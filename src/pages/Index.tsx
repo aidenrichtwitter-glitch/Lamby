@@ -362,7 +362,7 @@ const Index = () => {
 
           {rightPanel === 'chat' ? (
             <div className="flex-1 overflow-hidden">
-              <AIChat apiConfig={apiConfig} selectedFile={selectedFile} autoMode={recursionState.isRunning} />
+              <AIChat apiConfig={apiConfig} selectedFile={selectedFile} autoMode={recursionState.isRunning} capabilities={recursionState.capabilities} />
             </div>
           ) : (
             <div className="flex-1 overflow-auto">
