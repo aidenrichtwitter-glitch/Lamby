@@ -433,6 +433,7 @@ export async function requestAIImprovement(
         },
         body: JSON.stringify({
           mode: 'improve',
+          capabilities,
           messages: [{ role: 'user', content: prompt }],
         }),
       });

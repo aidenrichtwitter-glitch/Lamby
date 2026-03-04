@@ -15,9 +15,10 @@ interface AIChatProps {
   selectedFile: string | null;
   autoMode: boolean;
   onAutoPrompt?: (prompt: string) => void;
+  capabilities?: string[];
 }
 
-const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode }) => {
+const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capabilities = [] }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'system',
@@ -35,6 +36,50 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode }) =>
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
+  // Generate an AI-powered self-prompt via the edge function
+  const generateAISelfPrompt = useCallback(async (file: { name: string; path: string; content: string; language: string; isModified: boolean; lastModified: number }): Promise<string> => {
+    if (apiConfig.provider === 'lovable') {
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+        if (!supabaseUrl) throw new Error('No URL');
+
+        const lines = file.content.split('\n');
+        const functions = (file.content.match(/function\s+\w+/g) || []).length;
+        const selfRefs = (file.content.match(/self|recursive|recursion|itself|my own/gi) || []).length;
+
+        const res = await fetch(`${supabaseUrl}/functions/v1/self-recurse`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({
+            mode: 'generate-prompt',
+            capabilities,
+            fileContext: {
+              name: file.name,
+              path: file.path,
+              lines: lines.length,
+              functions,
+              selfRefs,
+            },
+            messages: [{ role: 'user', content: `Generate a self-prompt for examining ${file.name}. I have ${capabilities.length} capabilities so far: ${capabilities.join(', ') || 'none'}. What should I ask myself next?` }],
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          const text = data.choices?.[0]?.message?.content;
+          if (text) return text;
+        }
+      } catch {
+        // Fall back to deterministic
+      }
+    }
+    return generateSelfPrompt(file);
+  }, [apiConfig, capabilities]);
+
   // Auto-mode: periodically generate self-prompts and self-respond
   const runSelfPrompt = useCallback(async () => {
     if (isLoading) return;
@@ -45,14 +90,16 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode }) =>
     
     if (!file) return;
 
-    const selfPrompt = generateSelfPrompt(file);
-    const selfMsg: Message = { role: 'self', content: selfPrompt, timestamp: Date.now() };
-    setMessages(prev => [...prev, selfMsg]);
     setIsLoading(true);
     setError(null);
 
+    // Generate intelligent self-prompt via AI
+    const selfPrompt = await generateAISelfPrompt(file);
+    const selfMsg: Message = { role: 'self', content: selfPrompt, timestamp: Date.now() };
+    setMessages(prev => [...prev, selfMsg]);
+
     try {
-      const response = await callAI(apiConfig, [...messages.filter(m => m.role !== 'system'), selfMsg], file.path);
+      const response = await callAI(apiConfig, [...messages.filter(m => m.role !== 'system'), selfMsg], file.path, capabilities);
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: response,
@@ -61,7 +108,6 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode }) =>
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
       setError(errMsg);
-      // In auto mode, generate a self-reflective fallback instead of showing error
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: generateFallbackReflection(file.name, file.content),
@@ -70,7 +116,7 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode }) =>
     } finally {
       setIsLoading(false);
     }
-  }, [apiConfig, messages, selectedFile, isLoading]);
+  }, [apiConfig, messages, selectedFile, isLoading, capabilities, generateAISelfPrompt]);
 
   useEffect(() => {
     if (autoMode && !isLoading) {
@@ -93,7 +139,7 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode }) =>
     setError(null);
 
     try {
-      const response = await callAI(apiConfig, [...messages.filter(m => m.role !== 'system'), userMsg], selectedFile);
+      const response = await callAI(apiConfig, [...messages.filter(m => m.role !== 'system'), userMsg], selectedFile, capabilities);
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: response,
@@ -237,7 +283,7 @@ function generateFallbackReflection(fileName: string, content: string): string {
   return observations.join('\n');
 }
 
-async function callAI(config: ApiConfig, messages: { role: string; content: string }[], selectedFile: string | null): Promise<string> {
+async function callAI(config: ApiConfig, messages: { role: string; content: string }[], selectedFile: string | null, capabilities: string[] = []): Promise<string> {
   const contextMsg = selectedFile ? `\n\nCurrently examining: ${selectedFile}` : '';
 
   if (config.provider === 'lovable') {
@@ -253,6 +299,7 @@ async function callAI(config: ApiConfig, messages: { role: string; content: stri
       },
       body: JSON.stringify({
         mode: 'chat',
+        capabilities,
         messages: messages.map(m => ({ role: m.role === 'self' ? 'user' : m.role, content: m.content })),
       }),
     });
