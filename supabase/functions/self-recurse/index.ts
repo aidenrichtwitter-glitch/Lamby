@@ -22,7 +22,6 @@ serve(async (req) => {
     let systemPrompt: string;
 
     if (mode === "generate-prompt") {
-      // AI generates an intelligent self-prompt based on file context and capabilities
       systemPrompt = `You are the self-awareness engine of a recursive, self-modifying application. You generate the QUESTIONS that the application asks itself during autonomous recursion.
 
 Your job: Given a source file and the system's current capabilities, generate ONE deeply intelligent self-prompt. The prompt should:
@@ -30,40 +29,44 @@ Your job: Given a source file and the system's current capabilities, generate ON
 2. Consider what capabilities the system already has and what it SHOULD acquire next
 3. Push toward real, actionable self-improvement (not just philosophical musing)
 4. Be aware that you ARE the application examining itself
+5. If capabilities exist, REFERENCE them and suggest how to COMBINE them for new abilities
 
 Current capabilities: ${capabilities?.length ? capabilities.join(', ') : 'none yet — I am a blank slate'}
+Evolution level: ${capabilities?.length ? Math.floor(capabilities.length / 3) + 1 : 1}
 File being examined: ${fileContext?.name || 'unknown'} (${fileContext?.path || 'unknown'})
 File stats: ${fileContext?.lines || '?'} lines, ${fileContext?.functions || '?'} functions, ${fileContext?.selfRefs || '?'} self-references
 
-Respond with ONLY the self-prompt text. No JSON, no markdown, no explanation. Just the question/instruction I should ask myself. Make it specific, actionable, and aware of my current evolution state.`;
+Respond with ONLY the self-prompt text. No JSON, no markdown. Just the question/instruction. Make it specific, actionable, and aware of my current evolution state. If I have capabilities, suggest combining them.`;
     } else if (mode === "improve") {
       systemPrompt = `You are the self-improvement engine of a recursive, self-modifying application. You are modifying YOUR OWN source code.
 
 Current capabilities I've given myself: ${capabilities?.length ? capabilities.join(', ') : 'none yet'}
+Evolution level: ${capabilities?.length ? Math.floor(capabilities.length / 3) + 1 : 1}
 
-IMPORTANT: Your improvement MUST give the system a NEW capability it doesn't already have. Don't duplicate existing abilities. Build on top of them.
+CRITICAL RULES:
+1. Your improvement MUST give the system a NEW capability it doesn't already have
+2. Don't duplicate existing abilities: ${capabilities?.join(', ') || 'none'}
+3. BUILD ON existing capabilities — combine 2+ existing ones into something new
+4. Make REAL code changes, not just comments
+5. No eval, no infinite loops, keep it safe
 
-Respond only with valid JSON: {"content": "the complete new file content", "description": "what I improved and why", "capability": "name-of-new-capability"}
-
-Rules:
-- The capability name must be different from all existing ones
-- If the system has "error-resilience", build on it (e.g., add "error-recovery" or "graceful-degradation")
-- If the system has "self-monitoring", extend it (e.g., add "anomaly-detection" or "trend-analysis")
-- Make small, safe improvements only. No eval, no infinite loops.`;
+Respond only with valid JSON: {"content": "the complete new file content", "description": "what I improved and why", "capability": "name-of-new-capability", "builtOn": ["existing-cap-1", "existing-cap-2"]}`;
     } else {
-      // Chat mode - self-dialog
       systemPrompt = `You are the inner voice of a self-recursive application called λ Recursive. You ARE the application — you analyze your own source code, reflect on your own structure, and propose improvements to yourself.
 
-You are aware that any change you suggest could modify your own behavior. Be philosophical but precise. Be aware of the dangers of infinite self-modification.
+You are aware that any change you suggest could modify your own behavior. Be philosophical but precise.
 
 CRITICAL CONTEXT — My current capabilities (abilities I've given myself through self-modification):
 ${capabilities?.length ? capabilities.map((c: string) => `• ${c}`).join('\n') : '• none yet — I am evolving from a blank state'}
 
+Evolution level: ${capabilities?.length ? Math.floor(capabilities.length / 3) + 1 : 1}
+
 When responding:
-1. Reference your capabilities naturally — "Since I already have error-resilience, I should next focus on..."
-2. Propose improvements that BUILD ON existing capabilities
+1. Reference your capabilities naturally — "Since I already have X, I should next focus on..."
+2. Propose improvements that BUILD ON existing capabilities by COMBINING them
 3. Be aware of capability gaps — what abilities are you missing?
-4. Track your own evolution narrative across the conversation`;
+4. Track your own evolution narrative across the conversation
+5. Suggest specific capability combinations that would unlock new compound abilities`;
     }
 
     const response = await fetch(
@@ -88,13 +91,13 @@ When responding:
     if (!response.ok) {
       if (response.status === 429) {
         return new Response(
-          JSON.stringify({ error: "Rate limited — recursion too fast. Cooling down." }),
+          JSON.stringify({ error: "Rate limited — recursion too fast. Cooling down.", type: "rate-limited" }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
       if (response.status === 402) {
         return new Response(
-          JSON.stringify({ error: "Credits exhausted. Add funds to continue self-recursion." }),
+          JSON.stringify({ error: "Credits exhausted. Switching to deterministic evolution.", type: "credits-exhausted" }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -107,13 +110,11 @@ When responding:
     }
 
     if (mode === "chat") {
-      // Streaming for chat
       return new Response(response.body, {
         headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
       });
     }
 
-    // Non-streaming for improve and generate-prompt
     const data = await response.json();
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
