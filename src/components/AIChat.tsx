@@ -194,9 +194,14 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
     <div className="flex flex-col h-full">
       {/* Auto mode indicator */}
       {autoMode && (
-        <div className="px-3 py-1 border-b border-border bg-primary/5 flex items-center gap-2 shrink-0">
-          <Sparkles className="w-3 h-3 text-primary animate-pulse" />
-          <span className="text-[10px] text-primary/70">Autonomous — I question myself</span>
+        <div className="px-3 py-1 border-b border-border bg-primary/5 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3 h-3 text-primary animate-pulse" />
+            <span className="text-[10px] text-primary/70">Autonomous — I question myself</span>
+          </div>
+          {rateLimitCooldown > 0 && (
+            <span className="text-[9px] text-terminal-amber/70">⏳ {rateLimitCooldown}s cooldown</span>
+          )}
         </div>
       )}
 
