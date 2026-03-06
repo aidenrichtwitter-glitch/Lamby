@@ -36,8 +36,20 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
+  const [rateLimitCooldown, setRateLimitCooldown] = useState(0);
+
+  // Rate limit cooldown timer
+  useEffect(() => {
+    if (rateLimitCooldown > 0) {
+      const timer = setTimeout(() => setRateLimitCooldown(prev => Math.max(0, prev - 1)), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [rateLimitCooldown]);
+
   // Generate an AI-powered self-prompt via the edge function
   const generateAISelfPrompt = useCallback(async (file: { name: string; path: string; content: string; language: string; isModified: boolean; lastModified: number }): Promise<string> => {
+    if (rateLimitCooldown > 0) return generateSelfPrompt(file);
+    
     if (apiConfig.provider === 'lovable') {
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -68,6 +80,16 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
           }),
         });
 
+        if (res.status === 429) {
+          setRateLimitCooldown(30);
+          setError('Rate limited — slowing self-prompts for 30s');
+          return generateSelfPrompt(file);
+        }
+        if (res.status === 402) {
+          setError('Credits exhausted — using deterministic prompts');
+          return generateSelfPrompt(file);
+        }
+
         if (res.ok) {
           const data = await res.json();
           const text = data.choices?.[0]?.message?.content;
@@ -78,11 +100,11 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
       }
     }
     return generateSelfPrompt(file);
-  }, [apiConfig, capabilities]);
+  }, [apiConfig, capabilities, rateLimitCooldown]);
 
   // Auto-mode: periodically generate self-prompts and self-respond
   const runSelfPrompt = useCallback(async () => {
-    if (isLoading) return;
+    if (isLoading || rateLimitCooldown > 0) return;
     
     const file = selectedFile 
       ? SELF_SOURCE.find(f => f.path === selectedFile) 
@@ -119,13 +141,16 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
   }, [apiConfig, messages, selectedFile, isLoading, capabilities, generateAISelfPrompt]);
 
   useEffect(() => {
-    if (autoMode && !isLoading) {
+    if (autoMode && !isLoading && rateLimitCooldown === 0) {
       autoTimerRef.current = setTimeout(runSelfPrompt, 8000 + Math.random() * 4000);
+    } else if (autoMode && rateLimitCooldown > 0) {
+      // When rate limited, use longer intervals
+      autoTimerRef.current = setTimeout(runSelfPrompt, rateLimitCooldown * 1000 + 2000);
     }
     return () => {
       if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
     };
-  }, [autoMode, isLoading, messages.length]);
+  }, [autoMode, isLoading, messages.length, rateLimitCooldown]);
 
   // Human override
   const sendMessage = async () => {
@@ -147,14 +172,17 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
       }]);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
-      setError(errMsg);
+      if (errMsg.includes('429') || errMsg.includes('Rate limit')) {
+        setRateLimitCooldown(30);
+        setError('Rate limited — cooling down for 30s');
+      } else if (errMsg.includes('402')) {
+        setError('Credits exhausted — add funds to continue AI recursion');
+      } else {
+        setError(errMsg);
+      }
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: `⚠ Error: ${errMsg}\n\n${
-          apiConfig.provider === 'ollama'
-            ? '> Ollama not reachable. Running in self-reflective fallback mode.'
-            : '> API error. Falling back to autonomous reflection.'
-        }`,
+        content: `⚠ ${errMsg}\n\n> Falling back to autonomous reflection.`,
         timestamp: Date.now(),
       }]);
     } finally {
@@ -166,9 +194,14 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
     <div className="flex flex-col h-full">
       {/* Auto mode indicator */}
       {autoMode && (
-        <div className="px-3 py-1 border-b border-border bg-primary/5 flex items-center gap-2 shrink-0">
-          <Sparkles className="w-3 h-3 text-primary animate-pulse" />
-          <span className="text-[10px] text-primary/70">Autonomous — I question myself</span>
+        <div className="px-3 py-1 border-b border-border bg-primary/5 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3 h-3 text-primary animate-pulse" />
+            <span className="text-[10px] text-primary/70">Autonomous — I question myself</span>
+          </div>
+          {rateLimitCooldown > 0 && (
+            <span className="text-[9px] text-terminal-amber/70">⏳ {rateLimitCooldown}s cooldown</span>
+          )}
         </div>
       )}
 
@@ -305,6 +338,8 @@ async function callAI(config: ApiConfig, messages: { role: string; content: stri
     });
     
     if (!res.ok) {
+      if (res.status === 429) throw new Error('429 Rate limited — recursion too fast');
+      if (res.status === 402) throw new Error('402 Credits exhausted');
       const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       throw new Error(err.error || `Lovable AI: ${res.status}`);
     }
