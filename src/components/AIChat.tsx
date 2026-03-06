@@ -338,6 +338,8 @@ async function callAI(config: ApiConfig, messages: { role: string; content: stri
     });
     
     if (!res.ok) {
+      if (res.status === 429) throw new Error('429 Rate limited — recursion too fast');
+      if (res.status === 402) throw new Error('402 Credits exhausted');
       const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       throw new Error(err.error || `Lovable AI: ${res.status}`);
     }
