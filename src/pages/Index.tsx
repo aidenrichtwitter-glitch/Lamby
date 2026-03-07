@@ -68,7 +68,7 @@ const Index = () => {
           lastAction: `⏳ Rate limited — cooling for ${remaining}s`,
           log: prev.log[prev.log.length - 1]?.phase === 'rate-limited' ? prev.log : [
             ...prev.log,
-            createLogEntry('rate-limited' as any, `⏳ Rate limited — backing off for ${remaining}s. Using deterministic improvements.`, 'warning'),
+            createLogEntry('rate-limited' as any, `⏳ Rate limited — waiting ${remaining}s before next AI request.`, 'warning'),
           ],
         };
       }
