@@ -17,7 +17,6 @@ import {
   createLogEntry,
   getNextFile,
   generateSelfObservation,
-  attemptSelfImprovement,
   getPhaseDuration,
   requestAIImprovement,
   saveCapabilities,
