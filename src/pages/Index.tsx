@@ -36,7 +36,13 @@ const Index = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [apiConfig, setApiConfig] = useState<ApiConfig>(() => {
     const saved = localStorage.getItem('recursive-api-config');
-    return saved ? JSON.parse(saved) : DEFAULT_API_CONFIG;
+    if (saved) return JSON.parse(saved);
+    // Auto-detect: if running on localhost, use Ollama; otherwise use Lovable AI
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    if (isLocal) {
+      return { provider: 'ollama' as const, baseUrl: 'http://localhost:11434', apiKey: '', model: 'llama3.2' };
+    }
+    return DEFAULT_API_CONFIG;
   });
   const [changes, setChanges] = useState<ChangeRecord[]>([]);
   const [rightPanel, setRightPanel] = useState<'chat' | 'history' | 'evolution'>('chat');
