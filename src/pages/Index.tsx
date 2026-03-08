@@ -421,10 +421,13 @@ const Index = () => {
 
     // Dream mode — ask AI to create a goal
     if ((state as any)._awaitingDream && state.phase === 'proposing') {
+      // Build context from journal and goal history
+      const goalHistoryStr = goals.filter(g => g.status === 'completed').slice(-5)
+        .map(g => `✓ ${g.title}${g.unlocksCapability ? ` → ${g.unlocksCapability}` : ''}`).join('\n');
       const prompt = buildGoalDreamPrompt(
         state.capabilities, goals, state.cycleCount, state.evolutionLevel
       );
-      requestGoalDream(apiConfig, prompt, state.capabilities).then(({ goal, error }) => {
+      requestGoalDream(apiConfig, prompt, state.capabilities, goalHistoryStr).then(({ goal, error }) => {
         if (error) {
           setRecursionState(prev => ({
             ...prev,
