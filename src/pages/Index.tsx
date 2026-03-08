@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useToast } from '@/hooks/use-toast';
 import { Settings, Terminal, Brain, Shield, Activity, FileCode, RefreshCw, Eye, Zap, Clock, Target } from 'lucide-react';
 import DesktopWindow from '@/components/DesktopWindow';
 import FileTree from '@/components/FileTree';
