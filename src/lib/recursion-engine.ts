@@ -56,9 +56,9 @@ export interface RecursionLogEntry {
 }
 
 const PHASE_DURATION: Record<string, Record<string, number>> = {
-  slow: { scanning: 4000, reflecting: 6000, proposing: 8000, validating: 2000, applying: 2000, cooling: 10000, 'rate-limited': 5000 },
-  normal: { scanning: 3000, reflecting: 4000, proposing: 5000, validating: 1500, applying: 1000, cooling: 8000, 'rate-limited': 5000 },
-  fast: { scanning: 2000, reflecting: 3000, proposing: 3000, validating: 1000, applying: 500, cooling: 5000, 'rate-limited': 3000 },
+  slow: { scanning: 3000, reflecting: 4000, proposing: 5000, validating: 1500, applying: 1000, cooling: 6000, 'rate-limited': 5000 },
+  normal: { scanning: 2000, reflecting: 3000, proposing: 4000, validating: 1000, applying: 800, cooling: 5000, 'rate-limited': 5000 },
+  fast: { scanning: 1500, reflecting: 2000, proposing: 2500, validating: 800, applying: 500, cooling: 3000, 'rate-limited': 3000 },
 };
 
 // Self-reflective prompts the AI generates about itself
