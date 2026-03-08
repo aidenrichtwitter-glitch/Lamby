@@ -179,12 +179,12 @@ export async function addJournalEntry(
   try {
     await supabase
       .from('evolution_journal')
-      .insert({
+      .insert([{
         event_type: eventType,
         title,
         description,
         metadata,
-      });
+      }]);
   } catch {}
 }
 
