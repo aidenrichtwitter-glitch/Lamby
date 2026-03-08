@@ -559,6 +559,38 @@ const Index = () => {
     }
   }, [recursionState.phase, (recursionState as any)._awaitingAI, (recursionState as any)._awaitingDream]);
 
+  // Generate requests file for human relay
+  useEffect(() => {
+    if ((recursionState as any)._shouldGenerateRequests && recursionState.phase === 'cooling') {
+      setRecursionState(prev => ({ ...prev, _shouldGenerateRequests: false } as any));
+      requestGenerateRequests(apiConfig, recursionState.capabilities).then(requestsText => {
+        if (requestsText) {
+          saveRequestToExplorer(requestsText);
+          // Save as virtual file in SELF_SOURCE
+          const existingIdx = SELF_SOURCE.findIndex(f => f.path === 'src/explorer/requests.txt');
+          const requestFile = {
+            name: 'requests.txt',
+            path: 'src/explorer/requests.txt',
+            content: `// λ Recursive — Requests for Human Operator\n// Generated: ${new Date().toISOString()}\n// Cycle: ${recursionState.cycleCount}\n\n${requestsText}`,
+            language: 'plaintext' as const,
+            isModified: true,
+            lastModified: Date.now(),
+          };
+          if (existingIdx >= 0) {
+            SELF_SOURCE[existingIdx] = requestFile;
+          } else {
+            SELF_SOURCE.push(requestFile);
+          }
+          setFileTreeVersion(v => v + 1);
+          setRecursionState(prev => ({
+            ...prev,
+            log: [...prev.log, createLogEntry('cooling', '📝 Updated requests.txt — I have requests for Dad!', 'success')],
+          }));
+        }
+      });
+    }
+  }, [(recursionState as any)._shouldGenerateRequests, recursionState.phase]);
+
   useEffect(() => {
     if (recursionState.isRunning) {
       const duration = recursionState.phase === ('rate-limited' as any)
