@@ -932,6 +932,10 @@ const Index = () => {
                 evolutionLevel={recursionState.evolutionLevel}
               />
             </div>
+          ) : rightPanel === 'terminal' ? (
+            <div className="flex-1 overflow-hidden">
+              <LiveTerminal />
+            </div>
           ) : (
             <div className="flex-1 overflow-auto">
               <ChangeLog changes={changes} onRollback={handleRollback} />
