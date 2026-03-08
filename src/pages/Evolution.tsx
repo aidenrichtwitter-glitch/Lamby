@@ -127,11 +127,19 @@ const Evolution: React.FC = () => {
   const [containerSize, setContainerSize] = useState(800);
   const mainRef = React.useRef<HTMLDivElement>(null);
 
-  const zoom = ZOOM_LEVELS[zoomIdx];
-
-  const zoomIn = useCallback(() => setZoomIdx(i => Math.min(i + 1, ZOOM_LEVELS.length - 1)), []);
-  const zoomOut = useCallback(() => setZoomIdx(i => Math.max(i - 1, 0)), []);
-  const zoomFit = useCallback(() => setZoomIdx(0), []); // fully zoomed out
+  // Measure container and auto-fit
+  useEffect(() => {
+    const measure = () => {
+      if (mainRef.current) {
+        const rect = mainRef.current.getBoundingClientRect();
+        const s = Math.min(rect.width, rect.height);
+        setContainerSize(Math.max(600, s));
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   useEffect(() => {
     // Fetch capabilities + goals in parallel
