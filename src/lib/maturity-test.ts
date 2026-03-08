@@ -49,6 +49,8 @@ export interface MaturityReport {
   readinessLabel: string;
   nextMilestone: string;
   scoreHistory: number[];  // last N scores for trend
+  maturityAge: number;     // how many runs total (across sessions)
+  adaptations: string[];   // what the test evolved this run
 }
 
 // Milestones define what the system is working TOWARD
