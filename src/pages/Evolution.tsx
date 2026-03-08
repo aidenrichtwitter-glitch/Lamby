@@ -120,6 +120,10 @@ const Evolution: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [lifeReport, setLifeReport] = useState<LifeProofReport | null>(null);
+  const [isRunningLifeProof, setIsRunningLifeProof] = useState(false);
+  const [lifeProofLoop, setLifeProofLoop] = useState(false);
+  const lifeProofRef = React.useRef(false);
   const mainRef = React.useRef<HTMLDivElement>(null);
 
   // Measure container
