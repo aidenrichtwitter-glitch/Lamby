@@ -84,7 +84,7 @@ function layoutGraph(capabilities: CapabilityNode[], containerSize: number): { n
     
     levelBands.push({ 
       level: lvl, 
-      label: EVOLUTION_TITLES[lvl] || `L${lvl}`, 
+      label: getEvolutionTitle(lvl), 
       yStart, 
       yEnd 
     });
