@@ -891,6 +891,16 @@ const Index = () => {
               <ScrollText className="w-3 h-3" /> Journal
             </button>
             <button
+              onClick={() => setRightPanel('terminal')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] uppercase tracking-wider font-semibold transition-colors ${
+                rightPanel === 'terminal'
+                  ? 'text-primary border-b border-primary bg-primary/5'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Terminal className="w-3 h-3" /> Term
+            </button>
+            <button
               onClick={() => setRightPanel('history')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] uppercase tracking-wider font-semibold transition-colors ${
                 rightPanel === 'history'
