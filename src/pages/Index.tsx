@@ -268,6 +268,7 @@ const Index = () => {
                 ...(result.builtOn && result.builtOn.length > 0 ? [createLogEntry('proposing', `🔗 Builds on: ${result.builtOn.join(' + ')}`, 'info')] : []),
               ],
               _proposal: result,
+              _awaitingAI: false,
             } as any));
           } else {
             setRecursionState(prev => ({
