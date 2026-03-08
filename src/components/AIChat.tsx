@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Bot, User, Loader2, AlertCircle, Sparkles } from 'lucide-react';
 import { ApiConfig } from '@/lib/self-reference';
-import { generateSelfPrompt } from '@/lib/recursion-engine';
 import { SELF_SOURCE } from '@/lib/self-source';
 
 interface Message {
