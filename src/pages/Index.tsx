@@ -426,6 +426,11 @@ const Index = () => {
       if (nextPhase === 'cooling') {
         newState.lastAction = 'Cooling down between cycles...';
         newLog.push(createLogEntry('cooling', '◌ Cooling. Preparing next recursive cycle.', 'info'));
+        
+        // Every 10 cycles, generate requests for the human
+        if (newState.cycleCount > 0 && newState.cycleCount % 10 === 0) {
+          (newState as any)._shouldGenerateRequests = true;
+        }
       }
 
       if (newLog.length > 200) newLog.splice(0, newLog.length - 200);
