@@ -485,6 +485,8 @@ export async function requestGoalDream(
   config: ApiConfig,
   prompt: string,
   capabilities: string[],
+  goalHistory?: string,
+  journalContext?: string,
 ): Promise<{ goal: any | null; error?: AIImprovementError }> {
   try {
     if (config.provider !== 'lovable') return { goal: null };
@@ -496,7 +498,7 @@ export async function requestGoalDream(
     const res = await fetch(`${url}/functions/v1/self-recurse`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ mode: 'dream-goal', capabilities, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify({ mode: 'dream-goal', capabilities, goalHistory, journalContext, messages: [{ role: 'user', content: prompt }] }),
     });
 
     if (res.status === 429) return { goal: null, error: { type: 'rate-limited', message: 'Rate limited while dreaming', retryAfter: 30000 } };
