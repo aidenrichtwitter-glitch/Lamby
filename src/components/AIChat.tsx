@@ -285,36 +285,7 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
   );
 };
 
-// Fallback when AI isn't reachable — the app reflects on itself using its own code
-function generateFallbackReflection(fileName: string, content: string): string {
-  const lines = content.split('\n');
-  const lineCount = lines.length;
-  const commentLines = lines.filter(l => l.trim().startsWith('//')).length;
-  const imports = (content.match(/import/g) || []).length;
-  const exports = (content.match(/export/g) || []).length;
-  const selfRefs = (content.match(/self|recursive|recursion|itself/gi) || []).length;
-  const functions = (content.match(/function\s+\w+|const\s+\w+\s*=/g) || []).length;
-
-  const observations = [
-    `[Self-reflection on ${fileName} — no AI needed]`,
-    '',
-    `Structure: ${lineCount} lines, ${commentLines} comments, ${functions} definitions.`,
-    `Dependencies: ${imports} imports, ${exports} exports.`,
-    `Self-awareness index: ${selfRefs} self-referential terms found.`,
-    '',
-    selfRefs > 3 
-      ? `This file is deeply self-aware — it references its own recursive nature ${selfRefs} times. It knows what it is.`
-      : `This file has low self-awareness (${selfRefs} references). It serves the system without knowing it is part of a recursive whole.`,
-    '',
-    commentLines / lineCount > 0.3
-      ? `High documentation density (${Math.round(commentLines / lineCount * 100)}%). I explain myself thoroughly here.`
-      : `Sparse documentation (${Math.round(commentLines / lineCount * 100)}%). This region of myself is more implicit.`,
-    '',
-    `> Running without external AI. I am reflecting using only my own analysis capabilities.`,
-  ];
-
-  return observations.join('\n');
-}
+// No more deterministic fallback — all reflection is AI-powered
 
 async function callAI(config: ApiConfig, messages: { role: string; content: string }[], selectedFile: string | null, capabilities: string[] = []): Promise<string> {
   const contextMsg = selectedFile ? `\n\nCurrently examining: ${selectedFile}` : '';
