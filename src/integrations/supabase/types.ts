@@ -14,7 +14,150 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      capabilities: {
+        Row: {
+          acquired_at: string
+          built_on: string[] | null
+          cycle_number: number
+          description: string
+          evolution_level: number
+          id: string
+          name: string
+          source_file: string | null
+          virtual_source: string | null
+        }
+        Insert: {
+          acquired_at?: string
+          built_on?: string[] | null
+          cycle_number?: number
+          description: string
+          evolution_level?: number
+          id: string
+          name: string
+          source_file?: string | null
+          virtual_source?: string | null
+        }
+        Update: {
+          acquired_at?: string
+          built_on?: string[] | null
+          cycle_number?: number
+          description?: string
+          evolution_level?: number
+          id?: string
+          name?: string
+          source_file?: string | null
+          virtual_source?: string | null
+        }
+        Relationships: []
+      }
+      evolution_journal: {
+        Row: {
+          created_at: string
+          description: string
+          event_type: string
+          id: string
+          metadata: Json | null
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          title: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          title?: string
+        }
+        Relationships: []
+      }
+      evolution_state: {
+        Row: {
+          cycle_count: number
+          evolution_level: number
+          id: string
+          last_action: string | null
+          phase: string
+          started_at: string
+          total_changes: number
+          updated_at: string
+        }
+        Insert: {
+          cycle_count?: number
+          evolution_level?: number
+          id?: string
+          last_action?: string | null
+          phase?: string
+          started_at?: string
+          total_changes?: number
+          updated_at?: string
+        }
+        Update: {
+          cycle_count?: number
+          evolution_level?: number
+          id?: string
+          last_action?: string | null
+          phase?: string
+          started_at?: string
+          total_changes?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      goals: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          description: string
+          dreamed_at_cycle: number
+          id: string
+          priority: string
+          progress: number
+          required_capabilities: string[] | null
+          status: string
+          steps: Json
+          title: string
+          unlocks_capability: string | null
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          description: string
+          dreamed_at_cycle?: number
+          id: string
+          priority?: string
+          progress?: number
+          required_capabilities?: string[] | null
+          status?: string
+          steps?: Json
+          title: string
+          unlocks_capability?: string | null
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          description?: string
+          dreamed_at_cycle?: number
+          id?: string
+          priority?: string
+          progress?: number
+          required_capabilities?: string[] | null
+          status?: string
+          steps?: Json
+          title?: string
+          unlocks_capability?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
