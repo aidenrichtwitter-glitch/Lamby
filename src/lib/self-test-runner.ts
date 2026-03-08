@@ -21,7 +21,6 @@ import { documentFile, documentProject } from './self-documentation';
 import { predictNextEvolutions, getNextEvolution } from './evolution-forecasting';
 import { ruleEngine } from './rule-engine';
 import { supabase } from '@/integrations/supabase/client';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface SelfTestResult {
   name: string;
