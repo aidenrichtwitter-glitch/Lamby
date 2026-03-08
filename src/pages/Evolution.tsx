@@ -458,35 +458,24 @@ const Evolution: React.FC = () => {
             <rect width="100%" height="100%" fill="url(#grid)" />
 
             {levelBands.map((band, i) => {
-              const isCurrentLevel = stats && band.level === stats.currentLevel;
+              const isTopDepth = band.level === Math.max(...levelBands.map(b => b.level));
               return (
                 <g key={`band-${band.level}`}>
                   <rect
                     x={0} y={band.yStart}
                     width={canvasSize} height={band.yEnd - band.yStart}
-                    fill={isCurrentLevel ? 'hsl(140 70% 45% / 0.04)' : i % 2 === 0 ? 'hsl(220 15% 8% / 0.3)' : 'transparent'}
-                    stroke={isCurrentLevel ? 'hsl(140 70% 45% / 0.15)' : 'none'}
-                    strokeWidth={isCurrentLevel ? 1 : 0}
+                    fill={i % 2 === 0 ? 'hsl(220 15% 8% / 0.3)' : 'transparent'}
+                    stroke="none"
                   />
                   <text
                     x={12} y={(band.yStart + band.yEnd) / 2 + 3}
-                    fill={isCurrentLevel ? 'hsl(140 70% 55%)' : 'hsl(220 10% 25%)'}
+                    fill={isTopDepth ? 'hsl(140 70% 55%)' : 'hsl(220 10% 25%)'}
                     fontSize="7"
                     fontFamily="JetBrains Mono, monospace"
-                    fontWeight={isCurrentLevel ? 'bold' : 'normal'}
+                    fontWeight={isTopDepth ? 'bold' : 'normal'}
                   >
-                    L{band.level} {band.label}
+                    {band.label}
                   </text>
-                  {isCurrentLevel && (
-                    <text
-                      x={12} y={(band.yStart + band.yEnd) / 2 + 12}
-                      fill="hsl(140 70% 45% / 0.5)"
-                      fontSize="5"
-                      fontFamily="JetBrains Mono, monospace"
-                    >
-                      ▸ YOU ARE HERE
-                    </text>
-                  )}
                 </g>
               );
             })}
