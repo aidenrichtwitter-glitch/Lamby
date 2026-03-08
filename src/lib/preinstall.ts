@@ -3248,6 +3248,13 @@ export const ALL_PREINSTALLED: PreinstalledCap[] = [
   autonomousEntropyRegulator,
   adversarialCodeMutationStressor,
   asymmetricCryptoStateGuard,
+  // L50+ Transcendence tier
+  quantumLogicSuperposition,
+  autonomousUIGenesis,
+  crossTemporalMemory,
+  metaGovernanceProtocol,
+  multiAgentFork,
+  recursiveSelfAuthorship,
 ];
 
 // Install all capabilities into the system

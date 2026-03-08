@@ -312,6 +312,12 @@ export function getFileTree(): { name: string; path: string; children?: any[] }[
             { name: 'safety-engine.ts', path: 'src/lib/safety-engine.ts' },
             { name: 'self-source.ts', path: 'src/lib/self-source.ts' },
             { name: 'explorer-store.ts', path: 'src/lib/explorer-store.ts' },
+            { name: 'quantum-logic.ts', path: 'src/lib/quantum-logic.ts' },
+            { name: 'ui-genesis.ts', path: 'src/lib/ui-genesis.ts' },
+            { name: 'memory-consolidation.ts', path: 'src/lib/memory-consolidation.ts' },
+            { name: 'meta-governance.ts', path: 'src/lib/meta-governance.ts' },
+            { name: 'multi-agent.ts', path: 'src/lib/multi-agent.ts' },
+            { name: 'self-authorship.ts', path: 'src/lib/self-authorship.ts' },
           ],
         },
         {
@@ -331,6 +337,8 @@ export function getFileTree(): { name: string; path: string; children?: any[] }[
           path: 'src/pages',
           children: [
             { name: 'Index.tsx', path: 'src/pages/Index.tsx' },
+            { name: 'Evolution.tsx', path: 'src/pages/Evolution.tsx' },
+            { name: 'EvolutionMatrix.tsx', path: 'src/pages/EvolutionMatrix.tsx' },
           ],
         },
         { name: 'App.tsx', path: 'src/App.tsx' },
