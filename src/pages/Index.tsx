@@ -398,9 +398,9 @@ const Index = () => {
           }
 
           // Update goal progress if working toward a goal
-          if (proposal.goalProgress !== undefined && currentGoalId) {
+          if (proposal.goalProgress !== undefined && currentGoalIdRef.current) {
             setGoals(prevGoals => prevGoals.map(g => {
-              if (g.id !== currentGoalId) return g;
+              if (g.id !== currentGoalIdRef.current) return g;
               const updatedSteps = [...g.steps];
               if (proposal.stepCompleted >= 0 && proposal.stepCompleted < updatedSteps.length) {
                 updatedSteps[proposal.stepCompleted] = { ...updatedSteps[proposal.stepCompleted], completed: true, completedAt: Date.now() };
