@@ -459,6 +459,9 @@ const Evolution: React.FC = () => {
                 </g>
               );
             })}
+
+            {/* Lightning bolts between actual nodes */}
+            {showStorm && <StormLightning nodes={stormNodes} canvasSize={canvasSize} />}
           </svg>
 
           {/* Selected node detail */}
