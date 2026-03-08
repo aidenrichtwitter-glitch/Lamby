@@ -174,17 +174,16 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
 
     const userMsg: Message = { role: 'user', content: input.trim(), timestamp: Date.now() };
     setMessages(prev => [...prev, userMsg]);
+    saveChatMessage('user', input.trim());
     setInput('');
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await callAI(apiConfig, [...messages.filter(m => m.role !== 'system'), userMsg], selectedFile, capabilities);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: response,
-        timestamp: Date.now(),
-      }]);
+      const assistantMsg: Message = { role: 'assistant', content: response, timestamp: Date.now() };
+      setMessages(prev => [...prev, assistantMsg]);
+      saveChatMessage('assistant', response);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
       if (errMsg.includes('429') || errMsg.includes('Rate limit')) {
