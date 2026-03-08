@@ -449,10 +449,21 @@ const Index = () => {
       if (nextPhase === 'cooling') {
         newState.lastAction = 'Cooling down between cycles...';
         newLog.push(createLogEntry('cooling', '◌ Cooling. Preparing next recursive cycle.', 'info'));
+        emitTerminalEvent('engine', 'state', `Cycle ${newState.cycleCount} complete. Phase: cooling`);
         
         // Every 10 cycles, generate requests for the human
         if (newState.cycleCount > 0 && newState.cycleCount % 10 === 0) {
           (newState as any)._shouldGenerateRequests = true;
+          // Save Memory Palace snapshot every 10 cycles
+          saveSnapshot({
+            evolution_level: newState.evolutionLevel,
+            capabilities: newState.capabilities,
+            merkle_root: computeMerkleRoot(newState.capabilities, newState.evolutionLevel, newState.cycleCount),
+            state_blob: { cycleCount: newState.cycleCount, totalChanges: newState.totalChanges, phase: 'snapshot' },
+            cycle_number: newState.cycleCount,
+            label: `Auto-snapshot L${newState.evolutionLevel}C${newState.cycleCount}`,
+          });
+          emitTerminalEvent('memory-palace', 'state', `Snapshot saved at L${newState.evolutionLevel}C${newState.cycleCount}`);
         }
         // Every 10 cycles (offset by 5), enter SAGE MODE
         if (newState.cycleCount > 0 && newState.cycleCount % 10 === 5) {
