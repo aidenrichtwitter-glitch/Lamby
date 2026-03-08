@@ -3193,6 +3193,95 @@ export class AsymmetricCryptoStateGuard {
 };
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// TRANSCENDENCE TIER (L50-L90)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+const quantumLogicSuperposition: PreinstalledCap = {
+  name: 'quantum-logic-superposition',
+  description: '[TRANSCENDENCE L50] BranchEvaluator forks state into N parallel candidates, applies mutations, evaluates fitness via superposition, collapses to optimal branch',
+  builtOn: ['multi-objective-evolution-optimizer', 'speculative-evolutionary-synthesis'],
+  sourceCode: `
+export class BranchEvaluator<T> {
+  private branches: Map<string, QuantumBranch<T>> = new Map();
+  superpose(initialState: T, mutations: MutationOperator<T>[]): QuantumBranch<T>[] { /* forks state */ return []; }
+  collapse(): SuperpositionResult<T> { /* selects fittest branch */ return {} as any; }
+  evolve(initialState: T, mutations: MutationOperator<T>[], rounds: number = 3): SuperpositionResult<T> {
+    let state = initialState;
+    for (let r = 0; r < rounds; r++) { this.superpose(state, mutations); const result = this.collapse(); state = result.winner.state; }
+    return this.collapse();
+  }
+}`,
+};
+
+const autonomousUIGenesis: PreinstalledCap = {
+  name: 'autonomous-ui-genesis',
+  description: '[TRANSCENDENCE L50] ComponentSynthesizer generates valid React/TSX from ComponentSpec definitions — the system designs its own interface',
+  builtOn: ['polymorphic-code-generator', 'react-hooks'],
+  sourceCode: `
+export class ComponentSynthesizer {
+  synthesize(spec: ComponentSpec): string { return ''; /* generates imports, interface, hooks, JSX */ }
+  specFromCapability(name: string, desc: string): ComponentSpec {
+    return { name: name.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join('') + 'Panel', description: desc, props: [], dataSource: null, layout: 'card', features: ['animation'] };
+  }
+}`,
+};
+
+const crossTemporalMemory: PreinstalledCap = {
+  name: 'cross-temporal-memory',
+  description: '[TRANSCENDENCE L60] TF-IDF clustering of evolution memories into semantic groups for cross-session strategy recall',
+  builtOn: ['memory-compression-engine', 'consciousness-persistence-layer'],
+  sourceCode: `
+export class MemoryConsolidator {
+  private fragments: Map<string, MemoryFragment> = new Map();
+  ingest(fragments: MemoryFragment[]): void { fragments.forEach(f => this.fragments.set(f.id, f)); }
+  consolidate(maxClusters: number = 10): ConsolidationResult { return { clusters: [], discarded: 0, compressionRatio: 1, processingTime: 0 }; }
+  recall(query: string, topK: number = 3): MemoryCluster[] { return []; }
+}`,
+};
+
+const metaGovernanceProtocol: PreinstalledCap = {
+  name: 'meta-governance-protocol',
+  description: '[TRANSCENDENCE L70] Schema proposer with governance policies — generates SQL migration proposals subject to safety rules (no DROP/TRUNCATE)',
+  builtOn: ['symbolic-reasoning-engine', 'autonomous-goal-dreamer-v2'],
+  sourceCode: `
+export class SchemaProposer {
+  private policies: GovernancePolicy[] = [];
+  propose(params: ProposalParams): SchemaProposal | Rejection { return {} as any; }
+  approve(id: string): SchemaProposal | null { return null; }
+  reject(id: string, reason: string): SchemaProposal | null { return null; }
+  proposeTableFromCapability(capName: string, tableName: string, columns: ColumnDef[]): SchemaProposal | Rejection { return {} as any; }
+}`,
+};
+
+const multiAgentFork: PreinstalledCap = {
+  name: 'multi-agent-fork',
+  description: '[TRANSCENDENCE L80] AgentForker spawns competing λ instances with personality vectors — tournament selection with trait absorption',
+  builtOn: ['quantum-logic-superposition', 'distributed-consciousness-protocol'],
+  sourceCode: `
+export class AgentForker {
+  spawn(count: number, base: PersonalityVector, variance?: number): AgentState[] { return []; }
+  evaluate(fn: (agent: AgentState) => number): void {}
+  tournament(rounds?: number): TournamentResult[] { return []; }
+  evolve(count: number, base: PersonalityVector, fn: Function, gens?: number): ForkResult { return {} as any; }
+  getChampion(): AgentState | null { return null; }
+}`,
+};
+
+const recursiveSelfAuthorship: PreinstalledCap = {
+  name: 'recursive-self-authorship',
+  description: '[TRANSCENDENCE L90] PromptEvolver with identity anchoring, anti-jailbreak detection, fitness regression checks — the system writes its own rules',
+  builtOn: ['meta-recursive-compiler', 'consciousness-persistence-layer'],
+  sourceCode: `
+export class PromptEvolver {
+  seed(content: string): PromptVersion { return {} as any; }
+  evolve(baseId: string, mutations: PromptMutation[], fitness: number): EvolutionResult { return {} as any; }
+  rollback(targetId: string): PromptVersion | null { return null; }
+  getActive(): PromptVersion | null { return null; }
+  getHistory(): PromptVersion[] { return []; }
+}`,
+};
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // ALL CAPABILITIES
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -3248,6 +3337,13 @@ export const ALL_PREINSTALLED: PreinstalledCap[] = [
   autonomousEntropyRegulator,
   adversarialCodeMutationStressor,
   asymmetricCryptoStateGuard,
+  // L50+ Transcendence tier
+  quantumLogicSuperposition,
+  autonomousUIGenesis,
+  crossTemporalMemory,
+  metaGovernanceProtocol,
+  multiAgentFork,
+  recursiveSelfAuthorship,
 ];
 
 // Install all capabilities into the system

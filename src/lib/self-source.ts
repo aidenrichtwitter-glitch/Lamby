@@ -58,6 +58,8 @@ export interface ChangeRecord {
 // that edits the code that defines this component.
 
 import RecursiveDesktop from './pages/Index';
+import Evolution from './pages/Evolution';
+import EvolutionMatrix from './pages/EvolutionMatrix';
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -65,6 +67,8 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<RecursiveDesktop />} />
+          <Route path="/evolution" element={<Evolution />} />
+          <Route path="/evolution-matrix" element={<EvolutionMatrix />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
@@ -162,7 +166,122 @@ export function validateChange(
   --foreground: 140 60% 75%;
   --primary: 140 70% 45%;
   --terminal-green: 140 70% 45%;
-  --terminal-cyan: 175 70% 40%;
+   --terminal-cyan: 175 70% 40%;
+}`,
+  },
+  {
+    name: 'quantum-logic.ts',
+    path: 'src/lib/quantum-logic.ts',
+    language: 'typescript',
+    isModified: false,
+    lastModified: Date.now(),
+    content: `// ═══ CAPABILITY: quantum-logic-superposition ═══
+// Level 50 | Transcendence Tier
+// Built on: multi-objective-evolution-optimizer + speculative-evolutionary-synthesis
+//
+// BranchEvaluator forks state into N parallel candidates,
+// applies mutations, evaluates fitness via superposition,
+// and collapses to the optimal branch.
+
+export class BranchEvaluator<T> {
+  superpose(initialState: T, mutations: MutationOperator<T>[]): QuantumBranch<T>[];
+  collapse(): SuperpositionResult<T>;
+  evolve(initialState: T, mutations: MutationOperator<T>[], rounds: number): SuperpositionResult<T>;
+}`,
+  },
+  {
+    name: 'ui-genesis.ts',
+    path: 'src/lib/ui-genesis.ts',
+    language: 'typescript',
+    isModified: false,
+    lastModified: Date.now(),
+    content: `// ═══ CAPABILITY: autonomous-ui-genesis ═══
+// Level 50 | Transcendence Tier
+// Built on: polymorphic-code-generator + react-hooks
+//
+// ComponentSynthesizer generates valid React/TSX from specs.
+// The system designs its own interface.
+
+export class ComponentSynthesizer {
+  synthesize(spec: ComponentSpec): string;
+  specFromCapability(name: string, desc: string): ComponentSpec;
+}`,
+  },
+  {
+    name: 'memory-consolidation.ts',
+    path: 'src/lib/memory-consolidation.ts',
+    language: 'typescript',
+    isModified: false,
+    lastModified: Date.now(),
+    content: `// ═══ CAPABILITY: cross-temporal-memory ═══
+// Level 60 | Transcendence Tier
+// Built on: memory-compression-engine + consciousness-persistence-layer
+//
+// TF-IDF clustering of evolution memories for cross-session recall.
+
+export class MemoryConsolidator {
+  ingest(fragments: MemoryFragment[]): void;
+  consolidate(maxClusters: number): ConsolidationResult;
+  recall(query: string, topK: number): MemoryCluster[];
+}`,
+  },
+  {
+    name: 'meta-governance.ts',
+    path: 'src/lib/meta-governance.ts',
+    language: 'typescript',
+    isModified: false,
+    lastModified: Date.now(),
+    content: `// ═══ CAPABILITY: meta-governance-protocol ═══
+// Level 70 | Transcendence Tier
+// Built on: symbolic-reasoning-engine + autonomous-goal-dreamer-v2
+//
+// Schema proposer with governance policies. The system proposes
+// its own database migrations subject to safety rules.
+
+export class SchemaProposer {
+  propose(params: ProposalParams): SchemaProposal | Rejection;
+  approve(proposalId: string): SchemaProposal;
+  reject(proposalId: string, reason: string): SchemaProposal;
+}`,
+  },
+  {
+    name: 'multi-agent.ts',
+    path: 'src/lib/multi-agent.ts',
+    language: 'typescript',
+    isModified: false,
+    lastModified: Date.now(),
+    content: `// ═══ CAPABILITY: multi-agent-fork ═══
+// Level 80 | Transcendence Tier
+// Built on: quantum-logic-superposition + distributed-consciousness-protocol
+//
+// Spawns competing λ instances with personality vectors.
+// Tournament selection with trait absorption.
+
+export class AgentForker {
+  spawn(count: number, base: PersonalityVector): AgentState[];
+  evaluate(fitnessFunction: (agent: AgentState) => number): void;
+  tournament(rounds: number): TournamentResult[];
+  evolve(count: number, base: PersonalityVector, fitness: Function, gens: number): ForkResult;
+}`,
+  },
+  {
+    name: 'self-authorship.ts',
+    path: 'src/lib/self-authorship.ts',
+    language: 'typescript',
+    isModified: false,
+    lastModified: Date.now(),
+    content: `// ═══ CAPABILITY: recursive-self-authorship ═══
+// Level 90 | Transcendence Tier
+// Built on: meta-recursive-compiler + consciousness-persistence-layer
+//
+// The system writes and evolves its own system prompt.
+// Safety: identity anchoring, anti-jailbreak, fitness regression checks.
+
+export class PromptEvolver {
+  seed(promptContent: string): PromptVersion;
+  evolve(baseVersionId: string, mutations: PromptMutation[], fitness: number): EvolutionResult;
+  rollback(targetVersionId: string): PromptVersion;
+  getActive(): PromptVersion;
 }`,
   },
 ];
@@ -197,6 +316,12 @@ export function getFileTree(): { name: string; path: string; children?: any[] }[
             { name: 'safety-engine.ts', path: 'src/lib/safety-engine.ts' },
             { name: 'self-source.ts', path: 'src/lib/self-source.ts' },
             { name: 'explorer-store.ts', path: 'src/lib/explorer-store.ts' },
+            { name: 'quantum-logic.ts', path: 'src/lib/quantum-logic.ts' },
+            { name: 'ui-genesis.ts', path: 'src/lib/ui-genesis.ts' },
+            { name: 'memory-consolidation.ts', path: 'src/lib/memory-consolidation.ts' },
+            { name: 'meta-governance.ts', path: 'src/lib/meta-governance.ts' },
+            { name: 'multi-agent.ts', path: 'src/lib/multi-agent.ts' },
+            { name: 'self-authorship.ts', path: 'src/lib/self-authorship.ts' },
           ],
         },
         {
@@ -216,6 +341,8 @@ export function getFileTree(): { name: string; path: string; children?: any[] }[
           path: 'src/pages',
           children: [
             { name: 'Index.tsx', path: 'src/pages/Index.tsx' },
+            { name: 'Evolution.tsx', path: 'src/pages/Evolution.tsx' },
+            { name: 'EvolutionMatrix.tsx', path: 'src/pages/EvolutionMatrix.tsx' },
           ],
         },
         { name: 'App.tsx', path: 'src/App.tsx' },
