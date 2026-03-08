@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Zap, Activity, Brain, Shield, TrendingUp, Network, Loader2, Target, CheckCircle2, Circle, Loader } from 'lucide-react';
+import { ArrowLeft, Zap, Activity, Brain, Shield, TrendingUp, Network, Target, CheckCircle2, Circle, Loader, Cpu, Bot, Cog } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { mean, std } from 'mathjs';
 import { getEvolutionTitle } from '@/lib/evolution-titles';
+import { ruleEngine, RuleEngineReport } from '@/lib/rule-engine';
+import TerminalStorm, { emitStormProcess } from '@/components/TerminalStorm';
 
 interface CapabilityNode {
   name: string;
@@ -15,6 +17,7 @@ interface CapabilityNode {
   x: number;
   y: number;
   status: 'acquired' | 'in-progress' | 'planned';
+  verified?: boolean;
 }
 
 interface EvolutionStats {
@@ -25,6 +28,8 @@ interface EvolutionStats {
   activeGoals: number;
   avgCyclesPerCapability: number;
   healthScore: number;
+  verifiedCount: number;
+  ghostCount: number;
 }
 
 // Square layout: group by evolution level, auto-fit everything
@@ -56,7 +61,6 @@ function layoutGraph(capabilities: CapabilityNode[], containerSize: number): { n
   const leveledFuture = future.map(n => ({ ...n, level: getDepthForFuture(n) }));
   const allNodes = [...acquired, ...leveledFuture];
 
-  // Group by level
   const levels = new Map<number, CapabilityNode[]>();
   allNodes.forEach(cap => {
     if (!levels.has(cap.level)) levels.set(cap.level, []);
@@ -70,7 +74,6 @@ function layoutGraph(capabilities: CapabilityNode[], containerSize: number): { n
   const padding = 40;
   const usable = SIZE - padding * 2;
   const bandHeight = usable / numLevels;
-  const nodeRadius = Math.min(14, Math.max(6, bandHeight * 0.2));
 
   const result: CapabilityNode[] = [];
   const levelBands: { level: number; label: string; yStart: number; yEnd: number }[] = [];
@@ -82,12 +85,7 @@ function layoutGraph(capabilities: CapabilityNode[], containerSize: number): { n
     const yStart = padding + ri * bandHeight;
     const yEnd = yStart + bandHeight;
     
-    levelBands.push({ 
-      level: lvl, 
-      label: getEvolutionTitle(lvl), 
-      yStart, 
-      yEnd 
-    });
+    levelBands.push({ level: lvl, label: getEvolutionTitle(lvl), yStart, yEnd });
 
     const count = nodes.length;
     const spacing = Math.min(usable / (count + 1), 80);
@@ -106,8 +104,6 @@ function layoutGraph(capabilities: CapabilityNode[], containerSize: number): { n
   return { nodes: result, size: SIZE, levelBands };
 }
 
-
-
 const Evolution: React.FC = () => {
   const [capabilities, setCapabilities] = useState<{ nodes: CapabilityNode[]; size: number; levelBands: { level: number; label: string; yStart: number; yEnd: number }[] }>({ nodes: [], size: 800, levelBands: [] });
   const [stats, setStats] = useState<EvolutionStats | null>(null);
@@ -115,9 +111,11 @@ const Evolution: React.FC = () => {
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [goals, setGoals] = useState<any[]>([]);
   const [containerSize, setContainerSize] = useState(800);
+  const [ruleReport, setRuleReport] = useState<RuleEngineReport | null>(null);
+  const [showStorm, setShowStorm] = useState(true);
   const mainRef = React.useRef<HTMLDivElement>(null);
 
-  // Measure container and auto-fit
+  // Measure container
   useEffect(() => {
     const measure = () => {
       if (mainRef.current) {
@@ -139,7 +137,6 @@ const Evolution: React.FC = () => {
       supabase.from('lambda_evolution_state').select('*').order('created_at', { ascending: false }).limit(10),
     ]);
 
-    // Build acquired nodes
     const acquiredNodes: CapabilityNode[] = (capRes.data || []).map(row => ({
       name: row.name,
       description: row.description,
@@ -148,15 +145,13 @@ const Evolution: React.FC = () => {
       level: row.evolution_level,
       x: 0, y: 0,
       status: 'acquired' as const,
+      verified: row.verified,
     }));
 
     const acquiredNames = new Set(acquiredNodes.map(n => n.name));
 
-    // Build in-progress / planned nodes from goals
     const goalNodes: CapabilityNode[] = (goalsRes.data || [])
-      .filter(g => g.unlocks_capability 
-        && !acquiredNames.has(g.unlocks_capability) 
-        && g.status !== 'completed')
+      .filter(g => g.unlocks_capability && !acquiredNames.has(g.unlocks_capability) && g.status !== 'completed')
       .map(g => {
         const isInProgress = g.status === 'in-progress';
         const maxLevel = acquiredNodes.length > 0 ? Math.max(...acquiredNodes.map(n => n.level)) : 1;
@@ -174,7 +169,6 @@ const Evolution: React.FC = () => {
     const allNodes = [...acquiredNodes, ...goalNodes];
     setCapabilities(layoutGraph(allNodes, containerSize));
 
-    // Stats
     if (stateRes.data) {
       const completed = goalsRes.data?.filter(g => g.status === 'completed').length || 0;
       const active = goalsRes.data?.filter(g => g.status === 'active' || g.status === 'in-progress').length || 0;
@@ -182,6 +176,7 @@ const Evolution: React.FC = () => {
       const avgCycles = cycles.length > 1 ? Number(mean(cycles)) : 0;
       const stdDev = cycles.length > 2 ? Number(std(cycles)) : 0;
       const healthScore = Math.max(0, Math.min(100, 100 - stdDev * 5));
+      const verifiedCount = acquiredNodes.filter(n => n.verified).length;
 
       setStats({
         currentLevel: stateRes.data.evolution_level,
@@ -191,6 +186,33 @@ const Evolution: React.FC = () => {
         activeGoals: active,
         avgCyclesPerCapability: Math.round(avgCycles * 10) / 10,
         healthScore: Math.round(healthScore),
+        verifiedCount,
+        ghostCount: acquiredNodes.length - verifiedCount,
+      });
+
+      // Run rule engine evaluation
+      const report = ruleEngine.evaluate({
+        capabilities: acquiredNodes.map(n => n.name),
+        evolutionLevel: stateRes.data.evolution_level,
+        cycleCount: stateRes.data.cycle_count,
+        lastTestVerdict: null,
+        failedTests: [],
+        capabilityCount: acquiredNodes.length,
+        timeSinceLastEvolution: Date.now() - new Date(stateRes.data.updated_at).getTime(),
+        codeFiles: [],
+      });
+      setRuleReport(report);
+
+      // Emit storm processes for triggered rules
+      report.actions.forEach(action => {
+        emitStormProcess({
+          label: action.description.slice(0, 60),
+          source: 'rule-engine',
+          target: action.target || 'system',
+          type: 'rule',
+          status: action.severity === 'warning' ? 'fail' : 'success',
+          reason: action.type,
+        });
       });
     }
 
@@ -202,12 +224,31 @@ const Evolution: React.FC = () => {
     }));
   }, [containerSize]);
 
-  // Initial fetch + polling every 5s
   useEffect(() => {
     fetchAll();
     const interval = setInterval(fetchAll, 5000);
     return () => clearInterval(interval);
   }, [fetchAll]);
+
+  // Periodic storm emissions to show the system is alive
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const types: StormProcess['type'][] = ['rule', 'test', 'capability', 'mutation'];
+      const labels = [
+        'Safety scan pass', 'Memory consolidation', 'Rule evaluation',
+        'Capability verify', 'Branch fitness check', 'Mutation eval',
+        'Test suite check', 'Pattern compile', 'Autonomy calc',
+      ];
+      emitStormProcess({
+        label: labels[Math.floor(Math.random() * labels.length)],
+        source: 'heartbeat',
+        target: 'system',
+        type: types[Math.floor(Math.random() * types.length)],
+        status: Math.random() > 0.1 ? 'success' : 'fail',
+      });
+    }, 2000 + Math.random() * 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   const layoutNodes = useMemo(() => capabilities.nodes, [capabilities]);
   const canvasSize = capabilities.size;
@@ -226,10 +267,14 @@ const Evolution: React.FC = () => {
 
   const selectedCap = selectedNode ? layoutNodes.find(n => n.name === selectedNode) : null;
   const title = stats ? getEvolutionTitle(stats.currentLevel) : 'Loading...';
+  const metrics = ruleEngine.getMetrics();
+
+  type StormProcess = { type: 'rule' | 'ai' | 'test' | 'capability' | 'mutation' };
 
   const nodeColor = (node: CapabilityNode, selected: boolean) => {
     if (node.status === 'planned') return { fill: 'hsl(220 15% 12%)', stroke: 'hsl(220 10% 25%)', dot: 'hsl(220 10% 30%)', text: 'hsl(220 10% 35%)' };
     if (node.status === 'in-progress') return { fill: 'hsl(40 30% 12%)', stroke: 'hsl(40 60% 40%)', dot: 'hsl(40 90% 55%)', text: 'hsl(40 60% 60%)' };
+    if (!node.verified) return { fill: 'hsl(0 30% 12%)', stroke: 'hsl(0 40% 30%)', dot: 'hsl(0 50% 40%)', text: 'hsl(0 40% 50%)' };
     if (selected) return { fill: 'hsl(140 70% 45% / 0.3)', stroke: 'hsl(140 70% 45%)', dot: 'hsl(140 70% 45%)', text: 'hsl(140 60% 75%)' };
     return { fill: 'hsl(220 18% 10%)', stroke: 'hsl(140 30% 20%)', dot: 'hsl(140 70% 45%)', text: 'hsl(140 60% 75%)' };
   };
@@ -260,23 +305,39 @@ const Evolution: React.FC = () => {
           {stats && (
             <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 inline-flex items-center gap-1">
               <Zap className="w-2.5 h-2.5" />
-              {title} · {stats.totalCapabilities} abilities
+              {title} · {stats.verifiedCount}/{stats.totalCapabilities} verified
             </span>
           )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowStorm(s => !s)}
+            className={`text-[9px] px-2 py-1 rounded border transition-colors ${
+              showStorm ? 'bg-primary/10 text-primary border-primary/30' : 'bg-muted/30 text-muted-foreground border-border'
+            }`}
+          >
+            ⚡ Storm {showStorm ? 'ON' : 'OFF'}
+          </button>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Main: Capability Graph - square, auto-fit */}
-        <main ref={mainRef} className="flex-1 relative overflow-hidden bg-background flex items-center justify-center">
+        {/* Main area: graph + storm overlay */}
+        <main ref={mainRef} className="flex-1 relative overflow-hidden flex items-center justify-center">
+          {/* Storm visualization overlay */}
+          {showStorm && (
+            <div className="absolute inset-0 z-10 pointer-events-none">
+              <TerminalStorm className="w-full h-full" />
+            </div>
+          )}
+
           <svg 
             width={canvasSize} 
             height={canvasSize} 
             viewBox={`0 0 ${canvasSize} ${canvasSize}`}
-            className="max-w-full max-h-full"
+            className="max-w-full max-h-full relative z-0"
             style={{ aspectRatio: '1 / 1' }}
           >
-            {/* Grid */}
             <defs>
               <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
                 <path d="M 40 0 L 0 0 0 40" fill="none" stroke="hsl(140 30% 20% / 0.1)" strokeWidth="0.5" />
@@ -284,7 +345,6 @@ const Evolution: React.FC = () => {
             </defs>
             <rect width="100%" height="100%" fill="url(#grid)" />
 
-            {/* Level band backgrounds & labels */}
             {levelBands.map((band, i) => {
               const isCurrentLevel = stats && band.level === stats.currentLevel;
               return (
@@ -319,7 +379,6 @@ const Evolution: React.FC = () => {
               );
             })}
 
-            {/* Edges */}
             {edges.map((edge, i) => (
               <motion.line
                 key={`edge-${i}`}
@@ -334,7 +393,6 @@ const Evolution: React.FC = () => {
               />
             ))}
 
-            {/* Nodes */}
             {layoutNodes.map((node, i) => {
               const isSelected = selectedNode === node.name;
               const colors = nodeColor(node, isSelected);
@@ -376,7 +434,6 @@ const Evolution: React.FC = () => {
                     transition={{ delay: i * 0.01 + 0.1 }}
                   />
 
-                  {/* Name label — only show on hover/select to reduce clutter */}
                   {isSelected && (
                     <text
                       x={node.x} y={node.y + nodeR + 12}
@@ -401,10 +458,16 @@ const Evolution: React.FC = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 20 }}
-                className="absolute bottom-4 left-4 right-80 bg-card border border-border rounded-lg p-4 shadow-xl"
+                className="absolute bottom-4 left-4 right-80 bg-card border border-border rounded-lg p-4 shadow-xl z-20"
               >
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-bold text-primary text-glow font-display">{selectedCap.name}</h3>
+                  {selectedCap.verified && (
+                    <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">✓ verified</span>
+                  )}
+                  {selectedCap.status === 'acquired' && !selectedCap.verified && (
+                    <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20">👻 ghost</span>
+                  )}
                   {selectedCap.status !== 'acquired' && (
                     <span className={`text-[8px] px-1.5 py-0.5 rounded-full border ${
                       selectedCap.status === 'in-progress' 
@@ -442,10 +505,10 @@ const Evolution: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: 'Capabilities', value: stats.totalCapabilities, icon: Brain },
+                  { label: 'Verified', value: stats.verifiedCount, icon: Shield },
+                  { label: 'Ghosts', value: stats.ghostCount, icon: Brain },
                   { label: 'Cycles', value: stats.totalCycles, icon: Activity },
-                  { label: 'Goals Done', value: stats.totalGoalsCompleted, icon: Shield },
-                  { label: 'Active Goals', value: stats.activeGoals, icon: TrendingUp },
+                  { label: 'Goals Done', value: stats.totalGoalsCompleted, icon: TrendingUp },
                 ].map(stat => (
                   <div key={stat.label} className="bg-muted/30 rounded-lg p-3 border border-border/50">
                     <stat.icon className="w-3 h-3 text-primary/60 mb-1" />
@@ -455,12 +518,73 @@ const Evolution: React.FC = () => {
                 ))}
               </div>
 
+              {/* AI AUTONOMY METER */}
+              <div className="space-y-2">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <Cpu className="w-3 h-3" /> AI Autonomy
+                </div>
+                <div className="relative h-4 rounded-full bg-muted/30 overflow-hidden border border-border/50">
+                  <motion.div
+                    className="absolute inset-y-0 left-0 rounded-full"
+                    style={{
+                      background: `linear-gradient(90deg, hsl(var(--terminal-amber)), hsl(var(--primary)))`,
+                    }}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${metrics.autonomyScore}%` }}
+                    transition={{ duration: 1.5, ease: 'easeOut' }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-[8px] font-bold text-foreground mix-blend-difference">
+                      {metrics.autonomyScore}% AUTONOMOUS
+                    </span>
+                  </div>
+                </div>
+                <div className="flex justify-between text-[8px] text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Bot className="w-2.5 h-2.5" /> {metrics.totalAICalls} AI calls
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Cog className="w-2.5 h-2.5" /> {metrics.totalAISaved} rule-handled
+                  </span>
+                </div>
+                <div className="text-[8px] text-muted-foreground/50">
+                  {metrics.ruleCount} rules · {metrics.totalRulesRun} evaluations
+                </div>
+              </div>
+
+              {/* Rule Engine Report */}
+              {ruleReport && ruleReport.rulesTriggered > 0 && (
+                <div className="space-y-2">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Cog className="w-3 h-3" /> Rule Engine
+                  </div>
+                  <div className="space-y-1">
+                    {ruleReport.actions.slice(0, 5).map((action, i) => (
+                      <div
+                        key={i}
+                        className={`text-[9px] px-2 py-1.5 rounded border ${
+                          action.severity === 'warning'
+                            ? 'bg-destructive/5 border-destructive/20 text-destructive'
+                            : action.severity === 'action'
+                            ? 'bg-accent/5 border-accent/20 text-accent'
+                            : 'bg-muted/20 border-border/30 text-muted-foreground'
+                        }`}
+                      >
+                        <span className="font-bold uppercase text-[7px]">[{action.type}]</span>{' '}
+                        {action.description.slice(0, 80)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Legend */}
               <div className="space-y-1.5">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Legend</div>
                 <div className="flex flex-col gap-1">
                   {[
-                    { color: 'bg-primary', label: 'Acquired', border: '' },
+                    { color: 'bg-primary', label: 'Verified', border: '' },
+                    { color: 'bg-destructive/40', label: 'Ghost (unverified)', border: '' },
                     { color: 'bg-accent', label: 'Building', border: 'border border-dashed border-accent/50' },
                     { color: 'bg-muted-foreground/30', label: 'Planned', border: 'border border-dashed border-muted-foreground/30' },
                   ].map(item => (
@@ -472,26 +596,24 @@ const Evolution: React.FC = () => {
                 </div>
               </div>
 
-              {/* Sage Mode Goals */}
+              {/* Goals */}
               <div className="space-y-2">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                  <Target className="w-3 h-3" /> Sage Mode Goals
+                  <Target className="w-3 h-3" /> Goals
                 </div>
                 {goals.length === 0 ? (
                   <div className="text-[10px] text-muted-foreground/50 py-2">No goals dreamed yet.</div>
                 ) : (
                   <div className="space-y-1.5">
-                    {goals.map(goal => {
+                    {goals.slice(0, 8).map(goal => {
                       const isComplete = goal.status === 'completed';
                       const isActive = goal.status === 'in-progress';
                       return (
                         <div
                           key={goal.id}
                           className={`rounded p-2 border transition-colors ${
-                            isComplete
-                              ? 'bg-primary/5 border-primary/20'
-                              : isActive
-                              ? 'bg-accent/5 border-accent/30'
+                            isComplete ? 'bg-primary/5 border-primary/20'
+                              : isActive ? 'bg-accent/5 border-accent/30'
                               : 'bg-muted/20 border-border/30'
                           }`}
                         >
@@ -510,13 +632,10 @@ const Evolution: React.FC = () => {
                                 {goal.title}
                               </div>
                               {goal.unlocks_capability && (
-                                <div className="text-[8px] text-muted-foreground/60 truncate">
-                                  → {goal.unlocks_capability}
-                                </div>
+                                <div className="text-[8px] text-muted-foreground/60 truncate">→ {goal.unlocks_capability}</div>
                               )}
                             </div>
                           </div>
-                          {/* Progress bar */}
                           {!isComplete && goal.progress > 0 && (
                             <div className="mt-1.5 h-1 rounded-full bg-muted/30 overflow-hidden">
                               <div
@@ -528,9 +647,6 @@ const Evolution: React.FC = () => {
                         </div>
                       );
                     })}
-                    <div className="text-[8px] text-muted-foreground/40 text-right pt-1">
-                      {goals.filter(g => g.status === 'completed').length}/{goals.length} completed
-                    </div>
                   </div>
                 )}
               </div>
@@ -565,19 +681,14 @@ const Evolution: React.FC = () => {
                   <Brain className="w-3 h-3" /> Memory Palace
                 </div>
                 {snapshots.length === 0 ? (
-                  <div className="text-[10px] text-muted-foreground/50 py-2">No snapshots yet — the palace awaits.</div>
+                  <div className="text-[10px] text-muted-foreground/50 py-2">No snapshots yet.</div>
                 ) : (
-                  snapshots.map(snap => (
+                  snapshots.slice(0, 5).map(snap => (
                     <div key={snap.id} className="bg-muted/20 rounded p-2 border border-border/30">
                       <div className="text-[10px] text-foreground/80 font-semibold">{snap.label || `Snapshot L${snap.evolution_level}`}</div>
                       <div className="text-[8px] text-muted-foreground mt-0.5">
-                        Level {snap.evolution_level} · Cycle {snap.cycle_number} · {new Date(snap.created_at).toLocaleString()}
+                        Level {snap.evolution_level} · Cycle {snap.cycle_number}
                       </div>
-                      {snap.merkle_root && (
-                        <div className="text-[7px] text-primary/40 mt-0.5 font-mono truncate">
-                          Merkle: {snap.merkle_root}
-                        </div>
-                      )}
                     </div>
                   ))
                 )}
@@ -593,8 +704,13 @@ const Evolution: React.FC = () => {
 
       {/* Footer */}
       <footer className="flex items-center justify-between px-4 py-1 border-t border-border bg-card/30 text-[10px] text-muted-foreground/50 shrink-0">
-        <span>λ Evolution Dashboard — Capability Dependency Graph</span>
-        <span>{layoutNodes.filter(n => n.status === 'acquired').length} acquired · {layoutNodes.filter(n => n.status === 'in-progress').length} building · {layoutNodes.filter(n => n.status === 'planned').length} planned</span>
+        <span>λ Evolution Dashboard — Live System Monitor</span>
+        <span>
+          {layoutNodes.filter(n => n.status === 'acquired' && n.verified).length} verified · 
+          {layoutNodes.filter(n => n.status === 'acquired' && !n.verified).length} ghosts · 
+          {layoutNodes.filter(n => n.status === 'in-progress').length} building · 
+          {layoutNodes.filter(n => n.status === 'planned').length} planned
+        </span>
       </footer>
     </div>
   );
