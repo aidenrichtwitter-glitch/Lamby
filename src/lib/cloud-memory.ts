@@ -183,7 +183,7 @@ export async function addJournalEntry(
         event_type: eventType,
         title,
         description,
-        metadata,
+        metadata: JSON.parse(JSON.stringify(metadata)),
       }]);
   } catch {}
 }
