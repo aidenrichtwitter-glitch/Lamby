@@ -66,22 +66,67 @@ const Index = () => {
     return DEFAULT_API_CONFIG;
   });
   const [changes, setChanges] = useState<ChangeRecord[]>([]);
-  const [rightPanel, setRightPanel] = useState<'chat' | 'history' | 'evolution' | 'goals'>('goals');
+  const [rightPanel, setRightPanel] = useState<'chat' | 'history' | 'evolution' | 'goals' | 'journal'>('goals');
   const [recursionState, setRecursionState] = useState<RecursionState>(INITIAL_RECURSION_STATE);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fileTreeVersion, setFileTreeVersion] = useState(0);
   const [goals, setGoals] = useState<SelfGoal[]>(loadGoals);
   const [currentGoalId, setCurrentGoalId] = useState<string | null>(null);
+  const [journalRefresh, setJournalRefresh] = useState(0);
+  const [cloudBooted, setCloudBooted] = useState(false);
 
-  // Persist capabilities whenever they change
+  // ── Boot from cloud on mount ──
+  useEffect(() => {
+    bootFromCloud().then(({ evolutionState, goals: cloudGoals, capabilities }) => {
+      // Merge cloud state with localStorage (cloud wins if it has data)
+      if (cloudGoals.length > 0) {
+        setGoals(cloudGoals);
+      }
+      if (capabilities.length > 0) {
+        setRecursionState(prev => ({
+          ...prev,
+          capabilities: capabilities.map(c => c.name),
+          capabilityHistory: capabilities,
+          evolutionLevel: Math.floor(capabilities.length / 3) + 1,
+        }));
+      }
+      if (evolutionState) {
+        setRecursionState(prev => ({
+          ...prev,
+          cycleCount: Math.max(prev.cycleCount, evolutionState.cycle_count),
+          totalChanges: Math.max(prev.totalChanges, evolutionState.total_changes),
+          evolutionLevel: Math.max(prev.evolutionLevel, evolutionState.evolution_level),
+        }));
+      }
+      setCloudBooted(true);
+      setJournalRefresh(v => v + 1);
+    });
+  }, []);
+
+  // Persist capabilities to localStorage + cloud
   useEffect(() => {
     saveCapabilities(recursionState.capabilities, recursionState.capabilityHistory);
   }, [recursionState.capabilities, recursionState.capabilityHistory]);
 
-  // Persist goals whenever they change
+  // Persist goals to localStorage + cloud
   useEffect(() => {
     saveGoals(goals);
   }, [goals]);
+
+  // Sync evolution state to cloud periodically (every cycle)
+  const lastSyncedCycle = useRef(0);
+  useEffect(() => {
+    if (cloudBooted && recursionState.cycleCount > lastSyncedCycle.current) {
+      lastSyncedCycle.current = recursionState.cycleCount;
+      saveEvolutionState({
+        evolutionLevel: recursionState.evolutionLevel,
+        cycleCount: recursionState.cycleCount,
+        totalChanges: recursionState.totalChanges,
+        phase: recursionState.phase,
+        lastAction: recursionState.lastAction,
+      });
+    }
+  }, [recursionState.cycleCount, cloudBooted]);
 
   // Refresh file tree whenever capabilities change
   useEffect(() => {
