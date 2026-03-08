@@ -2847,6 +2847,13 @@ export const ALL_PREINSTALLED: PreinstalledCap[] = [
   metaRecursiveCompiler,
   emergentBehaviorDetector,
   singularityBootstrap,
+  // Dreamed goals
+  syntheticHeuristicProfiler,
+  stochasticMetaHeuristicOptimizer,
+  recursiveSemanticDependencyMapper,
+  autonomousEntropyRegulator,
+  adversarialCodeMutationStressor,
+  asymmetricCryptoStateGuard,
 ];
 
 // Install all capabilities into the system
