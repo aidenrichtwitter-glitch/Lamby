@@ -769,6 +769,7 @@ const Index = () => {
           { id: 'journal' as const, icon: ScrollText, label: 'Journal' },
           { id: 'terminal' as const, icon: Terminal, label: 'Terminal' },
           { id: 'code' as const, icon: Eye, label: 'Code' },
+          { id: 'code-evo' as const, icon: Code2, label: 'Code Evolution' },
           { id: 'explorer' as const, icon: FileCode, label: 'Files' },
         ].map(item => (
           <button
