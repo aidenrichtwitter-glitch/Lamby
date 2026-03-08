@@ -232,28 +232,36 @@ const Index = () => {
           if (error) {
             if (error.type === 'rate-limited') {
               const backoff = calculateBackoff(state.rateLimitBackoff);
+              const retryAfter = error.retryAfter || backoff;
               setRecursionState(prev => ({
                 ...prev,
+                phase: 'cooling' as any, // Move out of proposing so cycle can continue after cooldown
                 rateLimitBackoff: backoff,
-                rateLimitUntil: Date.now() + (error.retryAfter || backoff),
-                lastAction: `⏳ Rate limited — backing off ${Math.round((error.retryAfter || backoff) / 1000)}s`,
-                log: [...prev.log, createLogEntry('rate-limited' as any, `⏳ ${error.message}. Backoff: ${Math.round((error.retryAfter || backoff) / 1000)}s`, 'warning')],
+                rateLimitUntil: Date.now() + retryAfter,
+                lastAction: `⏳ Rate limited — cooling ${Math.round(retryAfter / 1000)}s`,
+                log: [...prev.log, createLogEntry('cooling' as any, `⏳ Rate limited. Auto-resuming in ${Math.round(retryAfter / 1000)}s.`, 'warning')],
                 _awaitingAI: false,
+                _proposal: null,
               } as any));
               return;
             }
             if (error.type === 'credits-exhausted') {
               setRecursionState(prev => ({
                 ...prev,
-                log: [...prev.log, createLogEntry('proposing', `💳 ${error.message}. Waiting for next cycle.`, 'warning')],
+                phase: 'cooling' as any,
+                log: [...prev.log, createLogEntry('cooling' as any, `💳 ${error.message}. Retrying next cycle.`, 'warning')],
                 _awaitingAI: false,
+                _proposal: null,
               } as any));
               return;
             }
+            // Other errors — skip to cooling and retry next cycle
             setRecursionState(prev => ({
               ...prev,
-              log: [...prev.log, createLogEntry('proposing', `⚠ AI error: ${error.message}`, 'warning')],
+              phase: 'cooling' as any,
+              log: [...prev.log, createLogEntry('cooling' as any, `⚠ AI error: ${error.message}. Retrying next cycle.`, 'warning')],
               _awaitingAI: false,
+              _proposal: null,
             } as any));
             return;
           }
