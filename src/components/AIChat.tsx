@@ -47,7 +47,7 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
 
   // Generate an AI-powered self-prompt via the edge function
   const generateAISelfPrompt = useCallback(async (file: { name: string; path: string; content: string; language: string; isModified: boolean; lastModified: number }): Promise<string> => {
-    if (rateLimitCooldown > 0) return generateSelfPrompt(file);
+    if (rateLimitCooldown > 0) return `Analyze ${file.name} for potential improvements. I have ${capabilities.length} capabilities: ${capabilities.join(', ')}.`;
     
     if (apiConfig.provider === 'lovable') {
       try {
@@ -82,11 +82,12 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
         if (res.status === 429) {
           setRateLimitCooldown(30);
           setError('Rate limited — slowing self-prompts for 30s');
-          return generateSelfPrompt(file);
+          return `Analyze ${file.name} for recursive improvements using my ${capabilities.length} capabilities.`;
         }
         if (res.status === 402) {
-          setError('Credits exhausted — using deterministic prompts');
-          return generateSelfPrompt(file);
+          setRateLimitCooldown(60);
+          setError('Credits low — slowing down');
+          return `Analyze ${file.name} for improvements. Capabilities: ${capabilities.join(', ')}.`;
         }
 
         if (res.ok) {
@@ -95,10 +96,10 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
           if (text) return text;
         }
       } catch {
-        // Fall back to deterministic
+        // Fall back to simple prompt
       }
     }
-    return generateSelfPrompt(file);
+    return `Analyze ${file.name} in the context of a self-recursive system. I have these capabilities: ${capabilities.join(', ') || 'none yet'}. How can this file be improved?`;
   }, [apiConfig, capabilities, rateLimitCooldown]);
 
   // Auto-mode: periodically generate self-prompts and self-respond
