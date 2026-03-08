@@ -333,6 +333,39 @@ const Evolution: React.FC = () => {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={async () => {
+              if (isRunningCycle) return;
+              setIsRunningCycle(true);
+              try {
+                const report = await runAutonomyCycle();
+                recordAutonomyCycle(report);
+                setAutonomyReport(report);
+                // Emit storm events for each completed task
+                report.tasksCompleted.forEach(task => {
+                  emitStormProcess({
+                    label: `${task.name}: ${task.detail.slice(0, 40)}`,
+                    source: task.type,
+                    target: 'system',
+                    type: task.usedAI ? 'ai' : 'rule',
+                    status: task.success ? 'success' : 'fail',
+                  });
+                });
+                fetchAll();
+              } finally {
+                setIsRunningCycle(false);
+              }
+            }}
+            disabled={isRunningCycle}
+            className={`text-[9px] px-3 py-1 rounded border transition-colors flex items-center gap-1 ${
+              isRunningCycle 
+                ? 'bg-accent/20 text-accent border-accent/40 animate-pulse' 
+                : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20'
+            }`}
+          >
+            {isRunningCycle ? <Loader className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+            {isRunningCycle ? 'Running...' : 'Run Autonomy Cycle'}
+          </button>
+          <button
             onClick={() => setShowStorm(s => !s)}
             className={`text-[9px] px-2 py-1 rounded border transition-colors ${
               showStorm ? 'bg-primary/10 text-primary border-primary/30' : 'bg-muted/30 text-muted-foreground border-border'
