@@ -774,13 +774,25 @@ const Evolution: React.FC = () => {
                     </div>
                   )}
 
+                  {/* Self-adaptations */}
+                  {maturityReport.adaptations.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="text-[8px] text-muted-foreground/60 uppercase tracking-wider">🧬 Self-Adaptations</div>
+                      {maturityReport.adaptations.map((a, i) => (
+                        <div key={i} className="text-[8px] text-foreground/60 px-2 py-1 rounded bg-muted/20 border border-border/30">
+                          {a}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {isRunningMaturity && (
-                    <div className="text-[8px] text-purple-400 animate-pulse flex items-center gap-1">
+                    <div className="text-[8px] text-accent animate-pulse flex items-center gap-1">
                       <Loader className="w-2.5 h-2.5 animate-spin" /> Testing dimensions...
                     </div>
                   )}
                   <div className="text-[8px] text-muted-foreground/50">
-                    Duration: {maturityReport.duration.toFixed(0)}ms
+                    Age: {maturityReport.maturityAge} lifetime runs · {maturityReport.duration.toFixed(0)}ms
                   </div>
                 </div>
               )}
