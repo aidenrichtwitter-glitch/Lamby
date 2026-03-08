@@ -5,6 +5,7 @@ import { getFileTree } from '@/lib/self-source';
 interface FileTreeProps {
   onSelectFile: (path: string) => void;
   selectedFile: string | null;
+  refreshKey?: number; // Forces re-render when SELF_SOURCE changes
 }
 
 interface TreeNode {
@@ -69,7 +70,7 @@ const TreeItem: React.FC<{
   );
 };
 
-const FileTree: React.FC<FileTreeProps> = ({ onSelectFile, selectedFile }) => {
+const FileTree: React.FC<FileTreeProps> = ({ onSelectFile, selectedFile, refreshKey }) => {
   const tree = getFileTree();
 
   return (

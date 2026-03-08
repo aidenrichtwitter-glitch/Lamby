@@ -47,6 +47,7 @@ const Index = () => {
   const [rightPanel, setRightPanel] = useState<'chat' | 'history' | 'evolution'>('chat');
   const [recursionState, setRecursionState] = useState<RecursionState>(INITIAL_RECURSION_STATE);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [fileTreeVersion, setFileTreeVersion] = useState(0);
 
   // Persist capabilities whenever they change
   useEffect(() => {
@@ -187,6 +188,8 @@ const Index = () => {
             }
             // Save capability as a file in src/explorer/
             persistCapability(capRecord, proposal.content);
+            // Force file tree re-render
+            setTimeout(() => setFileTreeVersion(v => v + 1), 100);
             // Level up notification
             const prevLevel = Math.floor(prev.capabilities.length / 3) + 1;
             if (newState.evolutionLevel > prevLevel) {
@@ -390,7 +393,7 @@ const Index = () => {
               onFocus={() => setActivePanel('tree')}
               className="h-full border-0 rounded-none"
             >
-              <FileTree onSelectFile={setSelectedFile} selectedFile={selectedFile} />
+              <FileTree onSelectFile={setSelectedFile} selectedFile={selectedFile} refreshKey={fileTreeVersion} />
             </DesktopWindow>
           </div>
 
