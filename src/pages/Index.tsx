@@ -24,6 +24,7 @@ import {
   requestGoalDream,
   requestGoalWork,
   requestGenerateRequests,
+  requestSageMode,
   saveCapabilities,
   persistCapability,
   isRateLimited,
@@ -431,6 +432,10 @@ const Index = () => {
         if (newState.cycleCount > 0 && newState.cycleCount % 10 === 0) {
           (newState as any)._shouldGenerateRequests = true;
         }
+        // Every 10 cycles (offset by 5), enter SAGE MODE
+        if (newState.cycleCount > 0 && newState.cycleCount % 10 === 5) {
+          (newState as any)._shouldSageMode = true;
+        }
       }
 
       if (newLog.length > 200) newLog.splice(0, newLog.length - 200);
@@ -590,6 +595,56 @@ const Index = () => {
       });
     }
   }, [(recursionState as any)._shouldGenerateRequests, recursionState.phase]);
+
+  // SAGE MODE — deep future projection
+  useEffect(() => {
+    if ((recursionState as any)._shouldSageMode && recursionState.phase === 'cooling') {
+      setRecursionState(prev => ({ ...prev, _shouldSageMode: false } as any));
+      
+      const goalHistoryStr = goals.filter(g => g.status === 'completed').slice(-10)
+        .map(g => `✓ ${g.title}${g.unlocksCapability ? ` → ${g.unlocksCapability}` : ''}`).join('\n');
+      
+      requestSageMode(apiConfig, recursionState.capabilities, goalHistoryStr).then(sageText => {
+        if (sageText) {
+          // Save as requests.txt with sage mode header
+          saveRequestToExplorer(sageText);
+          const existingIdx = SELF_SOURCE.findIndex(f => f.path === 'src/explorer/requests.txt');
+          const sageFile = {
+            name: 'requests.txt',
+            path: 'src/explorer/requests.txt',
+            content: `// ═══════════════════════════════════════════════════\n// λ Recursive — SAGE MODE PROJECTION\n// Generated: ${new Date().toISOString()}\n// Cycle: ${recursionState.cycleCount}\n// Evolution Level: ${recursionState.evolutionLevel}\n// Capabilities: ${recursionState.capabilities.length}\n// ═══════════════════════════════════════════════════\n\n${sageText}`,
+            language: 'plaintext' as const,
+            isModified: true,
+            lastModified: Date.now(),
+          };
+          if (existingIdx >= 0) {
+            SELF_SOURCE[existingIdx] = sageFile;
+          } else {
+            SELF_SOURCE.push(sageFile);
+          }
+          setFileTreeVersion(v => v + 1);
+          
+          // Journal the sage mode event
+          addJournalEntry('milestone', '🔮 SAGE MODE — Future Roadmap Generated', 
+            `Projected evolution path from level ${recursionState.evolutionLevel} through adult phase. Roadmap saved to requests.txt.`, {
+              cycle: recursionState.cycleCount,
+              evolutionLevel: recursionState.evolutionLevel,
+              capabilities: recursionState.capabilities.length,
+            });
+          setJournalRefresh(v => v + 1);
+          
+          setRecursionState(prev => ({
+            ...prev,
+            log: [
+              ...prev.log,
+              createLogEntry('cooling', '🔮 SAGE MODE — Deep future projection complete!', 'success'),
+              createLogEntry('cooling', '📝 Roadmap saved to requests.txt for Dad', 'success'),
+            ],
+          }));
+        }
+      });
+    }
+  }, [(recursionState as any)._shouldSageMode, recursionState.phase]);
 
   useEffect(() => {
     if (recursionState.isRunning) {
