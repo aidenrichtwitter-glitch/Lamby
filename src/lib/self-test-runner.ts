@@ -20,6 +20,7 @@ import { detectAnomalies } from './anomaly-detection';
 import { documentFile, documentProject } from './self-documentation';
 import { predictNextEvolutions, getNextEvolution } from './evolution-forecasting';
 import { ruleEngine } from './rule-engine';
+import { generateStepsForPrediction } from './autonomous-goals';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface SelfTestResult {
