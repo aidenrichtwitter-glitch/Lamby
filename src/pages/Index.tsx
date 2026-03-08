@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { Settings, Terminal, Brain, Shield, Activity, FileCode, RefreshCw, Eye, Zap, Clock, Target, ScrollText } from 'lucide-react';
+import { Settings, Terminal, Brain, Shield, Activity, FileCode, RefreshCw, Eye, Zap, Clock, Target, ScrollText, Network } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import DesktopWindow from '@/components/DesktopWindow';
 import FileTree from '@/components/FileTree';
 import CodeViewer from '@/components/CodeViewer';
@@ -11,6 +12,7 @@ import RecursionPanel from '@/components/RecursionPanel';
 import CapabilityTimeline from '@/components/CapabilityTimeline';
 import GoalsPanel from '@/components/GoalsPanel';
 import EvolutionJournal from '@/components/EvolutionJournal';
+import LiveTerminal, { emitTerminalEvent } from '@/components/LiveTerminal';
 import { ApiConfig, DEFAULT_API_CONFIG, ChangeRecord } from '@/lib/self-reference';
 import { SELF_SOURCE } from '@/lib/self-source';
 import { validateChange } from '@/lib/safety-engine';
@@ -51,6 +53,7 @@ import {
   saveRequestToCloud,
   loadLatestRequest,
 } from '@/lib/cloud-memory';
+import { saveSnapshot, computeMerkleRoot } from '@/lib/memory-palace';
 import { installPresetCapabilities } from '@/lib/preinstall';
 
 const PHASE_SEQUENCE: RecursionState['phase'][] = ['scanning', 'reflecting', 'proposing', 'validating', 'applying', 'cooling'];
@@ -88,7 +91,7 @@ const Index = () => {
     return DEFAULT_API_CONFIG;
   });
   const [changes, setChanges] = useState<ChangeRecord[]>([]);
-  const [rightPanel, setRightPanel] = useState<'chat' | 'history' | 'evolution' | 'goals' | 'journal'>('goals');
+  const [rightPanel, setRightPanel] = useState<'chat' | 'history' | 'evolution' | 'goals' | 'journal' | 'terminal'>('goals');
   const [recursionState, setRecursionState] = useState<RecursionState>(INITIAL_RECURSION_STATE);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fileTreeVersion, setFileTreeVersion] = useState(0);
@@ -360,6 +363,7 @@ const Index = () => {
             newState.capabilityHistory = [...(prev.capabilityHistory || []), capRecord];
             newState.evolutionLevel = Math.floor(newState.capabilities.length / 3) + 1;
             newLog.push(createLogEntry('applying', `⚡ NEW CAPABILITY: ${proposal.capability}`, 'success'));
+            emitTerminalEvent('evolution', 'capability', `NEW CAPABILITY: ${proposal.capability}`);
             newLog.push(createLogEntry('applying', `📁 Saved to src/explorer/${proposal.capability}.ts`, 'success'));
             if (proposal.builtOn && proposal.builtOn.length > 0) {
               newLog.push(createLogEntry('applying', `🧬 Evolution: ${proposal.builtOn.join(' + ')} → ${proposal.capability}`, 'success'));
@@ -445,10 +449,21 @@ const Index = () => {
       if (nextPhase === 'cooling') {
         newState.lastAction = 'Cooling down between cycles...';
         newLog.push(createLogEntry('cooling', '◌ Cooling. Preparing next recursive cycle.', 'info'));
+        emitTerminalEvent('engine', 'state', `Cycle ${newState.cycleCount} complete. Phase: cooling`);
         
         // Every 10 cycles, generate requests for the human
         if (newState.cycleCount > 0 && newState.cycleCount % 10 === 0) {
           (newState as any)._shouldGenerateRequests = true;
+          // Save Memory Palace snapshot every 10 cycles
+          saveSnapshot({
+            evolution_level: newState.evolutionLevel,
+            capabilities: newState.capabilities,
+            merkle_root: computeMerkleRoot(newState.capabilities, newState.evolutionLevel, newState.cycleCount),
+            state_blob: { cycleCount: newState.cycleCount, totalChanges: newState.totalChanges, phase: 'snapshot' },
+            cycle_number: newState.cycleCount,
+            label: `Auto-snapshot L${newState.evolutionLevel}C${newState.cycleCount}`,
+          });
+          emitTerminalEvent('memory-palace', 'state', `Snapshot saved at L${newState.evolutionLevel}C${newState.cycleCount}`);
         }
         // Every 10 cycles (offset by 5), enter SAGE MODE
         if (newState.cycleCount > 0 && newState.cycleCount % 10 === 5) {
@@ -737,6 +752,12 @@ const Index = () => {
           </span>
           {/* Evolution badge */}
           {recursionState.capabilities.length > 0 && (
+            <Link to="/evolution" className="text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 hidden sm:inline-flex items-center gap-1 hover:bg-primary/20 transition-colors">
+              <Network className="w-2.5 h-2.5" />
+              Dashboard
+            </Link>
+          )}
+          {recursionState.capabilities.length > 0 && (
             <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 hidden sm:inline-flex items-center gap-1">
               <Zap className="w-2.5 h-2.5" />
               Lvl {recursionState.evolutionLevel} · {recursionState.capabilities.length} abilities
@@ -870,6 +891,16 @@ const Index = () => {
               <ScrollText className="w-3 h-3" /> Journal
             </button>
             <button
+              onClick={() => setRightPanel('terminal')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] uppercase tracking-wider font-semibold transition-colors ${
+                rightPanel === 'terminal'
+                  ? 'text-primary border-b border-primary bg-primary/5'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Terminal className="w-3 h-3" /> Term
+            </button>
+            <button
               onClick={() => setRightPanel('history')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] uppercase tracking-wider font-semibold transition-colors ${
                 rightPanel === 'history'
@@ -900,6 +931,10 @@ const Index = () => {
                 history={recursionState.capabilityHistory}
                 evolutionLevel={recursionState.evolutionLevel}
               />
+            </div>
+          ) : rightPanel === 'terminal' ? (
+            <div className="flex-1 overflow-hidden">
+              <LiveTerminal />
             </div>
           ) : (
             <div className="flex-1 overflow-auto">
