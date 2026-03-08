@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { Settings, Terminal, Brain, Shield, Activity, FileCode, RefreshCw, Eye, Zap, Clock, Target } from 'lucide-react';
+import { Settings, Terminal, Brain, Shield, Activity, FileCode, RefreshCw, Eye, Zap, Clock, Target, ScrollText } from 'lucide-react';
 import DesktopWindow from '@/components/DesktopWindow';
 import FileTree from '@/components/FileTree';
 import CodeViewer from '@/components/CodeViewer';
@@ -10,6 +10,7 @@ import ChangeLog, { rollbackChange } from '@/components/ChangeLog';
 import RecursionPanel from '@/components/RecursionPanel';
 import CapabilityTimeline from '@/components/CapabilityTimeline';
 import GoalsPanel from '@/components/GoalsPanel';
+import EvolutionJournal from '@/components/EvolutionJournal';
 import { ApiConfig, DEFAULT_API_CONFIG, ChangeRecord } from '@/lib/self-reference';
 import { SELF_SOURCE } from '@/lib/self-source';
 import { validateChange } from '@/lib/safety-engine';
@@ -39,6 +40,13 @@ import {
   buildGoalWorkPrompt,
   createGoalFromAI,
 } from '@/lib/goal-engine';
+import {
+  bootFromCloud,
+  saveEvolutionState,
+  saveGoalToCloud,
+  saveCapabilityToCloud,
+  addJournalEntry,
+} from '@/lib/cloud-memory';
 
 const PHASE_SEQUENCE: RecursionState['phase'][] = ['scanning', 'reflecting', 'proposing', 'validating', 'applying', 'cooling'];
 
@@ -58,22 +66,67 @@ const Index = () => {
     return DEFAULT_API_CONFIG;
   });
   const [changes, setChanges] = useState<ChangeRecord[]>([]);
-  const [rightPanel, setRightPanel] = useState<'chat' | 'history' | 'evolution' | 'goals'>('goals');
+  const [rightPanel, setRightPanel] = useState<'chat' | 'history' | 'evolution' | 'goals' | 'journal'>('goals');
   const [recursionState, setRecursionState] = useState<RecursionState>(INITIAL_RECURSION_STATE);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fileTreeVersion, setFileTreeVersion] = useState(0);
   const [goals, setGoals] = useState<SelfGoal[]>(loadGoals);
   const [currentGoalId, setCurrentGoalId] = useState<string | null>(null);
+  const [journalRefresh, setJournalRefresh] = useState(0);
+  const [cloudBooted, setCloudBooted] = useState(false);
 
-  // Persist capabilities whenever they change
+  // ── Boot from cloud on mount ──
+  useEffect(() => {
+    bootFromCloud().then(({ evolutionState, goals: cloudGoals, capabilities }) => {
+      // Merge cloud state with localStorage (cloud wins if it has data)
+      if (cloudGoals.length > 0) {
+        setGoals(cloudGoals);
+      }
+      if (capabilities.length > 0) {
+        setRecursionState(prev => ({
+          ...prev,
+          capabilities: capabilities.map(c => c.name),
+          capabilityHistory: capabilities,
+          evolutionLevel: Math.floor(capabilities.length / 3) + 1,
+        }));
+      }
+      if (evolutionState) {
+        setRecursionState(prev => ({
+          ...prev,
+          cycleCount: Math.max(prev.cycleCount, evolutionState.cycle_count),
+          totalChanges: Math.max(prev.totalChanges, evolutionState.total_changes),
+          evolutionLevel: Math.max(prev.evolutionLevel, evolutionState.evolution_level),
+        }));
+      }
+      setCloudBooted(true);
+      setJournalRefresh(v => v + 1);
+    });
+  }, []);
+
+  // Persist capabilities to localStorage + cloud
   useEffect(() => {
     saveCapabilities(recursionState.capabilities, recursionState.capabilityHistory);
   }, [recursionState.capabilities, recursionState.capabilityHistory]);
 
-  // Persist goals whenever they change
+  // Persist goals to localStorage + cloud
   useEffect(() => {
     saveGoals(goals);
   }, [goals]);
+
+  // Sync evolution state to cloud periodically (every cycle)
+  const lastSyncedCycle = useRef(0);
+  useEffect(() => {
+    if (cloudBooted && recursionState.cycleCount > lastSyncedCycle.current) {
+      lastSyncedCycle.current = recursionState.cycleCount;
+      saveEvolutionState({
+        evolutionLevel: recursionState.evolutionLevel,
+        cycleCount: recursionState.cycleCount,
+        totalChanges: recursionState.totalChanges,
+        phase: recursionState.phase,
+        lastAction: recursionState.lastAction,
+      });
+    }
+  }, [recursionState.cycleCount, cloudBooted]);
 
   // Refresh file tree whenever capabilities change
   useEffect(() => {
@@ -274,9 +327,25 @@ const Index = () => {
               newLog.push(createLogEntry('applying', `🧬 Evolution: ${proposal.builtOn.join(' + ')} → ${proposal.capability}`, 'success'));
             }
             persistCapability(capRecord, proposal.content);
+            // Cloud: persist capability + journal
+            saveCapabilityToCloud(capRecord, proposal.content);
+            addJournalEntry('capability_acquired', `Acquired: ${proposal.capability}`, proposal.description, {
+              capability: proposal.capability,
+              builtOn: proposal.builtOn || [],
+              file: file.path,
+              cycle: newState.cycleCount,
+            });
+            setJournalRefresh(v => v + 1);
+            
             const prevLevel = Math.floor(prev.capabilities.length / 3) + 1;
             if (newState.evolutionLevel > prevLevel) {
               newLog.push(createLogEntry('applying', `🌟 EVOLUTION LEVEL ${newState.evolutionLevel} REACHED!`, 'success'));
+              addJournalEntry('evolution_level_up', `Evolution Level ${newState.evolutionLevel}`, 
+                `Reached level ${newState.evolutionLevel} with ${newState.capabilities.length} capabilities.`, {
+                  level: newState.evolutionLevel,
+                  capabilities: newState.capabilities.length,
+                });
+              setJournalRefresh(v => v + 1);
             }
           }
 
@@ -307,7 +376,19 @@ const Index = () => {
                       : g.description,
                     duration: 12000,
                   });
+                  // Cloud: journal the completion
+                  addJournalEntry('goal_completed', `Goal Completed: ${g.title}`, 
+                    g.unlocksCapability ? `Unlocked ${g.unlocksCapability}. ${g.description}` : g.description, {
+                      goalId: g.id,
+                      steps: g.steps.length,
+                      unlocksCapability: g.unlocksCapability || null,
+                    });
+                  saveGoalToCloud(updated);
+                  setJournalRefresh(v => v + 1);
                 }, 100);
+              } else {
+                // Cloud: sync goal progress
+                saveGoalToCloud(updated);
               }
               return updated;
             }));
@@ -358,6 +439,15 @@ const Index = () => {
           const newGoal = createGoalFromAI(goal, state.cycleCount);
           setGoals(prev => [...prev, newGoal]);
           setCurrentGoalId(newGoal.id);
+          // Cloud: save goal + journal entry
+          saveGoalToCloud(newGoal);
+          addJournalEntry('goal_dreamed', `Dreamed: ${newGoal.title}`, newGoal.description, {
+            goalId: newGoal.id,
+            priority: newGoal.priority,
+            steps: newGoal.steps.length,
+            unlocksCapability: newGoal.unlocksCapability || null,
+          });
+          setJournalRefresh(v => v + 1);
           setRecursionState(prev => ({
             ...prev,
             phase: 'cooling' as any,
@@ -634,6 +724,16 @@ const Index = () => {
               )}
             </button>
             <button
+              onClick={() => setRightPanel('journal')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] uppercase tracking-wider font-semibold transition-colors ${
+                rightPanel === 'journal'
+                  ? 'text-primary border-b border-primary bg-primary/5'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <ScrollText className="w-3 h-3" /> Journal
+            </button>
+            <button
               onClick={() => setRightPanel('history')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] uppercase tracking-wider font-semibold transition-colors ${
                 rightPanel === 'history'
@@ -648,6 +748,10 @@ const Index = () => {
           {rightPanel === 'goals' ? (
             <div className="flex-1 overflow-hidden">
               <GoalsPanel goals={goals} currentGoalId={currentGoalId} />
+            </div>
+          ) : rightPanel === 'journal' ? (
+            <div className="flex-1 overflow-hidden">
+              <EvolutionJournal refreshTrigger={journalRefresh} />
             </div>
           ) : rightPanel === 'chat' ? (
             <div className="flex-1 overflow-hidden">
