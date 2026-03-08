@@ -246,7 +246,7 @@ const Evolution: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchAll]);
 
-  // Life proof continuous loop — replaces random storm with real tests
+  // Life proof continuous loop
   useEffect(() => {
     lifeProofRef.current = lifeProofLoop;
   }, [lifeProofLoop]);
@@ -268,7 +268,6 @@ const Evolution: React.FC = () => {
           console.error('Life proof error:', err);
         }
         setIsRunningLifeProof(false);
-        // Wait 8 seconds between heartbeats
         await new Promise(r => setTimeout(r, 8000));
       }
     };
@@ -276,6 +275,36 @@ const Evolution: React.FC = () => {
     loop();
     return () => { cancelled = true; };
   }, [lifeProofLoop]);
+
+  // Maturity test continuous loop
+  useEffect(() => {
+    maturityRef.current = maturityLoop;
+  }, [maturityLoop]);
+
+  useEffect(() => {
+    if (!maturityLoop) return;
+    let cancelled = false;
+
+    const loop = async () => {
+      while (!cancelled && maturityRef.current) {
+        setIsRunningMaturity(true);
+        try {
+          const report = await runMaturityTest();
+          if (!cancelled) {
+            setMaturityReport(report);
+            fetchAll();
+          }
+        } catch (err) {
+          console.error('Maturity test error:', err);
+        }
+        setIsRunningMaturity(false);
+        await new Promise(r => setTimeout(r, 12000));
+      }
+    };
+
+    loop();
+    return () => { cancelled = true; };
+  }, [maturityLoop]);
 
   const layoutNodes = useMemo(() => capabilities.nodes, [capabilities]);
   const canvasSize = capabilities.size;
