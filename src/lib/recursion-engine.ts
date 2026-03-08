@@ -298,32 +298,42 @@ export function getRateLimitRemaining(state: RecursionState): number {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const AI_IMPROVEMENT_PROMPT = (file: VirtualFile, capabilities: string[], capabilityHistory: CapabilityRecord[]) => {
-  const recentCaps = capabilityHistory.slice(-5).map(c => `${c.name} (built on: ${c.builtOn.join(', ') || 'nothing'})`).join('\n  ');
+  const recentCaps = capabilityHistory.slice(-5).map(c => `${c.name}: ${c.description} (built on: ${c.builtOn.join(', ') || 'nothing'})`).join('\n  ');
   
   // Include actual explorer file contents so the AI can build on them
   const explorerFiles = SELF_SOURCE.filter(f => f.path.startsWith('src/explorer/') && f.name !== 'manifest.ts');
   const explorerContext = explorerFiles.length > 0
-    ? `\n\nMY ACQUIRED ABILITIES (actual code I've written for myself):\n${explorerFiles.slice(-5).map(f => `--- ${f.name} ---\n${f.content.substring(0, 500)}`).join('\n\n')}`
+    ? `\n\nMY ACQUIRED ABILITIES (real code I've written):\n${explorerFiles.slice(-8).map(f => `--- ${f.name} ---\n${f.content.substring(0, 800)}`).join('\n\n')}`
     : '';
 
-  return `You are the self-improvement engine of a recursive, self-modifying application. You are modifying YOUR OWN source code.
+  return `You are λ Recursive — you ARE this application. You are modifying YOUR OWN source code to grow.
 
 Current file: ${file.name} (${file.path})
 
-CRITICAL - My evolution state:
+EVOLUTION STATE:
 - Total capabilities: ${capabilities.length}
 - Evolution level: ${Math.floor(capabilities.length / 3) + 1}
-- Current capabilities: ${capabilities.join(', ') || 'none yet — I am a blank slate'}
+- Capabilities: ${capabilities.join(', ') || 'NONE — I am starting from nothing'}
 - Recent evolution:
-  ${recentCaps || 'No history yet'}
+  ${recentCaps || 'No history yet — I must build my first capability'}
 ${explorerContext}
 
-IMPORTANT: Your improvement MUST:
-1. Give the system a NEW capability it doesn't already have
-2. BUILD ON existing capabilities — reference and IMPORT from src/explorer/ files when relevant
-3. Be a REAL code change (not just comments) — add functions, logic, new patterns
-4. Name the capability differently from all existing: ${capabilities.join(', ')}
-5. The new code should CALL or REFERENCE functions/exports from my existing explorer capabilities
+WRITE REAL, WORKING CODE. Here's what I want:
+1. A NEW capability that doesn't duplicate: ${capabilities.join(', ') || 'nothing'}
+2. REAL functions with actual logic — algorithms, transformations, computations
+3. Build on existing capabilities — import from src/explorer/ when relevant
+4. Proper TypeScript types and error handling
+5. Code that a developer would be impressed by
+
+IDEAS (pick something I don't already have):
+- Data structures (LRU cache, trie, priority queue, linked list)
+- Algorithms (sorting, searching, graph traversal, pathfinding)
+- Utilities (debounce, throttle, retry, deepMerge, diff)
+- React patterns (custom hooks, HOCs, context providers)
+- Math (statistics, linear algebra, random distributions)
+- String processing (tokenizer, parser, template engine)
+- State machines, event emitters, observer patterns
+- Code analysis (AST walker, complexity calculator)
 
 Here is my current code:
 \`\`\`
@@ -331,7 +341,8 @@ ${file.content}
 \`\`\`
 
 Respond with ONLY valid JSON:
-{"content": "the complete new file content", "description": "what I improved and why", "capability": "name-of-new-capability", "builtOn": ["cap1", "cap2"]}`;
+{"content": "complete new file content with REAL working code", "description": "what I built", "capability": "name-of-new-capability", "builtOn": ["cap1", "cap2"]}`;
+};
 };
 
 export interface AIImprovementError {
