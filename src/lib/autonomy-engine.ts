@@ -11,6 +11,7 @@ import { predictNextEvolutions } from './evolution-forecasting';
 import { documentProject } from './self-documentation';
 import { verifyCapability } from './verification-engine';
 import { validateChange } from './safety-engine';
+import { SELF_SOURCE } from './self-source';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface AutonomyReport {
