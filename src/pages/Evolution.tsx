@@ -103,7 +103,7 @@ function layoutGraph(capabilities: CapabilityNode[]): { nodes: CapabilityNode[];
 const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 
 const Evolution: React.FC = () => {
-  const [capabilities, setCapabilities] = useState<CapabilityNode[]>([]);
+  const [capabilities, setCapabilities] = useState<{ nodes: CapabilityNode[]; width: number; height: number }>({ nodes: [], width: CANVAS_W, height: CANVAS_H_MIN });
   const [stats, setStats] = useState<EvolutionStats | null>(null);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
