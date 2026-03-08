@@ -115,28 +115,85 @@ const Index = () => {
 
       if (nextPhase === 'scanning') {
         newState.cycleCount = prev.cycleCount + 1;
-        const { file, index } = getNextFile(prev.currentFileIndex);
-        newState.currentFileIndex = index;
-        newState.lastAction = `Scanning ${file.name}...`;
-        newLog.push(createLogEntry('scanning', `── Cycle ${newState.cycleCount} ── Selecting: ${file.name}`, 'action', file.path));
-        setSelectedFile(file.path);
+        const activeGoal = getActiveGoal(goals);
+        
+        // Check if we should dream a new goal
+        if (shouldDreamNewGoal(goals, newState.cycleCount)) {
+          (newState as any)._shouldDream = true;
+          newState.lastAction = `💭 Dreaming up a new goal...`;
+          newLog.push(createLogEntry('scanning', `── Cycle ${newState.cycleCount} ── 💭 Dreaming a new goal...`, 'action'));
+        } else if (activeGoal) {
+          // Pick a file relevant to the goal's next step
+          const nextStep = activeGoal.steps.find(s => !s.completed);
+          const targetPath = nextStep?.targetFile;
+          const targetFile = targetPath ? SELF_SOURCE.find(f => f.path === targetPath) : null;
+          
+          if (targetFile) {
+            const idx = SELF_SOURCE.indexOf(targetFile);
+            newState.currentFileIndex = idx;
+            newState.lastAction = `🎯 Working on: ${activeGoal.title}`;
+            newLog.push(createLogEntry('scanning', `── Cycle ${newState.cycleCount} ── 🎯 Goal: ${activeGoal.title}`, 'action', targetFile.path));
+            setSelectedFile(targetFile.path);
+            setCurrentGoalId(activeGoal.id);
+          } else {
+            const { file, index } = getNextFile(prev.currentFileIndex);
+            newState.currentFileIndex = index;
+            newState.lastAction = `🎯 Working on: ${activeGoal.title} (${file.name})`;
+            newLog.push(createLogEntry('scanning', `── Cycle ${newState.cycleCount} ── 🎯 Goal: ${activeGoal.title} → ${file.name}`, 'action', file.path));
+            setSelectedFile(file.path);
+            setCurrentGoalId(activeGoal.id);
+          }
+        } else {
+          const { file, index } = getNextFile(prev.currentFileIndex);
+          newState.currentFileIndex = index;
+          newState.lastAction = `Scanning ${file.name}...`;
+          newLog.push(createLogEntry('scanning', `── Cycle ${newState.cycleCount} ── Selecting: ${file.name}`, 'action', file.path));
+          setSelectedFile(file.path);
+          setCurrentGoalId(null);
+        }
       }
 
       if (nextPhase === 'reflecting') {
-        const file = SELF_SOURCE[prev.currentFileIndex >= 0 ? prev.currentFileIndex : 0];
-        if (file) {
-          newState.lastAction = `Preparing AI analysis of ${file.name}...`;
-          newLog.push(createLogEntry('reflecting', `🤖 Preparing AI-powered analysis of ${file.name}`, 'action', file.path));
+        if ((prev as any)._shouldDream) {
+          newState.lastAction = '💭 AI is dreaming up a new goal...';
+          newLog.push(createLogEntry('reflecting', '💭 Entering dream state — imagining my next objective...', 'action'));
+          (newState as any)._shouldDream = true;
+        } else {
+          const file = SELF_SOURCE[prev.currentFileIndex >= 0 ? prev.currentFileIndex : 0];
+          if (file) {
+            const activeGoal = getActiveGoal(goals);
+            newState.lastAction = activeGoal 
+              ? `🎯 Analyzing ${file.name} for goal: ${activeGoal.title}`
+              : `Preparing AI analysis of ${file.name}...`;
+            newLog.push(createLogEntry('reflecting', activeGoal 
+              ? `🎯 Analyzing ${file.name} for: ${activeGoal.title}`
+              : `🤖 Preparing analysis of ${file.name}`, 'action', file.path));
+          }
         }
       }
 
       if (nextPhase === 'proposing') {
-        const file = SELF_SOURCE[prev.currentFileIndex >= 0 ? prev.currentFileIndex : 0];
-        if (file) {
-          newState.lastAction = `Requesting AI improvement for ${file.name}...`;
-          newLog.push(createLogEntry('proposing', `🤖 Requesting AI improvement for ${file.name} (${prev.capabilities.length} caps)`, 'action', file.path));
-          (newState as any)._proposal = null;
-          (newState as any)._awaitingAI = true;
+        if ((prev as any)._shouldDream) {
+          // Dream mode — ask AI to create a goal
+          newState.lastAction = '💭 Dreaming...';
+          newLog.push(createLogEntry('proposing', '💭 Asking AI to dream up a new goal...', 'action'));
+          (newState as any)._awaitingDream = true;
+          (newState as any)._awaitingAI = false;
+          (newState as any)._shouldDream = false;
+        } else {
+          const file = SELF_SOURCE[prev.currentFileIndex >= 0 ? prev.currentFileIndex : 0];
+          if (file) {
+            const activeGoal = getActiveGoal(goals);
+            newState.lastAction = activeGoal
+              ? `🎯 AI working on: ${activeGoal.title}`
+              : `Requesting AI improvement for ${file.name}...`;
+            newLog.push(createLogEntry('proposing', activeGoal 
+              ? `🎯 AI working toward: ${activeGoal.title}`
+              : `🤖 Requesting improvement for ${file.name}`, 'action', file.path));
+            (newState as any)._proposal = null;
+            (newState as any)._awaitingAI = true;
+            (newState as any)._awaitingDream = false;
+          }
         }
       }
 
