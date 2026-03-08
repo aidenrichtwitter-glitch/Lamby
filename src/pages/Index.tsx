@@ -363,6 +363,7 @@ const Index = () => {
             newState.capabilityHistory = [...(prev.capabilityHistory || []), capRecord];
             newState.evolutionLevel = Math.floor(newState.capabilities.length / 3) + 1;
             newLog.push(createLogEntry('applying', `⚡ NEW CAPABILITY: ${proposal.capability}`, 'success'));
+            emitTerminalEvent('evolution', 'capability', `NEW CAPABILITY: ${proposal.capability}`);
             newLog.push(createLogEntry('applying', `📁 Saved to src/explorer/${proposal.capability}.ts`, 'success'));
             if (proposal.builtOn && proposal.builtOn.length > 0) {
               newLog.push(createLogEntry('applying', `🧬 Evolution: ${proposal.builtOn.join(' + ')} → ${proposal.capability}`, 'success'));
