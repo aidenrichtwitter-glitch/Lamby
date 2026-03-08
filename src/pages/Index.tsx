@@ -439,6 +439,15 @@ const Index = () => {
           const newGoal = createGoalFromAI(goal, state.cycleCount);
           setGoals(prev => [...prev, newGoal]);
           setCurrentGoalId(newGoal.id);
+          // Cloud: save goal + journal entry
+          saveGoalToCloud(newGoal);
+          addJournalEntry('goal_dreamed', `Dreamed: ${newGoal.title}`, newGoal.description, {
+            goalId: newGoal.id,
+            priority: newGoal.priority,
+            steps: newGoal.steps.length,
+            unlocksCapability: newGoal.unlocksCapability || null,
+          });
+          setJournalRefresh(v => v + 1);
           setRecursionState(prev => ({
             ...prev,
             phase: 'cooling' as any,
