@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Zap, Activity, Brain, Shield, TrendingUp, Network, ZoomIn, ZoomOut, Maximize, Loader2 } from 'lucide-react';
+import { ArrowLeft, Zap, Activity, Brain, Shield, TrendingUp, Network, ZoomIn, ZoomOut, Maximize, Loader2, Target, CheckCircle2, Circle, Loader } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { mean, std } from 'mathjs';
@@ -68,7 +68,8 @@ const Evolution: React.FC = () => {
   const [stats, setStats] = useState<EvolutionStats | null>(null);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [zoomIdx, setZoomIdx] = useState(3); // default 1.0
+  const [zoomIdx, setZoomIdx] = useState(3);
+  const [goals, setGoals] = useState<any[]>([]);
 
   const zoom = ZOOM_LEVELS[zoomIdx];
 
@@ -140,6 +141,12 @@ const Evolution: React.FC = () => {
       }
 
       if (snapRes.data) setSnapshots(snapRes.data);
+
+      // Store goals for sidebar
+      setGoals((goalsRes.data || []).sort((a, b) => {
+        const order: Record<string, number> = { 'in-progress': 0, 'active': 1, 'completed': 2 };
+        return (order[a.status] ?? 3) - (order[b.status] ?? 3);
+      }));
     };
 
     fetchAll();
@@ -399,6 +406,69 @@ const Evolution: React.FC = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Sage Mode Goals */}
+              <div className="space-y-2">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                  <Target className="w-3 h-3" /> Sage Mode Goals
+                </div>
+                {goals.length === 0 ? (
+                  <div className="text-[10px] text-muted-foreground/50 py-2">No goals dreamed yet.</div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {goals.map(goal => {
+                      const isComplete = goal.status === 'completed';
+                      const isActive = goal.status === 'in-progress';
+                      return (
+                        <div
+                          key={goal.id}
+                          className={`rounded p-2 border transition-colors ${
+                            isComplete
+                              ? 'bg-primary/5 border-primary/20'
+                              : isActive
+                              ? 'bg-accent/5 border-accent/30'
+                              : 'bg-muted/20 border-border/30'
+                          }`}
+                        >
+                          <div className="flex items-start gap-1.5">
+                            {isComplete ? (
+                              <CheckCircle2 className="w-3 h-3 text-primary shrink-0 mt-0.5" />
+                            ) : isActive ? (
+                              <Loader className="w-3 h-3 text-accent shrink-0 mt-0.5 animate-spin" />
+                            ) : (
+                              <Circle className="w-3 h-3 text-muted-foreground/40 shrink-0 mt-0.5" />
+                            )}
+                            <div className="min-w-0">
+                              <div className={`text-[10px] font-semibold truncate ${
+                                isComplete ? 'text-primary/80' : isActive ? 'text-accent' : 'text-foreground/60'
+                              }`}>
+                                {goal.title}
+                              </div>
+                              {goal.unlocks_capability && (
+                                <div className="text-[8px] text-muted-foreground/60 truncate">
+                                  → {goal.unlocks_capability}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {/* Progress bar */}
+                          {!isComplete && goal.progress > 0 && (
+                            <div className="mt-1.5 h-1 rounded-full bg-muted/30 overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${isActive ? 'bg-accent' : 'bg-primary/40'}`}
+                                style={{ width: `${goal.progress}%` }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <div className="text-[8px] text-muted-foreground/40 text-right pt-1">
+                      {goals.filter(g => g.status === 'completed').length}/{goals.length} completed
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Health */}
