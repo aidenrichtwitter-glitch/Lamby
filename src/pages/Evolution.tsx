@@ -848,8 +848,27 @@ const Evolution: React.FC = () => {
                   <div className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                     <Activity className="w-3 h-3" /> Last Cycle
                   </div>
+                  
+                  {/* Goal attempt highlight */}
+                  {autonomyReport.goalAttempted && (
+                    <div className={`p-2 rounded border ${autonomyReport.goalAttempted.success ? 'bg-primary/5 border-primary/30' : 'bg-destructive/5 border-destructive/30'}`}>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Target className={`w-3 h-3 ${autonomyReport.goalAttempted.success ? 'text-primary' : 'text-destructive'}`} />
+                        <span className="text-[10px] font-semibold text-foreground/80 truncate">
+                          {autonomyReport.goalAttempted.title}
+                        </span>
+                      </div>
+                      <div className="text-[9px] text-foreground/60 mb-1">
+                        Attempted: {autonomyReport.goalAttempted.stepAttempted}
+                      </div>
+                      <div className={`text-[8px] ${autonomyReport.goalAttempted.success ? 'text-primary/80' : 'text-destructive/80'}`}>
+                        {autonomyReport.goalAttempted.detail}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-1">
-                    {autonomyReport.tasksCompleted.map(task => (
+                    {autonomyReport.tasksCompleted.filter(t => t.id !== 'goal-exec').map(task => (
                       <div
                         key={task.id}
                         className={`text-[9px] px-2 py-1.5 rounded border ${
