@@ -214,6 +214,14 @@ async function testTaskReady(): Promise<DimensionResult> {
   const rules = ruleEngine.getRules();
   checks.push({ name: 'autonomous-rules', pass: rules.length >= 5, detail: `${rules.length} decision rules active` });
 
+  // Check: Can decompose tasks deterministically?
+  try {
+    const decomposed = decomposeTask('clean the garage');
+    checks.push({ name: 'task-decomposition', pass: decomposed.steps.length >= 3, detail: `Decomposed "clean garage" into ${decomposed.steps.length} steps (~${decomposed.totalMinutes}min)` });
+  } catch {
+    checks.push({ name: 'task-decomposition', pass: false, detail: 'Task decomposition failed' });
+  }
+
   // Check: Has lambda_tasks for async work
   const { data: tasks } = await supabase.from('lambda_tasks').select('id, status').limit(5);
   checks.push({ name: 'async-tasks', pass: (tasks?.length || 0) > 0, detail: `${tasks?.length || 0} tasks in queue` });
