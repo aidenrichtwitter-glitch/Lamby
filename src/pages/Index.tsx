@@ -483,8 +483,12 @@ const Index = () => {
 
       const activeGoal = currentGoalId ? goals.find(g => g.id === currentGoalId) : null;
 
+      // Get recent capability code for richer context
+      const explorerFiles = SELF_SOURCE.filter(f => f.path.startsWith('src/explorer/') && f.name !== 'manifest.ts');
+      const recentCapCode = explorerFiles.slice(-5).map(f => `// ${f.name}\n${f.content.substring(0, 600)}`).join('\n\n');
+
       const aiRequest = activeGoal
-        ? requestGoalWork(apiConfig, buildGoalWorkPrompt(activeGoal, file, state.capabilities), state.capabilities)
+        ? requestGoalWork(apiConfig, buildGoalWorkPrompt(activeGoal, file, state.capabilities, recentCapCode), state.capabilities)
         : requestAIImprovement(apiConfig, file, state.capabilities, state.capabilityHistory);
 
       aiRequest.then(({ result, error }) => {
