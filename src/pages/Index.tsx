@@ -281,8 +281,10 @@ const Index = () => {
           } else {
             setRecursionState(prev => ({
               ...prev,
-              log: [...prev.log, createLogEntry('proposing', 'AI returned no improvement — continuing cycle.', 'info')],
+              phase: 'cooling' as any,
+              log: [...prev.log, createLogEntry('cooling' as any, 'AI returned no improvement — cooling before next cycle.', 'info')],
               _awaitingAI: false,
+              _proposal: null,
             } as any));
           }
         });
