@@ -951,6 +951,33 @@ const Index = () => {
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* Ghost Briefing trigger */}
+            <button
+              onClick={() => {
+                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+                emitTerminalEvent('ghost', 'ai', '👻 Triggering Ghost Instance briefing...');
+                fetch(`${supabaseUrl}/functions/v1/ghost-evolve`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseKey}` },
+                  body: JSON.stringify({}),
+                }).then(r => r.json()).then(data => {
+                  if (data.briefing) {
+                    emitTerminalEvent('ghost', 'ai', `👻 Briefing received: ${data.briefing.substring(0, 100)}...`);
+                    addJournalEntry('milestone', '👻 Ghost Briefing', data.briefing.substring(0, 500), {
+                      evolution_level: data.state?.evolution_level,
+                      capabilities_count: data.state?.capabilities_count,
+                    });
+                    setJournalRefresh(v => v + 1);
+                    toast({ title: '👻 Ghost Briefing Ready', description: 'Check the Journal for the full briefing.', duration: 5000 });
+                  }
+                }).catch(() => emitTerminalEvent('ghost', 'error', 'Ghost instance failed'));
+              }}
+              className="text-[10px] px-2.5 py-1 rounded-full bg-muted/20 text-muted-foreground border border-border hover:text-primary hover:border-primary/30 transition-all flex items-center gap-1"
+              title="Request Ghost Instance Briefing"
+            >
+              <Rocket className="w-3 h-3" /> Briefing
+            </button>
             <button
               onClick={handleToggleRunning}
               className={`text-[10px] px-3 py-1 rounded-full transition-all ${
