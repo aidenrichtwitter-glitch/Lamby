@@ -56,9 +56,9 @@ export interface RecursionLogEntry {
 }
 
 const PHASE_DURATION: Record<string, Record<string, number>> = {
-  slow: { scanning: 3000, reflecting: 4000, proposing: 5000, validating: 1500, applying: 1000, cooling: 6000, 'rate-limited': 5000 },
-  normal: { scanning: 2000, reflecting: 3000, proposing: 4000, validating: 1000, applying: 800, cooling: 5000, 'rate-limited': 5000 },
-  fast: { scanning: 1500, reflecting: 2000, proposing: 2500, validating: 800, applying: 500, cooling: 3000, 'rate-limited': 3000 },
+  slow: { scanning: 1500, reflecting: 2000, proposing: 3000, validating: 800, applying: 500, cooling: 3000, 'rate-limited': 3000 },
+  normal: { scanning: 800, reflecting: 1500, proposing: 2000, validating: 500, applying: 400, cooling: 2000, 'rate-limited': 3000 },
+  fast: { scanning: 400, reflecting: 800, proposing: 1200, validating: 300, applying: 200, cooling: 1000, 'rate-limited': 2000 },
 };
 
 // Self-reflective prompts the AI generates about itself
@@ -565,6 +565,37 @@ export async function requestGoalWork(
     return { result: null };
   } catch (e) {
     return { result: null, error: { type: 'unknown', message: e instanceof Error ? e.message : 'Goal work error' } };
+  }
+}
+
+// Request AI to generate requests for the human operator
+export async function requestGenerateRequests(
+  config: ApiConfig,
+  capabilities: string[],
+  journalContext?: string,
+): Promise<string | null> {
+  try {
+    if (config.provider !== 'lovable') return null;
+    let url = '', key = '';
+    try { url = import.meta.env.VITE_SUPABASE_URL; key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY; } catch {}
+    if (!url) return null;
+
+    const res = await fetch(`${url}/functions/v1/self-recurse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({
+        mode: 'generate-requests',
+        capabilities,
+        journalContext,
+        messages: [{ role: 'user', content: `Generate requests for abilities I need but cannot build myself. I have ${capabilities.length} capabilities: ${capabilities.join(', ')}` }],
+      }),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || null;
+  } catch {
+    return null;
   }
 }
 

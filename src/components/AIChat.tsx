@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Bot, User, Loader2, AlertCircle, Sparkles } from 'lucide-react';
 import { ApiConfig } from '@/lib/self-reference';
 import { SELF_SOURCE } from '@/lib/self-source';
+import { saveChatMessage, loadChatMessages } from '@/lib/cloud-memory';
 
 interface Message {
   role: 'user' | 'assistant' | 'system' | 'self';
@@ -18,18 +19,32 @@ interface AIChatProps {
 }
 
 const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capabilities = [] }) => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'system',
-      content: `> Recursive AI active. Provider: ${apiConfig.provider}.\n> Mode: ${autoMode ? 'Autonomous — I ask myself questions.' : 'Awaiting input.'}\n> Human override: always available.`,
-      timestamp: Date.now(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesLoaded, setMessagesLoaded] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Load persisted messages from cloud on mount
+  useEffect(() => {
+    loadChatMessages(150).then(rows => {
+      const loaded: Message[] = rows.map(r => ({
+        role: r.role as Message['role'],
+        content: r.content,
+        timestamp: r.created_at ? new Date(r.created_at).getTime() : Date.now(),
+      }));
+      // Add system header
+      const systemMsg: Message = {
+        role: 'system',
+        content: `> Recursive AI active. Provider: ${apiConfig.provider}.\n> Mode: ${autoMode ? 'Autonomous — I ask myself questions.' : 'Awaiting input.'}\n> Human override: always available.`,
+        timestamp: Date.now(),
+      };
+      setMessages(loaded.length > 0 ? [...loaded] : [systemMsg]);
+      setMessagesLoaded(true);
+    });
+  }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -119,14 +134,13 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
     const selfPrompt = await generateAISelfPrompt(file);
     const selfMsg: Message = { role: 'self', content: selfPrompt, timestamp: Date.now() };
     setMessages(prev => [...prev, selfMsg]);
+    saveChatMessage('self', selfPrompt);
 
     try {
       const response = await callAI(apiConfig, [...messages.filter(m => m.role !== 'system'), selfMsg], file.path, capabilities);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: response,
-        timestamp: Date.now(),
-      }]);
+      const assistantMsg: Message = { role: 'assistant', content: response, timestamp: Date.now() };
+      setMessages(prev => [...prev, assistantMsg]);
+      saveChatMessage('assistant', response);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
       setError(errMsg);
@@ -160,17 +174,16 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
 
     const userMsg: Message = { role: 'user', content: input.trim(), timestamp: Date.now() };
     setMessages(prev => [...prev, userMsg]);
+    saveChatMessage('user', input.trim());
     setInput('');
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await callAI(apiConfig, [...messages.filter(m => m.role !== 'system'), userMsg], selectedFile, capabilities);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: response,
-        timestamp: Date.now(),
-      }]);
+      const assistantMsg: Message = { role: 'assistant', content: response, timestamp: Date.now() };
+      setMessages(prev => [...prev, assistantMsg]);
+      saveChatMessage('assistant', response);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
       if (errMsg.includes('429') || errMsg.includes('Rate limit')) {

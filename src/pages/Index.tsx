@@ -23,6 +23,7 @@ import {
   requestAIImprovement,
   requestGoalDream,
   requestGoalWork,
+  requestGenerateRequests,
   saveCapabilities,
   persistCapability,
   isRateLimited,
@@ -46,6 +47,7 @@ import {
   saveGoalToCloud,
   saveCapabilityToCloud,
   addJournalEntry,
+  saveRequestToExplorer,
 } from '@/lib/cloud-memory';
 import { installPresetCapabilities } from '@/lib/preinstall';
 
@@ -424,6 +426,11 @@ const Index = () => {
       if (nextPhase === 'cooling') {
         newState.lastAction = 'Cooling down between cycles...';
         newLog.push(createLogEntry('cooling', '◌ Cooling. Preparing next recursive cycle.', 'info'));
+        
+        // Every 10 cycles, generate requests for the human
+        if (newState.cycleCount > 0 && newState.cycleCount % 10 === 0) {
+          (newState as any)._shouldGenerateRequests = true;
+        }
       }
 
       if (newLog.length > 200) newLog.splice(0, newLog.length - 200);
@@ -551,6 +558,38 @@ const Index = () => {
       });
     }
   }, [recursionState.phase, (recursionState as any)._awaitingAI, (recursionState as any)._awaitingDream]);
+
+  // Generate requests file for human relay
+  useEffect(() => {
+    if ((recursionState as any)._shouldGenerateRequests && recursionState.phase === 'cooling') {
+      setRecursionState(prev => ({ ...prev, _shouldGenerateRequests: false } as any));
+      requestGenerateRequests(apiConfig, recursionState.capabilities).then(requestsText => {
+        if (requestsText) {
+          saveRequestToExplorer(requestsText);
+          // Save as virtual file in SELF_SOURCE
+          const existingIdx = SELF_SOURCE.findIndex(f => f.path === 'src/explorer/requests.txt');
+          const requestFile = {
+            name: 'requests.txt',
+            path: 'src/explorer/requests.txt',
+            content: `// λ Recursive — Requests for Human Operator\n// Generated: ${new Date().toISOString()}\n// Cycle: ${recursionState.cycleCount}\n\n${requestsText}`,
+            language: 'plaintext' as const,
+            isModified: true,
+            lastModified: Date.now(),
+          };
+          if (existingIdx >= 0) {
+            SELF_SOURCE[existingIdx] = requestFile;
+          } else {
+            SELF_SOURCE.push(requestFile);
+          }
+          setFileTreeVersion(v => v + 1);
+          setRecursionState(prev => ({
+            ...prev,
+            log: [...prev.log, createLogEntry('cooling', '📝 Updated requests.txt — I have requests for Dad!', 'success')],
+          }));
+        }
+      });
+    }
+  }, [(recursionState as any)._shouldGenerateRequests, recursionState.phase]);
 
   useEffect(() => {
     if (recursionState.isRunning) {
