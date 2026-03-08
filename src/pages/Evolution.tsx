@@ -114,6 +114,11 @@ const Evolution: React.FC = () => {
   const [containerSize, setContainerSize] = useState(800);
   const [ruleReport, setRuleReport] = useState<RuleEngineReport | null>(null);
   const [showStorm, setShowStorm] = useState(true);
+  const [autonomyReport, setAutonomyReport] = useState<AutonomyReport | null>(null);
+  const [isRunningCycle, setIsRunningCycle] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   const mainRef = React.useRef<HTMLDivElement>(null);
 
   // Measure container
