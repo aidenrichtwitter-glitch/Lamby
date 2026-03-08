@@ -16,7 +16,6 @@ import {
   INITIAL_RECURSION_STATE,
   createLogEntry,
   getNextFile,
-  generateSelfObservation,
   getPhaseDuration,
   requestAIImprovement,
   saveCapabilities,
