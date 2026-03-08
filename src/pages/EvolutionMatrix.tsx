@@ -205,7 +205,7 @@ const EvolutionMatrix: React.FC = () => {
             <h1 className="text-sm font-bold tracking-tight">Evolution Chronosphere</h1>
             <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 inline-flex items-center gap-1">
               <Zap className="w-2.5 h-2.5" />
-              L{currentLevel} {EVOLUTION_TITLES[currentLevel] || ''} · {totalCaps} caps
+              L{currentLevel} {getEvolutionTitle(currentLevel)} · {totalCaps} caps
             </span>
           </div>
           <div className="flex items-center gap-3">
