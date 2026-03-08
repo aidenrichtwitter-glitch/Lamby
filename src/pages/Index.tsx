@@ -263,7 +263,7 @@ const Index = () => {
         } else {
           const file = SELF_SOURCE[prev.currentFileIndex >= 0 ? prev.currentFileIndex : 0];
           if (file) {
-            const activeGoal = getActiveGoal(goals);
+            const activeGoal = getActiveGoal(goalsRef.current);
             newState.lastAction = activeGoal 
               ? `🎯 Analyzing ${file.name} for goal: ${activeGoal.title}`
               : `Preparing AI analysis of ${file.name}...`;
