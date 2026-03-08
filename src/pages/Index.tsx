@@ -48,7 +48,8 @@ import {
   saveGoalToCloud,
   saveCapabilityToCloud,
   addJournalEntry,
-  saveRequestToExplorer,
+  saveRequestToCloud,
+  loadLatestRequest,
 } from '@/lib/cloud-memory';
 import { installPresetCapabilities } from '@/lib/preinstall';
 
