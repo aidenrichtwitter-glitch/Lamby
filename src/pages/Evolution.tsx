@@ -124,7 +124,11 @@ const Evolution: React.FC = () => {
   const [lifeReport, setLifeReport] = useState<LifeProofReport | null>(null);
   const [isRunningLifeProof, setIsRunningLifeProof] = useState(false);
   const [lifeProofLoop, setLifeProofLoop] = useState(false);
+  const [maturityReport, setMaturityReport] = useState<MaturityReport | null>(null);
+  const [isRunningMaturity, setIsRunningMaturity] = useState(false);
+  const [maturityLoop, setMaturityLoop] = useState(false);
   const lifeProofRef = React.useRef(false);
+  const maturityRef = React.useRef(false);
   const mainRef = React.useRef<HTMLDivElement>(null);
 
   // Measure container
