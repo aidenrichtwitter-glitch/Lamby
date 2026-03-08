@@ -245,7 +245,7 @@ const Index = () => {
             if (error.type === 'credits-exhausted') {
               setRecursionState(prev => ({
                 ...prev,
-                log: [...prev.log, createLogEntry('proposing', `💳 ${error.message}. Continuing with deterministic evolution.`, 'warning')],
+                log: [...prev.log, createLogEntry('proposing', `💳 ${error.message}. Waiting for next cycle.`, 'warning')],
                 _awaitingAI: false,
               } as any));
               return;
