@@ -793,7 +793,7 @@ const Evolution: React.FC = () => {
                 </div>
               )}
 
-
+              <div className="space-y-2">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                   <Cpu className="w-3 h-3" /> Autonomy Score
                 </div>
