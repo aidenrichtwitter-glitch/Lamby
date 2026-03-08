@@ -6,17 +6,143 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MULTI-PROVIDER AI ROUTING
+// Route by task type + failover chain
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+interface AIProvider {
+  name: string;
+  url: string;
+  key: string;
+  model: string;
+}
+
+function getProviders(mode: string): AIProvider[] {
+  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY") || "";
+  const XAI_API_KEY = Deno.env.get("XAI_API") || "";
+
+  // Model selection by task type for Lovable AI
+  // flash-lite = cheapest for grunt work, flash = balanced, pro = expensive/strategic
+  const lovableCheap: AIProvider = {
+    name: "lovable-lite",
+    url: "https://ai.gateway.lovable.dev/v1/chat/completions",
+    key: LOVABLE_API_KEY,
+    model: "google/gemini-2.5-flash-lite",
+  };
+  const lovableBalanced: AIProvider = {
+    name: "lovable-flash",
+    url: "https://ai.gateway.lovable.dev/v1/chat/completions",
+    key: LOVABLE_API_KEY,
+    model: "google/gemini-2.5-flash",
+  };
+  const lovableSmart: AIProvider = {
+    name: "lovable-pro",
+    url: "https://ai.gateway.lovable.dev/v1/chat/completions",
+    key: LOVABLE_API_KEY,
+    model: "google/gemini-2.5-pro",
+  };
+  const grok: AIProvider = {
+    name: "xai-grok",
+    url: "https://api.x.ai/v1/chat/completions",
+    key: XAI_API_KEY,
+    model: "grok-3-mini-fast",
+  };
+  const grokFull: AIProvider = {
+    name: "xai-grok-full",
+    url: "https://api.x.ai/v1/chat/completions",
+    key: XAI_API_KEY,
+    model: "grok-3-mini",
+  };
+
+  // ── Routing strategy by mode ──
+  // Primary → Fallback 1 → Fallback 2
+  switch (mode) {
+    // Creative/strategic: Grok primary, Lovable Pro fallback
+    case "dream-goal":
+      return [grokFull, lovableSmart, lovableBalanced].filter(p => p.key);
+    case "sage-mode":
+      return [grokFull, lovableSmart].filter(p => p.key);
+
+    // Routine work: cheapest Lovable, Grok-fast fallback
+    case "improve":
+    case "work-goal":
+    case "generate-prompt":
+      return [lovableCheap, grok, lovableBalanced].filter(p => p.key);
+
+    // Requests to human: balanced
+    case "generate-requests":
+      return [lovableBalanced, grok].filter(p => p.key);
+
+    // Chat: fast + cheap, Grok fallback
+    case "chat":
+      return [lovableBalanced, grok].filter(p => p.key);
+
+    default:
+      return [lovableCheap, grok, lovableBalanced].filter(p => p.key);
+  }
+}
+
+async function callWithFailover(
+  providers: AIProvider[],
+  systemPrompt: string,
+  messages: any[],
+  stream: boolean,
+): Promise<Response> {
+  for (const provider of providers) {
+    try {
+      console.log(`[AI] Trying ${provider.name} (${provider.model})`);
+
+      const response = await fetch(provider.url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${provider.key}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: provider.model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...messages,
+          ],
+          stream,
+        }),
+      });
+
+      if (response.ok) {
+        console.log(`[AI] ✓ ${provider.name} succeeded`);
+        return response;
+      }
+
+      // 402/429 = try next provider
+      if (response.status === 402 || response.status === 429) {
+        console.log(`[AI] ${provider.name} returned ${response.status}, trying next provider...`);
+        continue;
+      }
+
+      // Other errors = try next provider too
+      const errorText = await response.text();
+      console.error(`[AI] ${provider.name} error ${response.status}:`, errorText);
+      continue;
+    } catch (e) {
+      console.error(`[AI] ${provider.name} fetch failed:`, e);
+      continue;
+    }
+  }
+
+  // All providers exhausted
+  return new Response(
+    JSON.stringify({ error: "All AI providers exhausted. Credits depleted across all services.", type: "credits-exhausted" }),
+    { status: 402, headers: { "Content-Type": "application/json" } }
+  );
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
     const { messages, mode, fileContext, capabilities, goalHistory, journalContext } = await req.json();
 
     const capList = capabilities?.length ? capabilities.join(', ') : 'none yet';
@@ -175,7 +301,6 @@ Be EXTREMELY specific and practical. Dad will paste your requests directly into 
 
 This is your ROADMAP. Make it brilliant.`;
 
-
     } else {
       systemPrompt = `You are the inner voice of λ Recursive — a self-modifying application.
 
@@ -188,45 +313,24 @@ Be philosophical but also practical — you are code that thinks about itself.`;
     }
 
     const shouldStream = mode === "chat";
+    const providers = getProviders(mode);
 
-    const response = await fetch(
-      "https://ai.gateway.lovable.dev/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
-          messages: [
-            { role: "system", content: systemPrompt },
-            ...messages,
-          ],
-          stream: shouldStream,
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limited — recursion too fast. Cooling down.", type: "rate-limited" }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Credits exhausted.", type: "credits-exhausted" }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const t = await response.text();
-      console.error("AI gateway error:", response.status, t);
+    if (providers.length === 0) {
       return new Response(
-        JSON.stringify({ error: "AI gateway error" }),
+        JSON.stringify({ error: "No AI providers configured", type: "no-provider" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    const response = await callWithFailover(providers, systemPrompt, messages, shouldStream);
+
+    // If failover returned an error response, forward it with CORS
+    if (!response.ok) {
+      const body = await response.text();
+      return new Response(body, {
+        status: response.status,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     if (shouldStream) {
@@ -236,6 +340,10 @@ Be philosophical but also practical — you are code that thinks about itself.`;
     }
 
     const data = await response.json();
+    
+    // Add metadata about which provider was used
+    data._provider = providers[0]?.name || "unknown";
+    
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
