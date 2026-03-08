@@ -421,10 +421,13 @@ const Index = () => {
 
     // Dream mode — ask AI to create a goal
     if ((state as any)._awaitingDream && state.phase === 'proposing') {
+      // Build context from journal and goal history
+      const goalHistoryStr = goals.filter(g => g.status === 'completed').slice(-5)
+        .map(g => `✓ ${g.title}${g.unlocksCapability ? ` → ${g.unlocksCapability}` : ''}`).join('\n');
       const prompt = buildGoalDreamPrompt(
         state.capabilities, goals, state.cycleCount, state.evolutionLevel
       );
-      requestGoalDream(apiConfig, prompt, state.capabilities).then(({ goal, error }) => {
+      requestGoalDream(apiConfig, prompt, state.capabilities, goalHistoryStr).then(({ goal, error }) => {
         if (error) {
           setRecursionState(prev => ({
             ...prev,
@@ -480,8 +483,12 @@ const Index = () => {
 
       const activeGoal = currentGoalId ? goals.find(g => g.id === currentGoalId) : null;
 
+      // Get recent capability code for richer context
+      const explorerFiles = SELF_SOURCE.filter(f => f.path.startsWith('src/explorer/') && f.name !== 'manifest.ts');
+      const recentCapCode = explorerFiles.slice(-5).map(f => `// ${f.name}\n${f.content.substring(0, 600)}`).join('\n\n');
+
       const aiRequest = activeGoal
-        ? requestGoalWork(apiConfig, buildGoalWorkPrompt(activeGoal, file, state.capabilities), state.capabilities)
+        ? requestGoalWork(apiConfig, buildGoalWorkPrompt(activeGoal, file, state.capabilities, recentCapCode), state.capabilities)
         : requestAIImprovement(apiConfig, file, state.capabilities, state.capabilityHistory);
 
       aiRequest.then(({ result, error }) => {
