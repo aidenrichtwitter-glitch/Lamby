@@ -55,6 +55,7 @@ import {
 } from '@/lib/cloud-memory';
 import { saveSnapshot, computeMerkleRoot } from '@/lib/memory-palace';
 import { installPresetCapabilities } from '@/lib/preinstall';
+import CodeEvolution from '@/components/CodeEvolution';
 
 const PHASE_SEQUENCE: RecursionState['phase'][] = ['scanning', 'reflecting', 'proposing', 'validating', 'applying', 'cooling'];
 
