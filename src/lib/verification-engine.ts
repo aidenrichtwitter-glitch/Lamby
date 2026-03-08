@@ -179,7 +179,7 @@ async function syncVerificationResults(results: VerificationResult[]): Promise<v
           verified: result.status === 'verified',
           verified_at: result.status === 'verified' ? new Date().toISOString() : null,
           verification_method: result.checks.map(c => `${c.name}:${c.passed ? '✓' : '✗'}`).join(', '),
-        })
+        } as any)
         .eq('name', result.capabilityName);
     } catch {}
   }
@@ -198,7 +198,7 @@ export async function quarantineGhosts(): Promise<number> {
       .update({
         verified: false,
         verification_method: 'GHOST — no backing code',
-      })
+      } as any)
       .eq('name', ghost.capabilityName);
   }
 
