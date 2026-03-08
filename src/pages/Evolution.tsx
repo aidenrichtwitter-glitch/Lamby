@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { mean, std } from 'mathjs';
 import { getEvolutionTitle } from '@/lib/evolution-titles';
 import { ruleEngine, RuleEngineReport } from '@/lib/rule-engine';
-import TerminalStorm, { emitStormProcess } from '@/components/TerminalStorm';
+import { StormLightning, emitStormProcess } from '@/components/TerminalStorm';
 
 interface CapabilityNode {
   name: string;
