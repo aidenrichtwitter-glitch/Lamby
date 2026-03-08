@@ -258,8 +258,6 @@ async function runForecasting(): Promise<AutonomyTask> {
 
 function runDocumentation(): AutonomyTask {
   const start = performance.now();
-  // Use SELF_SOURCE to get actual files to document
-  const { SELF_SOURCE } = require('./self-source');
   const files = (SELF_SOURCE || []).map((f: any) => ({ path: f.path, content: f.content }));
   const report = documentProject(files);
 
