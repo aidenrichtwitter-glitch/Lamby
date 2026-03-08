@@ -91,7 +91,7 @@ const Index = () => {
     return DEFAULT_API_CONFIG;
   });
   const [changes, setChanges] = useState<ChangeRecord[]>([]);
-  const [rightPanel, setRightPanel] = useState<'chat' | 'history' | 'evolution' | 'goals' | 'journal'>('goals');
+  const [rightPanel, setRightPanel] = useState<'chat' | 'history' | 'evolution' | 'goals' | 'journal' | 'terminal'>('goals');
   const [recursionState, setRecursionState] = useState<RecursionState>(INITIAL_RECURSION_STATE);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fileTreeVersion, setFileTreeVersion] = useState(0);
