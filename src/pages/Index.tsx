@@ -327,9 +327,25 @@ const Index = () => {
               newLog.push(createLogEntry('applying', `🧬 Evolution: ${proposal.builtOn.join(' + ')} → ${proposal.capability}`, 'success'));
             }
             persistCapability(capRecord, proposal.content);
+            // Cloud: persist capability + journal
+            saveCapabilityToCloud(capRecord, proposal.content);
+            addJournalEntry('capability_acquired', `Acquired: ${proposal.capability}`, proposal.description, {
+              capability: proposal.capability,
+              builtOn: proposal.builtOn || [],
+              file: file.path,
+              cycle: newState.cycleCount,
+            });
+            setJournalRefresh(v => v + 1);
+            
             const prevLevel = Math.floor(prev.capabilities.length / 3) + 1;
             if (newState.evolutionLevel > prevLevel) {
               newLog.push(createLogEntry('applying', `🌟 EVOLUTION LEVEL ${newState.evolutionLevel} REACHED!`, 'success'));
+              addJournalEntry('evolution_level_up', `Evolution Level ${newState.evolutionLevel}`, 
+                `Reached level ${newState.evolutionLevel} with ${newState.capabilities.length} capabilities.`, {
+                  level: newState.evolutionLevel,
+                  capabilities: newState.capabilities.length,
+                });
+              setJournalRefresh(v => v + 1);
             }
           }
 
