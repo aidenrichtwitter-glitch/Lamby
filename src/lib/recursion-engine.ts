@@ -568,6 +568,37 @@ export async function requestGoalWork(
   }
 }
 
+// Request AI to generate requests for the human operator
+export async function requestGenerateRequests(
+  config: ApiConfig,
+  capabilities: string[],
+  journalContext?: string,
+): Promise<string | null> {
+  try {
+    if (config.provider !== 'lovable') return null;
+    let url = '', key = '';
+    try { url = import.meta.env.VITE_SUPABASE_URL; key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY; } catch {}
+    if (!url) return null;
+
+    const res = await fetch(`${url}/functions/v1/self-recurse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({
+        mode: 'generate-requests',
+        capabilities,
+        journalContext,
+        messages: [{ role: 'user', content: `Generate requests for abilities I need but cannot build myself. I have ${capabilities.length} capabilities: ${capabilities.join(', ')}` }],
+      }),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || null;
+  } catch {
+    return null;
+  }
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CAPABILITY PERSISTENCE — saves to both localStorage AND src/explorer/
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
