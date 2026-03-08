@@ -47,6 +47,7 @@ import {
   saveCapabilityToCloud,
   addJournalEntry,
 } from '@/lib/cloud-memory';
+import { installPresetCapabilities } from '@/lib/preinstall';
 
 const PHASE_SEQUENCE: RecursionState['phase'][] = ['scanning', 'reflecting', 'proposing', 'validating', 'applying', 'cooling'];
 
