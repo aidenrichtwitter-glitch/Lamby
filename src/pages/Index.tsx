@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Settings, Terminal, Brain, Shield, Activity, FileCode, RefreshCw, Eye, Zap, Clock } from 'lucide-react';
+import { Settings, Terminal, Brain, Shield, Activity, FileCode, RefreshCw, Eye, Zap, Clock, Target } from 'lucide-react';
 import DesktopWindow from '@/components/DesktopWindow';
 import FileTree from '@/components/FileTree';
 import CodeViewer from '@/components/CodeViewer';
@@ -8,6 +8,7 @@ import SettingsModal from '@/components/SettingsModal';
 import ChangeLog, { rollbackChange } from '@/components/ChangeLog';
 import RecursionPanel from '@/components/RecursionPanel';
 import CapabilityTimeline from '@/components/CapabilityTimeline';
+import GoalsPanel from '@/components/GoalsPanel';
 import { ApiConfig, DEFAULT_API_CONFIG, ChangeRecord } from '@/lib/self-reference';
 import { SELF_SOURCE } from '@/lib/self-source';
 import { validateChange } from '@/lib/safety-engine';
@@ -18,6 +19,8 @@ import {
   getNextFile,
   getPhaseDuration,
   requestAIImprovement,
+  requestGoalDream,
+  requestGoalWork,
   saveCapabilities,
   persistCapability,
   isRateLimited,
@@ -25,6 +28,16 @@ import {
   calculateBackoff,
   CapabilityRecord,
 } from '@/lib/recursion-engine';
+import {
+  SelfGoal,
+  loadGoals,
+  saveGoals,
+  getActiveGoal,
+  shouldDreamNewGoal,
+  buildGoalDreamPrompt,
+  buildGoalWorkPrompt,
+  createGoalFromAI,
+} from '@/lib/goal-engine';
 
 const PHASE_SEQUENCE: RecursionState['phase'][] = ['scanning', 'reflecting', 'proposing', 'validating', 'applying', 'cooling'];
 
