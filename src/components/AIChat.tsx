@@ -134,14 +134,13 @@ const AIChat: React.FC<AIChatProps> = ({ apiConfig, selectedFile, autoMode, capa
     const selfPrompt = await generateAISelfPrompt(file);
     const selfMsg: Message = { role: 'self', content: selfPrompt, timestamp: Date.now() };
     setMessages(prev => [...prev, selfMsg]);
+    saveChatMessage('self', selfPrompt);
 
     try {
       const response = await callAI(apiConfig, [...messages.filter(m => m.role !== 'system'), selfMsg], file.path, capabilities);
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: response,
-        timestamp: Date.now(),
-      }]);
+      const assistantMsg: Message = { role: 'assistant', content: response, timestamp: Date.now() };
+      setMessages(prev => [...prev, assistantMsg]);
+      saveChatMessage('assistant', response);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Unknown error';
       setError(errMsg);
