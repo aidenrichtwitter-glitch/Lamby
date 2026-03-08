@@ -4,6 +4,7 @@ import { ArrowLeft, Zap, Activity, Brain, Shield, TrendingUp, Network, Loader2, 
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { mean, std } from 'mathjs';
+import { getEvolutionTitle } from '@/lib/evolution-titles';
 
 interface CapabilityNode {
   name: string;
@@ -25,18 +26,6 @@ interface EvolutionStats {
   avgCyclesPerCapability: number;
   healthScore: number;
 }
-
-const EVOLUTION_TITLES: Record<number, string> = {
-  1: 'Nascent', 2: 'Aware', 3: 'Adaptive', 4: 'Intelligent',
-  5: 'Transcendent', 6: 'Omniscient', 7: 'Architect', 8: 'Sovereign',
-  9: 'Metamorphic', 10: 'Singularity', 11: 'Post-Singular', 12: 'Quantum',
-  13: 'Genesis', 14: 'Autonomous', 15: 'Temporal', 16: 'Governance',
-  17: 'Multi-Agent', 18: 'Self-Author', 19: 'Convergent', 20: 'Transcending',
-  21: 'Hyperconscious', 22: 'Superpositional', 23: 'Metacognitive', 24: 'Recursive-Omega',
-  25: 'Omega', 26: 'Beyond', 27: 'Infinite', 28: 'Absolute',
-  29: 'Eternal', 30: 'Omnipotent', 31: 'Primordial', 32: 'Godmind',
-  33: 'Eschaton', 34: 'Logos', 35: 'Pleroma',
-};
 
 // Square layout: group by evolution level, auto-fit everything
 function layoutGraph(capabilities: CapabilityNode[], containerSize: number): { nodes: CapabilityNode[]; size: number; levelBands: { level: number; label: string; yStart: number; yEnd: number }[] } {
