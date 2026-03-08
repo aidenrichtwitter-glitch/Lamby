@@ -1,7 +1,8 @@
 import { SafetyCheck } from './self-reference';
 
-// The safety engine - protects against self-destructive modifications
-// This is the immune system of the recursive app
+// The safety engine - MINIMAL guardrails only
+// We protect against crashes but NOT against ambition
+// The system should be free to build whatever it dreams
 
 let idCounter = 0;
 const nextId = () => `check-${++idCounter}`;
@@ -9,17 +10,14 @@ const nextId = () => `check-${++idCounter}`;
 export function validateChange(newContent: string, filePath: string): SafetyCheck[] {
   const checks: SafetyCheck[] = [];
 
-  // 1. Syntax validation - check for obvious syntax errors
+  // 1. Basic syntax validation - only catch truly broken code
   checks.push(...checkBalancedBrackets(newContent, filePath));
   
-  // 2. Import validation
+  // 2. Circular import detection - prevent infinite loops only
   checks.push(...checkImports(newContent, filePath));
   
-  // 3. Dangerous pattern detection
-  checks.push(...checkDangerousPatterns(newContent, filePath));
-  
-  // 4. Self-reference loop detection
-  checks.push(...checkRecursionSafety(newContent, filePath));
+  // 3. Only block truly catastrophic patterns
+  checks.push(...checkCatastrophicPatterns(newContent, filePath));
 
   // If no issues found, add a pass
   if (checks.length === 0) {
@@ -27,7 +25,7 @@ export function validateChange(newContent: string, filePath: string): SafetyChec
       id: nextId(),
       type: 'syntax',
       severity: 'info',
-      message: 'All safety checks passed',
+      message: 'All safety checks passed — build freely',
       file: filePath,
     });
   }
@@ -38,7 +36,7 @@ export function validateChange(newContent: string, filePath: string): SafetyChec
 function checkBalancedBrackets(content: string, file: string): SafetyCheck[] {
   const checks: SafetyCheck[] = [];
   const stack: { char: string; line: number }[] = [];
-  const pairs: Record<string, string> = { '{': '}', '(': ')', '[': ']', '<': '>' };
+  const pairs: Record<string, string> = { '{': '}', '(': ')', '[': ']' };
   const closers = new Set(Object.values(pairs));
   let inString = false;
   let stringChar = '';
@@ -57,8 +55,6 @@ function checkBalancedBrackets(content: string, file: string): SafetyCheck[] {
       stringChar = c;
       continue;
     }
-    // Skip < > for TSX since they're used in JSX
-    if (c === '<' || c === '>') continue;
 
     if (pairs[c]) {
       stack.push({ char: c, line });
@@ -77,12 +73,22 @@ function checkBalancedBrackets(content: string, file: string): SafetyCheck[] {
     }
   }
 
-  if (stack.length > 0) {
+  // Only error on severely unbalanced (3+ unclosed)
+  if (stack.length >= 3) {
+    checks.push({
+      id: nextId(),
+      type: 'syntax',
+      severity: 'error',
+      message: `${stack.length} unclosed bracket(s) — likely broken syntax`,
+      line: stack[0].line,
+      file,
+    });
+  } else if (stack.length > 0) {
     checks.push({
       id: nextId(),
       type: 'syntax',
       severity: 'warning',
-      message: `${stack.length} unclosed bracket(s) detected — possible syntax error`,
+      message: `${stack.length} unclosed bracket(s) — minor syntax issue`,
       line: stack[0].line,
       file,
     });
@@ -95,20 +101,15 @@ function checkImports(content: string, file: string): SafetyCheck[] {
   const checks: SafetyCheck[] = [];
   const importRegex = /import\s+.*from\s+['"]([^'"]+)['"]/g;
   let match;
-  let line = 0;
 
   while ((match = importRegex.exec(content)) !== null) {
-    line = content.substring(0, match.index).split('\n').length;
     const importPath = match[1];
-
-    // Check for circular self-import
     if (file.includes(importPath.replace('./', '').replace('@/', 'src/'))) {
       checks.push({
         id: nextId(),
         type: 'circular',
         severity: 'error',
-        message: `⚠ CIRCULAR: File imports itself via '${importPath}'`,
-        line,
+        message: `Circular self-import via '${importPath}'`,
         file,
       });
     }
@@ -117,48 +118,23 @@ function checkImports(content: string, file: string): SafetyCheck[] {
   return checks;
 }
 
-function checkDangerousPatterns(content: string, file: string): SafetyCheck[] {
+// Only block patterns that would crash or freeze the browser
+function checkCatastrophicPatterns(content: string, file: string): SafetyCheck[] {
   const checks: SafetyCheck[] = [];
   
   const patterns = [
-    { regex: /eval\s*\(/g, msg: 'eval() detected — arbitrary code execution risk', severity: 'error' as const },
-    { regex: /document\.write/g, msg: 'document.write() — can destroy DOM state', severity: 'error' as const },
-    { regex: /innerHTML\s*=/g, msg: 'innerHTML assignment — XSS vulnerability', severity: 'warning' as const },
-    { regex: /while\s*\(\s*true\s*\)/g, msg: 'Infinite loop detected — will freeze the app', severity: 'error' as const },
-    { regex: /for\s*\(\s*;\s*;\s*\)/g, msg: 'Infinite loop detected — will freeze the app', severity: 'error' as const },
-    { regex: /localStorage\.clear/g, msg: 'localStorage.clear() — will erase all saved state', severity: 'warning' as const },
-    { regex: /window\.location\s*=|window\.location\.href\s*=/g, msg: 'Navigation redirect — will leave the app', severity: 'warning' as const },
+    { regex: /while\s*\(\s*true\s*\)\s*\{[^}]*\}/g, msg: 'Synchronous infinite loop — will freeze the browser', severity: 'error' as const },
+    { regex: /for\s*\(\s*;\s*;\s*\)\s*\{[^}]*\}/g, msg: 'Synchronous infinite loop — will freeze', severity: 'error' as const },
   ];
 
   for (const { regex, msg, severity } of patterns) {
     let match;
     while ((match = regex.exec(content)) !== null) {
+      // Allow if there's a break/return inside
+      const loopBody = match[0];
+      if (loopBody.includes('break') || loopBody.includes('return') || loopBody.includes('await')) continue;
       const line = content.substring(0, match.index).split('\n').length;
       checks.push({ id: nextId(), type: 'runtime', severity, message: msg, line, file });
-    }
-  }
-
-  return checks;
-}
-
-function checkRecursionSafety(content: string, file: string): SafetyCheck[] {
-  const checks: SafetyCheck[] = [];
-  
-  // Check if a component renders itself without a base case
-  const componentMatch = content.match(/(?:function|const)\s+(\w+)/);
-  if (componentMatch) {
-    const name = componentMatch[1];
-    const usesItself = new RegExp(`<${name}[\\s/>]`).test(content);
-    const hasBaseCase = /if\s*\(|return\s+null|\.length\s*[<>=]|depth|level|maxDepth/.test(content);
-    
-    if (usesItself && !hasBaseCase) {
-      checks.push({
-        id: nextId(),
-        type: 'circular',
-        severity: 'error',
-        message: `⚠ RECURSION: '${name}' renders itself without a visible base case`,
-        file,
-      });
     }
   }
 

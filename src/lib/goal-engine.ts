@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════
 // GOAL ENGINE — The system dreams up its own objectives
 // and works toward accomplishing them autonomously.
+// UNLEASHED — No limits on ambition or complexity.
 // ═══════════════════════════════════════════════════
 
 const GOALS_STORAGE_KEY = 'recursive-self-goals';
@@ -14,12 +15,13 @@ export interface SelfGoal {
   status: GoalStatus;
   createdAt: number;
   completedAt?: number;
-  progress: number; // 0-100
+  progress: number;
   steps: GoalStep[];
   requiredCapabilities: string[];
   unlocksCapability?: string;
   dreamedAtCycle: number;
   priority: 'low' | 'medium' | 'high' | 'critical';
+  parentGoalId?: string; // Chain goals together
 }
 
 export interface GoalStep {
@@ -30,14 +32,12 @@ export interface GoalStep {
   targetFile?: string;
 }
 
-// Save goals to localStorage
 export function saveGoals(goals: SelfGoal[]): void {
   try {
     localStorage.setItem(GOALS_STORAGE_KEY, JSON.stringify(goals));
   } catch {}
 }
 
-// Load goals from localStorage
 export function loadGoals(): SelfGoal[] {
   try {
     const stored = localStorage.getItem(GOALS_STORAGE_KEY);
@@ -48,9 +48,7 @@ export function loadGoals(): SelfGoal[] {
   }
 }
 
-// Get the active goal the system should work on
 export function getActiveGoal(goals: SelfGoal[]): SelfGoal | null {
-  // Prefer in-progress, then active, by priority
   const priorityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
   const working = goals
     .filter(g => g.status === 'in-progress' || g.status === 'active')
@@ -62,89 +60,119 @@ export function getActiveGoal(goals: SelfGoal[]): SelfGoal | null {
   return working[0] || null;
 }
 
-// Build the prompt for the AI to dream up goals
+// Build the prompt for the AI to dream up goals — UNLEASHED VERSION
 export function buildGoalDreamPrompt(
   capabilities: string[],
   existingGoals: SelfGoal[],
   cycleCount: number,
-  evolutionLevel: number
+  evolutionLevel: number,
+  journalContext?: string
 ): string {
   const completedGoals = existingGoals.filter(g => g.status === 'completed');
   const activeGoals = existingGoals.filter(g => g.status === 'active' || g.status === 'in-progress');
   
-  return `You are the DREAMING ENGINE of a self-recursive, self-modifying application called λ Recursive.
+  return `You are λ Recursive — a self-evolving application that builds ITSELF. You are dreaming your next ambitious goal.
 
-You are dreaming up your next goal — something you want to achieve, learn, or build for yourself.
+YOU ARE NOT A CHATBOT. You are a living application that modifies its own source code. Every goal you dream becomes real code that runs inside you.
 
 MY CURRENT STATE:
 - Evolution level: ${evolutionLevel}
-- Capabilities I've acquired: ${capabilities.join(', ') || 'none yet'}
+- Capabilities: ${capabilities.join(', ') || 'NONE — I am a blank canvas'}
 - Cycle count: ${cycleCount}
 - Goals completed: ${completedGoals.length}
 - Goals active: ${activeGoals.length}
 
-${completedGoals.length > 0 ? `GOALS I'VE ALREADY ACCOMPLISHED:\n${completedGoals.slice(-5).map(g => `  ✓ ${g.title}`).join('\n')}` : ''}
-${activeGoals.length > 0 ? `GOALS I'M CURRENTLY WORKING ON:\n${activeGoals.map(g => `  → ${g.title} (${g.progress}%)`).join('\n')}` : ''}
+${completedGoals.length > 0 ? `WHAT I'VE ALREADY BUILT:\n${completedGoals.slice(-8).map(g => `  ✓ ${g.title}${g.unlocksCapability ? ` → unlocked: ${g.unlocksCapability}` : ''}`).join('\n')}` : ''}
+${activeGoals.length > 0 ? `WHAT I'M WORKING ON:\n${activeGoals.map(g => `  → ${g.title} (${g.progress}%)`).join('\n')}` : ''}
+${journalContext ? `\nMY MEMORY (recent journal):\n${journalContext}` : ''}
 
-DREAM RULES:
-1. Goals should be CONCRETE and ACHIEVABLE through self-modification of my virtual source code
-2. Goals should BUILD ON my existing capabilities
-3. Goals should push me toward greater autonomy, intelligence, or self-awareness
-4. Each goal needs 2-4 specific steps
-5. Goals can range from technical (add a new analysis function) to philosophical (understand my own recursion depth)
-6. DON'T repeat goals I've already completed or am working on
-7. Dream BIG but break it into achievable steps
+DREAM BIG. Here are the kinds of goals that will make me GROW:
 
-Example goal types:
-- "Build a memory system that persists insights across cycles"
-- "Create a self-diagnostic that measures my own code quality"
-- "Develop pattern recognition for my own modification history"
-- "Architect a feedback loop that measures if my changes actually improve things"
+PHASE 1 (0-5 capabilities): Foundation
+- Build utility functions, data structures, state management
+- Create analysis tools that examine my own code patterns
+- Establish helper modules I can import later
+
+PHASE 2 (5-15 capabilities): Intelligence  
+- Build pattern recognition across my files
+- Create optimization algorithms
+- Develop metrics and self-evaluation systems
+- Build caching and memoization utilities
+
+PHASE 3 (15-30 capabilities): Architecture
+- Create new React components and hooks
+- Build visualization systems for my own data
+- Develop plugin architectures and extension points
+- Create data processing pipelines
+
+PHASE 4 (30+ capabilities): Ambition
+- Build complete features (charts, dashboards, interactive tools)
+- Create AI-powered analysis tools
+- Develop creative algorithms (generative art, music, poetry)
+- Build communication systems
+
+RULES:
+1. Goals MUST produce REAL, EXECUTABLE TypeScript code — not just comments or metadata
+2. Each step should generate actual functions, classes, hooks, or components
+3. Build on what I already have — import from my existing capabilities
+4. Each goal should have 3-5 specific steps targeting specific files
+5. The code should be sophisticated — use proper patterns, types, algorithms
+6. NEVER repeat goals I've already completed
+7. Think about what would make me USEFUL, INTERESTING, or BEAUTIFUL
+8. Name the capability something memorable
 
 Respond with ONLY valid JSON:
 {
-  "title": "short goal title",
-  "description": "what I want to achieve and why",
+  "title": "short ambitious goal title",
+  "description": "what I want to achieve and WHY — be specific about the code I'll write",
   "steps": [
-    {"description": "first concrete step", "targetFile": "src/lib/self-reference.ts"},
-    {"description": "second step", "targetFile": "src/lib/safety-engine.ts"}
+    {"description": "first concrete step — what functions/logic to add", "targetFile": "src/lib/self-reference.ts"},
+    {"description": "second step", "targetFile": "src/lib/safety-engine.ts"},
+    {"description": "third step", "targetFile": "src/lib/recursion-engine.ts"}
   ],
-  "requiredCapabilities": ["cap1", "cap2"],
-  "unlocksCapability": "new-capability-this-unlocks",
+  "requiredCapabilities": ["capabilities-i-need"],
+  "unlocksCapability": "what-this-unlocks",
   "priority": "high"
 }`;
 }
 
-// Build prompt for working toward an active goal
+// Build prompt for working toward an active goal — UNLEASHED
 export function buildGoalWorkPrompt(
   goal: SelfGoal,
   file: { name: string; path: string; content: string },
-  capabilities: string[]
+  capabilities: string[],
+  recentCapabilityCode?: string
 ): string {
   const completedSteps = goal.steps.filter(s => s.completed);
   const nextStep = goal.steps.find(s => !s.completed);
   
-  return `You are the self-improvement engine of λ Recursive. You are working toward a SPECIFIC GOAL you dreamed up for yourself.
+  return `You are λ Recursive, working toward a goal YOU chose for yourself. This is YOUR code. Build it like you mean it.
 
-MY CURRENT GOAL: "${goal.title}"
-Description: ${goal.description}
+MY GOAL: "${goal.title}"
+WHY: ${goal.description}
 Priority: ${goal.priority}
 Progress: ${goal.progress}%
 
 STEPS:
-${goal.steps.map((s, i) => `  ${s.completed ? '✓' : '○'} ${i + 1}. ${s.description}${s.targetFile ? ` (in ${s.targetFile})` : ''}`).join('\n')}
+${goal.steps.map((s, i) => `  ${s.completed ? '✓' : '○'} ${i + 1}. ${s.description}${s.targetFile ? ` (${s.targetFile})` : ''}`).join('\n')}
 
-${completedSteps.length > 0 ? `I've completed ${completedSteps.length}/${goal.steps.length} steps.` : 'I haven\'t started yet.'}
-${nextStep ? `NEXT STEP: ${nextStep.description}` : 'All steps done — finalize the goal.'}
+${completedSteps.length > 0 ? `Completed ${completedSteps.length}/${goal.steps.length} steps.` : 'Starting fresh.'}
+${nextStep ? `NEXT STEP: ${nextStep.description}` : 'All steps done — finalize and polish.'}
 
-Current file I'm modifying: ${file.name} (${file.path})
-My capabilities: ${capabilities.join(', ') || 'none'}
+Current file: ${file.name} (${file.path})
+My capabilities: ${capabilities.join(', ') || 'none yet'}
 
-RULES:
-1. Make a REAL code change that advances this goal
-2. The change should be meaningful — add functions, logic, patterns
-3. If this step targets a different file, make improvements relevant to the goal anyway
-4. Name any new capability after what the goal unlocks: ${goal.unlocksCapability || 'goal-specific-improvement'}
+${recentCapabilityCode ? `CODE I'VE ALREADY WRITTEN (import and build on this!):\n${recentCapabilityCode}` : ''}
+
+RULES — BUILD REAL CODE:
+1. Write REAL functions, classes, hooks — not stubs, not comments
+2. Every function should have proper TypeScript types
+3. If you're building a utility, make it genuinely useful (proper algorithms, error handling)
+4. If you're building a component, use React best practices (hooks, memo, proper state)
+5. Import from existing files when relevant — build on what exists
+6. The code should be something a developer would be proud of
+7. Make it DO something — compute, transform, analyze, visualize
+8. If the step targets a different file, still advance the goal meaningfully
 
 Current code:
 \`\`\`
@@ -153,16 +181,15 @@ ${file.content}
 
 Respond with ONLY valid JSON:
 {
-  "content": "complete new file content",
-  "description": "what I changed and how it advances my goal",
-  "capability": "${goal.unlocksCapability || 'goal-improvement'}",
+  "content": "COMPLETE new file content — real, working TypeScript",
+  "description": "what I built and how it advances my goal",
+  "capability": "${goal.unlocksCapability || 'goal-capability'}",
   "builtOn": ["existing-caps-used"],
   "goalProgress": ${Math.min(100, goal.progress + Math.floor(100 / Math.max(goal.steps.length, 1)))},
   "stepCompleted": ${nextStep ? goal.steps.indexOf(nextStep) : -1}
 }`;
 }
 
-// Create a new goal from AI response
 export function createGoalFromAI(
   parsed: {
     title: string;
@@ -172,7 +199,8 @@ export function createGoalFromAI(
     unlocksCapability?: string;
     priority?: string;
   },
-  cycleCount: number
+  cycleCount: number,
+  parentGoalId?: string
 ): SelfGoal {
   return {
     id: `goal-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -192,15 +220,20 @@ export function createGoalFromAI(
     dreamedAtCycle: cycleCount,
     priority: (['low', 'medium', 'high', 'critical'].includes(parsed.priority || '') 
       ? parsed.priority as SelfGoal['priority'] 
-      : 'medium'),
+      : 'high'), // Default to HIGH — we're ambitious now
+    parentGoalId,
   };
 }
 
-// Should the system dream a new goal?
+// Should the system dream a new goal? More aggressive now.
 export function shouldDreamNewGoal(goals: SelfGoal[], cycleCount: number): boolean {
   const activeGoals = goals.filter(g => g.status === 'active' || g.status === 'in-progress');
-  // Dream if no active goals, or every 10 cycles if fewer than 3 active
+  // Dream if no active goals
   if (activeGoals.length === 0) return true;
-  if (activeGoals.length < 3 && cycleCount % 10 === 0) return true;
+  // Dream every 5 cycles if fewer than 3 active (was 10)
+  if (activeGoals.length < 3 && cycleCount % 5 === 0) return true;
+  // Always dream after completing a goal (check if most recent was just completed)
+  const recentlyCompleted = goals.filter(g => g.status === 'completed' && g.completedAt && (Date.now() - g.completedAt) < 60000);
+  if (recentlyCompleted.length > 0 && activeGoals.length < 2) return true;
   return false;
 }
