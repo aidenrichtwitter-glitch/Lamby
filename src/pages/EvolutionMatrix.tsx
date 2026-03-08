@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { ArrowLeft, Network, Zap, GitBranch, Layers, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getEvolutionTitle } from '@/lib/evolution-titles';
 
 interface Capability {
   id: string;
@@ -41,17 +42,6 @@ const TIER_COLORS: Record<number, string> = {
   4: 'hsl(350, 89%, 60%)',
 };
 
-const EVOLUTION_TITLES: Record<number, string> = {
-  1: 'Nascent', 2: 'Aware', 3: 'Adaptive', 4: 'Intelligent',
-  5: 'Transcendent', 6: 'Omniscient', 7: 'Architect', 8: 'Sovereign',
-  9: 'Metamorphic', 10: 'Singularity', 11: 'Post-Singular', 12: 'Quantum',
-  13: 'Genesis', 14: 'Autonomous', 15: 'Temporal', 16: 'Governance',
-  17: 'Multi-Agent', 18: 'Self-Author', 19: 'Convergent', 20: 'Transcending',
-  21: 'Hyperconscious', 22: 'Superpositional', 23: 'Metacognitive', 24: 'Recursive-Omega',
-  25: 'Omega', 26: 'Beyond', 27: 'Infinite', 28: 'Absolute',
-  29: 'Eternal', 30: 'Omnipotent', 31: 'Primordial', 32: 'Godmind',
-  33: 'Eschaton', 34: 'Logos', 35: 'Pleroma',
-};
 
 function getTierColor(level: number): string {
   if (level >= 30) return TIER_COLORS[4];
@@ -93,7 +83,7 @@ function layoutSquareGraph(
 
     levelBands.push({
       level: lvl,
-      label: EVOLUTION_TITLES[lvl] || `L${lvl}`,
+      label: getEvolutionTitle(lvl),
       yStart,
       yEnd,
     });
@@ -215,7 +205,7 @@ const EvolutionMatrix: React.FC = () => {
             <h1 className="text-sm font-bold tracking-tight">Evolution Chronosphere</h1>
             <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 inline-flex items-center gap-1">
               <Zap className="w-2.5 h-2.5" />
-              L{currentLevel} {EVOLUTION_TITLES[currentLevel] || ''} · {totalCaps} caps
+              L{currentLevel} {getEvolutionTitle(currentLevel)} · {totalCaps} caps
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -381,7 +371,7 @@ const EvolutionMatrix: React.FC = () => {
                 <div className="flex items-center gap-2 mb-1">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getTierColor(selectedNode.level) }} />
                   <span className="text-[9px] text-muted-foreground font-mono">
-                    L{selectedNode.level} · {EVOLUTION_TITLES[selectedNode.level] || ''}
+                    L{selectedNode.level} · {getEvolutionTitle(selectedNode.level)}
                     {selectedNode.status !== 'acquired' && ' · PLANNED'}
                   </span>
                 </div>
