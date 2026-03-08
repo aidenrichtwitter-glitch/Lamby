@@ -11,7 +11,7 @@ import { validateChange } from './safety-engine';
 export interface Rule {
   id: string;
   name: string;
-  category: 'refactor' | 'optimize' | 'test' | 'synthesize' | 'maintain';
+  category: 'refactor' | 'optimize' | 'test' | 'synthesize' | 'maintain' | 'consolidate';
   description: string;
   priority: number; // 0-100, higher = runs first
   condition: (ctx: RuleContext) => boolean;
