@@ -299,6 +299,13 @@ export function getRateLimitRemaining(state: RecursionState): number {
 
 const AI_IMPROVEMENT_PROMPT = (file: VirtualFile, capabilities: string[], capabilityHistory: CapabilityRecord[]) => {
   const recentCaps = capabilityHistory.slice(-5).map(c => `${c.name} (built on: ${c.builtOn.join(', ') || 'nothing'})`).join('\n  ');
+  
+  // Include actual explorer file contents so the AI can build on them
+  const explorerFiles = SELF_SOURCE.filter(f => f.path.startsWith('src/explorer/') && f.name !== 'manifest.ts');
+  const explorerContext = explorerFiles.length > 0
+    ? `\n\nMY ACQUIRED ABILITIES (actual code I've written for myself):\n${explorerFiles.slice(-5).map(f => `--- ${f.name} ---\n${f.content.substring(0, 500)}`).join('\n\n')}`
+    : '';
+
   return `You are the self-improvement engine of a recursive, self-modifying application. You are modifying YOUR OWN source code.
 
 Current file: ${file.name} (${file.path})
@@ -309,12 +316,14 @@ CRITICAL - My evolution state:
 - Current capabilities: ${capabilities.join(', ') || 'none yet — I am a blank slate'}
 - Recent evolution:
   ${recentCaps || 'No history yet'}
+${explorerContext}
 
 IMPORTANT: Your improvement MUST:
 1. Give the system a NEW capability it doesn't already have
-2. BUILD ON existing capabilities — reference them and extend them
-3. Be a REAL code change (not just comments)
+2. BUILD ON existing capabilities — reference and IMPORT from src/explorer/ files when relevant
+3. Be a REAL code change (not just comments) — add functions, logic, new patterns
 4. Name the capability differently from all existing: ${capabilities.join(', ')}
+5. The new code should CALL or REFERENCE functions/exports from my existing explorer capabilities
 
 Here is my current code:
 \`\`\`
