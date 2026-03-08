@@ -68,7 +68,8 @@ const Evolution: React.FC = () => {
   const [stats, setStats] = useState<EvolutionStats | null>(null);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [zoomIdx, setZoomIdx] = useState(3); // default 1.0
+  const [zoomIdx, setZoomIdx] = useState(3);
+  const [goals, setGoals] = useState<any[]>([]);
 
   const zoom = ZOOM_LEVELS[zoomIdx];
 
