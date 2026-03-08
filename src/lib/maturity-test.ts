@@ -19,6 +19,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { deterministicSearch } from './autonomy-engine';
 import { ruleEngine } from './rule-engine';
 import { emitStormProcess } from '@/components/TerminalStorm';
+import { decomposeTask } from './task-decomposition';
 
 export type MaturityDimension =
   | 'conversational'
