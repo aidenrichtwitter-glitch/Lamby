@@ -105,7 +105,6 @@ const Index = () => {
       if (nextPhase === 'reflecting') {
         const file = SELF_SOURCE[prev.currentFileIndex >= 0 ? prev.currentFileIndex : 0];
         if (file) {
-          // Use AI for reflection too — skip to proposing immediately
           newState.lastAction = `Preparing AI analysis of ${file.name}...`;
           newLog.push(createLogEntry('reflecting', `🤖 Preparing AI-powered analysis of ${file.name}`, 'action', file.path));
         }
@@ -114,12 +113,17 @@ const Index = () => {
       if (nextPhase === 'proposing') {
         const file = SELF_SOURCE[prev.currentFileIndex >= 0 ? prev.currentFileIndex : 0];
         if (file) {
-          // Always use AI — no deterministic fallback
           newState.lastAction = `Requesting AI improvement for ${file.name}...`;
           newLog.push(createLogEntry('proposing', `🤖 Requesting AI improvement for ${file.name} (${prev.capabilities.length} caps)`, 'action', file.path));
           (newState as any)._proposal = null;
           (newState as any)._awaitingAI = true;
         }
+      }
+
+      // BLOCK: Don't advance past proposing while waiting for AI response
+      if (nextPhase === 'validating' && (prev as any)._awaitingAI) {
+        // Stay in proposing phase — AI hasn't responded yet
+        return { ...prev, log: newLog };
       }
 
       if (nextPhase === 'validating') {
