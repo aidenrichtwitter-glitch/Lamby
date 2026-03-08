@@ -35,37 +35,40 @@ interface EvolutionStats {
   ghostCount: number;
 }
 
-// Square layout: group by evolution level, auto-fit everything
+// Layout based on DEPENDENCY DEPTH — not evolution_level.
+// Roots (no dependencies) at bottom, children above. Every node connects.
 function layoutGraph(capabilities: CapabilityNode[], containerSize: number): { nodes: CapabilityNode[]; size: number; levelBands: { level: number; label: string; yStart: number; yEnd: number }[] } {
   const SIZE = containerSize || 800;
   if (capabilities.length === 0) return { nodes: [], size: SIZE, levelBands: [] };
 
-  const acquired = capabilities.filter(n => n.status === 'acquired');
-  const future = capabilities.filter(n => n.status !== 'acquired');
-  const acquiredNames = new Set(acquired.map(n => n.name));
-  const futureByName = new Map(future.map(n => [n.name, n]));
+  const byName = new Map(capabilities.map(n => [n.name, n]));
 
-  const getDepthForFuture = (node: CapabilityNode, visited = new Set<string>()): number => {
-    if (visited.has(node.name)) return 0;
-    visited.add(node.name);
-    const maxAcquiredLevel = acquired.length > 0 ? Math.max(...acquired.map(n => n.level)) : 0;
-    let maxParentDepth = maxAcquiredLevel;
-    for (const dep of node.builtOn) {
-      if (acquiredNames.has(dep)) {
-        const parent = acquired.find(n => n.name === dep);
-        if (parent) maxParentDepth = Math.max(maxParentDepth, parent.level);
-      } else if (futureByName.has(dep)) {
-        maxParentDepth = Math.max(maxParentDepth, getDepthForFuture(futureByName.get(dep)!, visited));
-      }
-    }
-    return maxParentDepth + 1;
+  // Compute dependency depth for every node
+  const depthCache = new Map<string, number>();
+  const getDepth = (name: string, visited = new Set<string>()): number => {
+    if (depthCache.has(name)) return depthCache.get(name)!;
+    if (visited.has(name)) return 0;
+    visited.add(name);
+    const node = byName.get(name);
+    if (!node) return 0;
+    // Only count parents that actually exist in the graph
+    const parentDepths = (node.builtOn || [])
+      .filter(p => byName.has(p))
+      .map(p => getDepth(p, new Set(visited)));
+    const depth = parentDepths.length > 0 ? Math.max(...parentDepths) + 1 : 0;
+    depthCache.set(name, depth);
+    return depth;
   };
 
-  const leveledFuture = future.map(n => ({ ...n, level: getDepthForFuture(n) }));
-  const allNodes = [...acquired, ...leveledFuture];
+  // Compute all depths
+  const nodesWithDepth = capabilities.map(n => ({
+    ...n,
+    level: getDepth(n.name), // override level with computed depth
+  }));
 
+  // Group by depth
   const levels = new Map<number, CapabilityNode[]>();
-  allNodes.forEach(cap => {
+  nodesWithDepth.forEach(cap => {
     if (!levels.has(cap.level)) levels.set(cap.level, []);
     levels.get(cap.level)!.push(cap);
   });
@@ -83,12 +86,12 @@ function layoutGraph(capabilities: CapabilityNode[], containerSize: number): { n
 
   sortedLevels.forEach((lvl, li) => {
     const nodes = levels.get(lvl)!;
-    const ri = numLevels - 1 - li;
+    const ri = numLevels - 1 - li; // bottom = lowest depth
     const yCenter = padding + ri * bandHeight + bandHeight / 2;
     const yStart = padding + ri * bandHeight;
     const yEnd = yStart + bandHeight;
     
-    levelBands.push({ level: lvl, label: getEvolutionTitle(lvl), yStart, yEnd });
+    levelBands.push({ level: lvl, label: `Depth ${lvl}`, yStart, yEnd });
 
     const count = nodes.length;
     const spacing = Math.min(usable / (count + 1), 80);
