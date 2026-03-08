@@ -191,8 +191,9 @@ const Evolution: React.FC = () => {
     fetchAll();
   }, []);
 
-  const layoutNodes = useMemo(() => capabilities, [capabilities]);
-  const canvasH = Math.max(CANVAS_H_MIN, (layoutNodes.length / 3) * 150 + 300);
+  const layoutNodes = useMemo(() => capabilities.nodes, [capabilities]);
+  const canvasW = capabilities.width;
+  const canvasH = capabilities.height;
 
   const edges = useMemo(() => {
     const result: { from: CapabilityNode; to: CapabilityNode }[] = [];
