@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Zap, Activity, Brain, Shield, TrendingUp, Network } from 'lucide-react';
+import { ArrowLeft, Zap, Activity, Brain, Shield, TrendingUp, Network, ZoomIn, ZoomOut, Maximize, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { mean, std } from 'mathjs';
@@ -13,6 +13,7 @@ interface CapabilityNode {
   level: number;
   x: number;
   y: number;
+  status: 'acquired' | 'in-progress' | 'planned';
 }
 
 interface EvolutionStats {
@@ -31,10 +32,12 @@ const EVOLUTION_TITLES: Record<number, string> = {
   9: 'Metamorphic', 10: 'Singularity',
 };
 
+const CANVAS_W = 1200;
+const CANVAS_H_MIN = 800;
+
 function layoutGraph(capabilities: CapabilityNode[]): CapabilityNode[] {
   if (capabilities.length === 0) return [];
-  
-  // Group by level
+
   const levels = new Map<number, CapabilityNode[]>();
   capabilities.forEach(cap => {
     const lvl = cap.level;
@@ -47,75 +50,103 @@ function layoutGraph(capabilities: CapabilityNode[]): CapabilityNode[] {
 
   sortedLevels.forEach((lvl, li) => {
     const nodes = levels.get(lvl)!;
-    const y = 80 + li * 120;
+    const y = 80 + li * 130;
     nodes.forEach((node, ni) => {
-      const totalWidth = nodes.length * 160;
-      const startX = (800 - totalWidth) / 2;
-      result.push({ ...node, x: startX + ni * 160 + 80, y });
+      const totalWidth = nodes.length * 180;
+      const startX = (CANVAS_W - totalWidth) / 2;
+      result.push({ ...node, x: startX + ni * 180 + 90, y });
     });
   });
 
   return result;
 }
 
+const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
+
 const Evolution: React.FC = () => {
   const [capabilities, setCapabilities] = useState<CapabilityNode[]>([]);
   const [stats, setStats] = useState<EvolutionStats | null>(null);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [zoomIdx, setZoomIdx] = useState(3); // default 1.0
+
+  const zoom = ZOOM_LEVELS[zoomIdx];
+
+  const zoomIn = useCallback(() => setZoomIdx(i => Math.min(i + 1, ZOOM_LEVELS.length - 1)), []);
+  const zoomOut = useCallback(() => setZoomIdx(i => Math.max(i - 1, 0)), []);
+  const zoomFit = useCallback(() => setZoomIdx(0), []); // fully zoomed out
 
   useEffect(() => {
-    // Fetch capabilities
-    supabase.from('capabilities').select('*').order('cycle_number', { ascending: true }).then(({ data }) => {
-      if (data) {
-        const nodes: CapabilityNode[] = data.map(row => ({
-          name: row.name,
-          description: row.description,
-          builtOn: row.built_on || [],
-          cycle: row.cycle_number,
-          level: row.evolution_level,
-          x: 0, y: 0,
-        }));
-        setCapabilities(layoutGraph(nodes));
-      }
-    });
+    // Fetch capabilities + goals in parallel
+    const fetchAll = async () => {
+      const [capRes, stateRes, goalsRes, snapRes] = await Promise.all([
+        supabase.from('capabilities').select('*').order('cycle_number', { ascending: true }),
+        supabase.from('evolution_state').select('*').eq('id', 'singleton').single(),
+        supabase.from('goals').select('*'),
+        supabase.from('lambda_evolution_state').select('*').order('created_at', { ascending: false }).limit(10),
+      ]);
 
-    // Fetch evolution state
-    supabase.from('evolution_state').select('*').eq('id', 'singleton').single().then(({ data }) => {
-      if (data) {
-        // Fetch goals for stats
-        supabase.from('goals').select('status').then(({ data: goalsData }) => {
-          const completed = goalsData?.filter(g => g.status === 'completed').length || 0;
-          const active = goalsData?.filter(g => g.status === 'active' || g.status === 'in-progress').length || 0;
+      // Build acquired nodes
+      const acquiredNodes: CapabilityNode[] = (capRes.data || []).map(row => ({
+        name: row.name,
+        description: row.description,
+        builtOn: row.built_on || [],
+        cycle: row.cycle_number,
+        level: row.evolution_level,
+        x: 0, y: 0,
+        status: 'acquired' as const,
+      }));
 
-          supabase.from('capabilities').select('cycle_number').then(({ data: capData }) => {
-            const cycles = capData?.map(c => c.cycle_number) || [];
-            const avgCycles = cycles.length > 1 ? Number(mean(cycles)) : 0;
-            const stdDev = cycles.length > 2 ? Number(std(cycles)) : 0;
-            // Health = inverse of stdDev normalized (lower variance = healthier)
-            const healthScore = Math.max(0, Math.min(100, 100 - stdDev * 5));
+      const acquiredNames = new Set(acquiredNodes.map(n => n.name));
 
-            setStats({
-              currentLevel: data.evolution_level,
-              totalCapabilities: capData?.length || 0,
-              totalCycles: data.cycle_count,
-              totalGoalsCompleted: completed,
-              activeGoals: active,
-              avgCyclesPerCapability: Math.round(avgCycles * 10) / 10,
-              healthScore: Math.round(healthScore),
-            });
-          });
+      // Build in-progress / planned nodes from goals
+      const goalNodes: CapabilityNode[] = (goalsRes.data || [])
+        .filter(g => g.unlocks_capability && !acquiredNames.has(g.unlocks_capability))
+        .map(g => {
+          const isInProgress = g.status === 'in-progress';
+          const maxLevel = acquiredNodes.length > 0 ? Math.max(...acquiredNodes.map(n => n.level)) : 1;
+          return {
+            name: g.unlocks_capability!,
+            description: g.description,
+            builtOn: g.required_capabilities || [],
+            cycle: 0,
+            level: maxLevel + (isInProgress ? 1 : 2),
+            x: 0, y: 0,
+            status: isInProgress ? 'in-progress' as const : 'planned' as const,
+          };
+        });
+
+      const allNodes = [...acquiredNodes, ...goalNodes];
+      setCapabilities(layoutGraph(allNodes));
+
+      // Stats
+      if (stateRes.data) {
+        const completed = goalsRes.data?.filter(g => g.status === 'completed').length || 0;
+        const active = goalsRes.data?.filter(g => g.status === 'active' || g.status === 'in-progress').length || 0;
+        const cycles = (capRes.data || []).map(c => c.cycle_number);
+        const avgCycles = cycles.length > 1 ? Number(mean(cycles)) : 0;
+        const stdDev = cycles.length > 2 ? Number(std(cycles)) : 0;
+        const healthScore = Math.max(0, Math.min(100, 100 - stdDev * 5));
+
+        setStats({
+          currentLevel: stateRes.data.evolution_level,
+          totalCapabilities: capRes.data?.length || 0,
+          totalCycles: stateRes.data.cycle_count,
+          totalGoalsCompleted: completed,
+          activeGoals: active,
+          avgCyclesPerCapability: Math.round(avgCycles * 10) / 10,
+          healthScore: Math.round(healthScore),
         });
       }
-    });
 
-    // Fetch memory palace snapshots
-    supabase.from('lambda_evolution_state').select('*').order('created_at', { ascending: false }).limit(10).then(({ data }) => {
-      if (data) setSnapshots(data);
-    });
+      if (snapRes.data) setSnapshots(snapRes.data);
+    };
+
+    fetchAll();
   }, []);
 
   const layoutNodes = useMemo(() => capabilities, [capabilities]);
+  const canvasH = Math.max(CANVAS_H_MIN, (layoutNodes.length / 3) * 150 + 300);
 
   const edges = useMemo(() => {
     const result: { from: CapabilityNode; to: CapabilityNode }[] = [];
@@ -129,8 +160,25 @@ const Evolution: React.FC = () => {
   }, [layoutNodes]);
 
   const selectedCap = selectedNode ? layoutNodes.find(n => n.name === selectedNode) : null;
-
   const title = stats ? (EVOLUTION_TITLES[stats.currentLevel] || `Level ${stats.currentLevel}`) : 'Loading...';
+
+  const nodeColor = (node: CapabilityNode, selected: boolean) => {
+    if (node.status === 'planned') return { fill: 'hsl(220 15% 12%)', stroke: 'hsl(220 10% 25%)', dot: 'hsl(220 10% 30%)', text: 'hsl(220 10% 35%)' };
+    if (node.status === 'in-progress') return { fill: 'hsl(40 30% 12%)', stroke: 'hsl(40 60% 40%)', dot: 'hsl(40 90% 55%)', text: 'hsl(40 60% 60%)' };
+    if (selected) return { fill: 'hsl(140 70% 45% / 0.3)', stroke: 'hsl(140 70% 45%)', dot: 'hsl(140 70% 45%)', text: 'hsl(140 60% 75%)' };
+    return { fill: 'hsl(220 18% 10%)', stroke: 'hsl(140 30% 20%)', dot: 'hsl(140 70% 45%)', text: 'hsl(140 60% 75%)' };
+  };
+
+  const edgeColor = (edge: { from: CapabilityNode; to: CapabilityNode }) => {
+    if (edge.to.status === 'planned') return 'hsl(220 10% 20% / 0.3)';
+    if (edge.to.status === 'in-progress') return 'hsl(40 60% 40% / 0.4)';
+    return 'hsl(140 70% 45% / 0.3)';
+  };
+
+  const edgeStroke = (edge: { from: CapabilityNode; to: CapabilityNode }) => {
+    if (edge.to.status !== 'acquired') return '4 4';
+    return 'none';
+  };
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
@@ -151,90 +199,154 @@ const Evolution: React.FC = () => {
             </span>
           )}
         </div>
+
+        {/* Zoom controls */}
+        <div className="flex items-center gap-1">
+          <button onClick={zoomOut} className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Zoom out">
+            <ZoomOut className="w-3.5 h-3.5" />
+          </button>
+          <span className="text-[9px] text-muted-foreground w-10 text-center font-mono">{Math.round(zoom * 100)}%</span>
+          <button onClick={zoomIn} className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Zoom in">
+            <ZoomIn className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={zoomFit} className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Fit all">
+            <Maximize className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
         {/* Main: Capability Graph */}
         <main className="flex-1 relative overflow-auto bg-background">
-          <svg width="800" height={Math.max(600, (layoutNodes.length / 3) * 140 + 200)} className="w-full" viewBox={`0 0 800 ${Math.max(600, (layoutNodes.length / 3) * 140 + 200)}`}>
-            {/* Grid lines */}
-            <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="hsl(140 30% 20% / 0.15)" strokeWidth="0.5" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
+          <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: CANVAS_W, minHeight: canvasH }}>
+            <svg width={CANVAS_W} height={canvasH} viewBox={`0 0 ${CANVAS_W} ${canvasH}`}>
+              {/* Grid */}
+              <defs>
+                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="hsl(140 30% 20% / 0.1)" strokeWidth="0.5" />
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#grid)" />
 
-            {/* Edges */}
-            {edges.map((edge, i) => (
-              <motion.line
-                key={`edge-${i}`}
-                x1={edge.from.x}
-                y1={edge.from.y}
-                x2={edge.to.x}
-                y2={edge.to.y}
-                stroke="hsl(140 70% 45% / 0.3)"
-                strokeWidth="1.5"
-                initial={{ pathLength: 0 }}
-                animate={{ pathLength: 1 }}
-                transition={{ duration: 0.8, delay: i * 0.05 }}
-              />
-            ))}
+              {/* Edges */}
+              {edges.map((edge, i) => (
+                <motion.line
+                  key={`edge-${i}`}
+                  x1={edge.from.x} y1={edge.from.y}
+                  x2={edge.to.x} y2={edge.to.y}
+                  stroke={edgeColor(edge)}
+                  strokeWidth="1.5"
+                  strokeDasharray={edgeStroke(edge)}
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 0.6, delay: i * 0.03 }}
+                />
+              ))}
 
-            {/* Nodes */}
-            {layoutNodes.map((node, i) => {
-              const isSelected = selectedNode === node.name;
-              return (
-                <g key={node.name} onClick={() => setSelectedNode(isSelected ? null : node.name)} className="cursor-pointer">
-                  <motion.circle
-                    cx={node.x}
-                    cy={node.y}
-                    r={isSelected ? 22 : 16}
-                    fill={isSelected ? 'hsl(140 70% 45% / 0.3)' : 'hsl(220 18% 10%)'}
-                    stroke={isSelected ? 'hsl(140 70% 45%)' : 'hsl(140 30% 20%)'}
-                    strokeWidth={isSelected ? 2 : 1}
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ duration: 0.3, delay: i * 0.03 }}
-                  />
-                  <motion.circle
-                    cx={node.x}
-                    cy={node.y}
-                    r={4}
-                    fill="hsl(140 70% 45%)"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.03 + 0.2 }}
-                  />
-                  <text
-                    x={node.x}
-                    y={node.y + 30}
-                    textAnchor="middle"
-                    fill="hsl(140 60% 75%)"
-                    fontSize="8"
-                    fontFamily="JetBrains Mono, monospace"
-                    className="pointer-events-none"
-                  >
-                    {node.name.length > 20 ? node.name.substring(0, 18) + '…' : node.name}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
+              {/* Nodes */}
+              {layoutNodes.map((node, i) => {
+                const isSelected = selectedNode === node.name;
+                const colors = nodeColor(node, isSelected);
+                const isGhost = node.status !== 'acquired';
 
-          {/* Selected node detail overlay */}
+                return (
+                  <g key={node.name} onClick={() => setSelectedNode(isSelected ? null : node.name)} className="cursor-pointer">
+                    {/* Pulse ring for in-progress */}
+                    {node.status === 'in-progress' && (
+                      <motion.circle
+                        cx={node.x} cy={node.y} r={24}
+                        fill="none"
+                        stroke="hsl(40 90% 55% / 0.2)"
+                        strokeWidth="1"
+                        animate={{ r: [24, 30, 24], opacity: [0.4, 0, 0.4] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      />
+                    )}
+
+                    <motion.circle
+                      cx={node.x} cy={node.y}
+                      r={isSelected ? 22 : 16}
+                      fill={colors.fill}
+                      stroke={colors.stroke}
+                      strokeWidth={isSelected ? 2 : 1}
+                      strokeDasharray={isGhost ? '3 3' : 'none'}
+                      opacity={isGhost ? 0.5 : 1}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ duration: 0.3, delay: i * 0.02 }}
+                    />
+                    <motion.circle
+                      cx={node.x} cy={node.y}
+                      r={node.status === 'in-progress' ? 3 : 4}
+                      fill={colors.dot}
+                      opacity={isGhost ? 0.4 : 1}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: isGhost ? 0.4 : 1 }}
+                      transition={{ delay: i * 0.02 + 0.15 }}
+                    />
+
+                    {/* Status icon for in-progress */}
+                    {node.status === 'in-progress' && (
+                      <foreignObject x={node.x - 6} y={node.y - 6} width={12} height={12}>
+                        <Loader2 className="w-3 h-3 text-accent animate-spin" style={{ color: 'hsl(40 90% 55%)' }} />
+                      </foreignObject>
+                    )}
+
+                    <text
+                      x={node.x} y={node.y + 30}
+                      textAnchor="middle"
+                      fill={colors.text}
+                      fontSize="8"
+                      fontFamily="JetBrains Mono, monospace"
+                      opacity={isGhost ? 0.5 : 1}
+                      className="pointer-events-none"
+                    >
+                      {node.name.length > 22 ? node.name.substring(0, 20) + '…' : node.name}
+                    </text>
+
+                    {/* Status label */}
+                    {isGhost && (
+                      <text
+                        x={node.x} y={node.y + 40}
+                        textAnchor="middle"
+                        fill={node.status === 'in-progress' ? 'hsl(40 60% 50%)' : 'hsl(220 10% 30%)'}
+                        fontSize="6"
+                        fontFamily="JetBrains Mono, monospace"
+                        className="pointer-events-none uppercase"
+                      >
+                        {node.status === 'in-progress' ? '⟳ building' : '◌ planned'}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          {/* Selected node detail */}
           <AnimatePresence>
             {selectedCap && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 20 }}
-                className="absolute bottom-4 left-4 right-4 bg-card border border-border rounded-lg p-4 shadow-xl"
+                className="absolute bottom-4 left-4 right-80 bg-card border border-border rounded-lg p-4 shadow-xl"
               >
-                <h3 className="text-sm font-bold text-primary text-glow font-display">{selectedCap.name}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-primary text-glow font-display">{selectedCap.name}</h3>
+                  {selectedCap.status !== 'acquired' && (
+                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full border ${
+                      selectedCap.status === 'in-progress' 
+                        ? 'bg-accent/10 text-accent border-accent/30' 
+                        : 'bg-muted/30 text-muted-foreground border-border'
+                    }`}>
+                      {selectedCap.status === 'in-progress' ? 'Building...' : 'Planned'}
+                    </span>
+                  )}
+                </div>
                 <p className="text-[11px] text-foreground/80 mt-1">{selectedCap.description}</p>
                 <div className="flex items-center gap-3 mt-2 text-[9px] text-muted-foreground">
-                  <span>Cycle {selectedCap.cycle}</span>
+                  {selectedCap.status === 'acquired' && <span>Cycle {selectedCap.cycle}</span>}
                   <span>Level {selectedCap.level}</span>
                   {selectedCap.builtOn.length > 0 && (
                     <span className="text-primary/60">Built on: {selectedCap.builtOn.join(' + ')}</span>
@@ -249,7 +361,6 @@ const Evolution: React.FC = () => {
         <aside className="w-72 border-l border-border bg-card/30 flex flex-col shrink-0 overflow-auto">
           {stats ? (
             <div className="p-4 space-y-4">
-              {/* Current Level */}
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Zap className="w-4 h-4 text-primary animate-pulse" />
@@ -258,7 +369,6 @@ const Evolution: React.FC = () => {
                 <div className="text-3xl font-bold text-foreground font-display">Level {stats.currentLevel}</div>
               </div>
 
-              {/* Stats grid */}
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: 'Capabilities', value: stats.totalCapabilities, icon: Brain },
@@ -274,17 +384,34 @@ const Evolution: React.FC = () => {
                 ))}
               </div>
 
-              {/* System Health Gauge */}
+              {/* Legend */}
+              <div className="space-y-1.5">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Legend</div>
+                <div className="flex flex-col gap-1">
+                  {[
+                    { color: 'bg-primary', label: 'Acquired', border: '' },
+                    { color: 'bg-accent', label: 'Building', border: 'border border-dashed border-accent/50' },
+                    { color: 'bg-muted-foreground/30', label: 'Planned', border: 'border border-dashed border-muted-foreground/30' },
+                  ].map(item => (
+                    <div key={item.label} className="flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full ${item.color} ${item.border}`} />
+                      <span className="text-[9px] text-muted-foreground">{item.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Health */}
               <div className="space-y-2">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider">System Health</div>
                 <div className="relative h-3 rounded-full bg-muted/30 overflow-hidden">
                   <motion.div
                     className="absolute inset-y-0 left-0 rounded-full"
                     style={{
-                      background: stats.healthScore > 70 
-                        ? 'linear-gradient(90deg, hsl(140 70% 45%), hsl(175 70% 40%))' 
-                        : stats.healthScore > 40 
-                        ? 'linear-gradient(90deg, hsl(40 90% 55%), hsl(140 70% 45%))' 
+                      background: stats.healthScore > 70
+                        ? 'linear-gradient(90deg, hsl(140 70% 45%), hsl(175 70% 40%))'
+                        : stats.healthScore > 40
+                        ? 'linear-gradient(90deg, hsl(40 90% 55%), hsl(140 70% 45%))'
                         : 'linear-gradient(90deg, hsl(0 70% 50%), hsl(40 90% 55%))',
                     }}
                     initial={{ width: 0 }}
@@ -298,7 +425,7 @@ const Evolution: React.FC = () => {
                 </div>
               </div>
 
-              {/* Memory Palace Snapshots */}
+              {/* Snapshots */}
               <div className="space-y-2">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
                   <Brain className="w-3 h-3" /> Memory Palace
@@ -333,7 +460,7 @@ const Evolution: React.FC = () => {
       {/* Footer */}
       <footer className="flex items-center justify-between px-4 py-1 border-t border-border bg-card/30 text-[10px] text-muted-foreground/50 shrink-0">
         <span>λ Evolution Dashboard — Capability Dependency Graph</span>
-        <span>{capabilities.length} nodes · {edges.length} edges</span>
+        <span>{layoutNodes.filter(n => n.status === 'acquired').length} acquired · {layoutNodes.filter(n => n.status === 'in-progress').length} building · {layoutNodes.filter(n => n.status === 'planned').length} planned</span>
       </footer>
     </div>
   );
