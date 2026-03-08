@@ -15,6 +15,12 @@ import { AgentForker, PersonalityVector } from './multi-agent';
 import { PromptEvolver } from './self-authorship';
 import { validateChange } from './safety-engine';
 import { verifyCapability, VerificationResult } from './verification-engine';
+import { detectPatterns, forecastGrowth } from './pattern-recognition';
+import { detectAnomalies } from './anomaly-detection';
+import { documentFile, documentProject } from './self-documentation';
+import { predictNextEvolutions, getNextEvolution } from './evolution-forecasting';
+import { ruleEngine } from './rule-engine';
+import { supabase } from '@/integrations/supabase/client';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface SelfTestResult {
