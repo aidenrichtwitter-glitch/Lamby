@@ -176,6 +176,11 @@ const Index = () => {
   }, [recursionState.capabilities.length]);
 
   // --- Autonomous recursion loop ---
+  const goalsRef = useRef(goals);
+  goalsRef.current = goals;
+  const currentGoalIdRef = useRef(currentGoalId);
+  currentGoalIdRef.current = currentGoalId;
+
   const advancePhase = useCallback(() => {
     setRecursionState(prev => {
       if (!prev.isRunning) return prev;
@@ -212,10 +217,10 @@ const Index = () => {
 
       if (nextPhase === 'scanning') {
         newState.cycleCount = prev.cycleCount + 1;
-        const activeGoal = getActiveGoal(goals);
+        const activeGoal = getActiveGoal(goalsRef.current);
         
         // Check if we should dream a new goal
-        if (shouldDreamNewGoal(goals, newState.cycleCount)) {
+        if (shouldDreamNewGoal(goalsRef.current, newState.cycleCount)) {
           (newState as any)._shouldDream = true;
           newState.lastAction = `💭 Dreaming up a new goal...`;
           newLog.push(createLogEntry('scanning', `── Cycle ${newState.cycleCount} ── 💭 Dreaming a new goal...`, 'action'));
@@ -258,7 +263,7 @@ const Index = () => {
         } else {
           const file = SELF_SOURCE[prev.currentFileIndex >= 0 ? prev.currentFileIndex : 0];
           if (file) {
-            const activeGoal = getActiveGoal(goals);
+            const activeGoal = getActiveGoal(goalsRef.current);
             newState.lastAction = activeGoal 
               ? `🎯 Analyzing ${file.name} for goal: ${activeGoal.title}`
               : `Preparing AI analysis of ${file.name}...`;
@@ -280,7 +285,7 @@ const Index = () => {
         } else {
           const file = SELF_SOURCE[prev.currentFileIndex >= 0 ? prev.currentFileIndex : 0];
           if (file) {
-            const activeGoal = getActiveGoal(goals);
+            const activeGoal = getActiveGoal(goalsRef.current);
             newState.lastAction = activeGoal
               ? `🎯 AI working on: ${activeGoal.title}`
               : `Requesting AI improvement for ${file.name}...`;
@@ -393,9 +398,9 @@ const Index = () => {
           }
 
           // Update goal progress if working toward a goal
-          if (proposal.goalProgress !== undefined && currentGoalId) {
+          if (proposal.goalProgress !== undefined && currentGoalIdRef.current) {
             setGoals(prevGoals => prevGoals.map(g => {
-              if (g.id !== currentGoalId) return g;
+              if (g.id !== currentGoalIdRef.current) return g;
               const updatedSteps = [...g.steps];
               if (proposal.stepCompleted >= 0 && proposal.stepCompleted < updatedSteps.length) {
                 updatedSteps[proposal.stepCompleted] = { ...updatedSteps[proposal.stepCompleted], completed: true, completedAt: Date.now() };
@@ -485,10 +490,10 @@ const Index = () => {
     // Dream mode — ask AI to create a goal
     if ((state as any)._awaitingDream && state.phase === 'proposing') {
       // Build context from journal and goal history
-      const goalHistoryStr = goals.filter(g => g.status === 'completed').slice(-5)
+      const goalHistoryStr = goalsRef.current.filter(g => g.status === 'completed').slice(-5)
         .map(g => `✓ ${g.title}${g.unlocksCapability ? ` → ${g.unlocksCapability}` : ''}`).join('\n');
       const prompt = buildGoalDreamPrompt(
-        state.capabilities, goals, state.cycleCount, state.evolutionLevel
+        state.capabilities, goalsRef.current, state.cycleCount, state.evolutionLevel
       );
       requestGoalDream(apiConfig, prompt, state.capabilities, goalHistoryStr).then(({ goal, error }) => {
         if (error) {
@@ -544,7 +549,7 @@ const Index = () => {
       const file = SELF_SOURCE[state.currentFileIndex >= 0 ? state.currentFileIndex : 0];
       if (!file) return;
 
-      const activeGoal = currentGoalId ? goals.find(g => g.id === currentGoalId) : null;
+      const activeGoal = currentGoalIdRef.current ? goalsRef.current.find(g => g.id === currentGoalIdRef.current) : null;
 
       // Get recent capability code for richer context
       const explorerFiles = SELF_SOURCE.filter(f => f.path.startsWith('src/explorer/') && f.name !== 'manifest.ts');
