@@ -739,7 +739,7 @@ const Index = () => {
 
   // Drawer state for detail panels
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerPanel, setDrawerPanel] = useState<'engine' | 'goals' | 'evolution' | 'journal' | 'terminal' | 'code' | 'explorer'>('goals');
+  const [drawerPanel, setDrawerPanel] = useState<'engine' | 'goals' | 'evolution' | 'journal' | 'terminal' | 'code' | 'explorer' | 'code-evo'>('goals');
 
   const openDrawer = (panel: typeof drawerPanel) => {
     if (drawerOpen && drawerPanel === panel) {
