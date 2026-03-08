@@ -522,6 +522,7 @@ export async function requestGoalWork(
   config: ApiConfig,
   prompt: string,
   capabilities: string[],
+  journalContext?: string,
 ): Promise<{ result: (ImprovementResult & { goalProgress?: number; stepCompleted?: number }) | null; error?: AIImprovementError }> {
   try {
     if (config.provider !== 'lovable') return { result: null };
@@ -533,7 +534,7 @@ export async function requestGoalWork(
     const res = await fetch(`${url}/functions/v1/self-recurse`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
-      body: JSON.stringify({ mode: 'work-goal', capabilities, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify({ mode: 'work-goal', capabilities, journalContext, messages: [{ role: 'user', content: prompt }] }),
     });
 
     if (res.status === 429) return { result: null, error: { type: 'rate-limited', message: 'Rate limited while working on goal', retryAfter: 30000 } };
