@@ -217,7 +217,7 @@ const Evolution: React.FC = () => {
     };
 
     fetchAll();
-  }, []);
+  }, [containerSize]);
 
   const layoutNodes = useMemo(() => capabilities.nodes, [capabilities]);
   const canvasW = capabilities.width;
