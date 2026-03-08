@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { mean, std } from 'mathjs';
 import { getEvolutionTitle } from '@/lib/evolution-titles';
 import { ruleEngine, RuleEngineReport } from '@/lib/rule-engine';
-import TerminalStorm, { emitStormProcess } from '@/components/TerminalStorm';
+import { StormLightning, emitStormProcess } from '@/components/TerminalStorm';
 
 interface CapabilityNode {
   name: string;
@@ -230,25 +230,35 @@ const Evolution: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchAll]);
 
-  // Periodic storm emissions to show the system is alive
+  // Periodic storm: pick actual capabilities to show testing/verification
   useEffect(() => {
+    if (!showStorm) return;
+    const acquiredNodes = capabilities.nodes.filter(n => n.status === 'acquired');
+    if (acquiredNodes.length < 2) return;
+
     const interval = setInterval(() => {
-      const types: StormProcess['type'][] = ['rule', 'test', 'capability', 'mutation'];
-      const labels = [
-        'Safety scan pass', 'Memory consolidation', 'Rule evaluation',
-        'Capability verify', 'Branch fitness check', 'Mutation eval',
-        'Test suite check', 'Pattern compile', 'Autonomy calc',
+      const from = acquiredNodes[Math.floor(Math.random() * acquiredNodes.length)];
+      const to = acquiredNodes[Math.floor(Math.random() * acquiredNodes.length)];
+      if (from.name === to.name) return;
+
+      const actions = [
+        { label: `Verify ${from.name}`, type: 'test' as const },
+        { label: `${from.name} → ${to.name}`, type: 'capability' as const },
+        { label: `Rule check: ${from.name}`, type: 'rule' as const },
+        { label: `Mutate ${to.name}`, type: 'mutation' as const },
       ];
+      const action = actions[Math.floor(Math.random() * actions.length)];
+
       emitStormProcess({
-        label: labels[Math.floor(Math.random() * labels.length)],
-        source: 'heartbeat',
-        target: 'system',
-        type: types[Math.floor(Math.random() * types.length)],
+        label: action.label,
+        source: from.name,
+        target: to.name,
+        type: action.type,
         status: Math.random() > 0.1 ? 'success' : 'fail',
       });
-    }, 2000 + Math.random() * 3000);
+    }, 1500 + Math.random() * 2500);
     return () => clearInterval(interval);
-  }, []);
+  }, [showStorm, capabilities.nodes]);
 
   const layoutNodes = useMemo(() => capabilities.nodes, [capabilities]);
   const canvasSize = capabilities.size;
@@ -269,7 +279,13 @@ const Evolution: React.FC = () => {
   const title = stats ? getEvolutionTitle(stats.currentLevel) : 'Loading...';
   const metrics = ruleEngine.getMetrics();
 
-  type StormProcess = { type: 'rule' | 'ai' | 'test' | 'capability' | 'mutation' };
+  // Storm node positions for lightning
+  const stormNodes = useMemo(() => layoutNodes.filter(n => n.status === 'acquired').map(n => ({
+    name: n.name,
+    x: n.x,
+    y: n.y,
+    verified: !!n.verified,
+  })), [layoutNodes]);
 
   const nodeColor = (node: CapabilityNode, selected: boolean) => {
     if (node.status === 'planned') return { fill: 'hsl(220 15% 12%)', stroke: 'hsl(220 10% 25%)', dot: 'hsl(220 10% 30%)', text: 'hsl(220 10% 35%)' };
@@ -324,12 +340,6 @@ const Evolution: React.FC = () => {
       <div className="flex-1 flex overflow-hidden">
         {/* Main area: graph + storm overlay */}
         <main ref={mainRef} className="flex-1 relative overflow-hidden flex items-center justify-center">
-          {/* Storm visualization overlay */}
-          {showStorm && (
-            <div className="absolute inset-0 z-10 pointer-events-none">
-              <TerminalStorm className="w-full h-full" />
-            </div>
-          )}
 
           <svg 
             width={canvasSize} 
@@ -449,6 +459,9 @@ const Evolution: React.FC = () => {
                 </g>
               );
             })}
+
+            {/* Lightning bolts between actual nodes */}
+            {showStorm && <StormLightning nodes={stormNodes} canvasSize={canvasSize} />}
           </svg>
 
           {/* Selected node detail */}
