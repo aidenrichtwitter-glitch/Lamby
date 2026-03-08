@@ -752,6 +752,12 @@ const Index = () => {
           </span>
           {/* Evolution badge */}
           {recursionState.capabilities.length > 0 && (
+            <Link to="/evolution" className="text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 hidden sm:inline-flex items-center gap-1 hover:bg-primary/20 transition-colors">
+              <Network className="w-2.5 h-2.5" />
+              Dashboard
+            </Link>
+          )}
+          {recursionState.capabilities.length > 0 && (
             <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 hidden sm:inline-flex items-center gap-1">
               <Zap className="w-2.5 h-2.5" />
               Lvl {recursionState.evolutionLevel} · {recursionState.capabilities.length} abilities
