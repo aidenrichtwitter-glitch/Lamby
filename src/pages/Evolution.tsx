@@ -119,12 +119,13 @@ function layoutGraph(capabilities: CapabilityNode[], containerSize: number): { n
 const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
 
 const Evolution: React.FC = () => {
-  const [capabilities, setCapabilities] = useState<{ nodes: CapabilityNode[]; width: number; height: number }>({ nodes: [], width: CANVAS_W, height: CANVAS_H_MIN });
+  const [capabilities, setCapabilities] = useState<{ nodes: CapabilityNode[]; size: number; levelBands: { level: number; label: string; yStart: number; yEnd: number }[] }>({ nodes: [], size: 800, levelBands: [] });
   const [stats, setStats] = useState<EvolutionStats | null>(null);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [zoomIdx, setZoomIdx] = useState(1); // default 50% to show everything
   const [goals, setGoals] = useState<any[]>([]);
+  const [containerSize, setContainerSize] = useState(800);
+  const mainRef = React.useRef<HTMLDivElement>(null);
 
   const zoom = ZOOM_LEVELS[zoomIdx];
 
