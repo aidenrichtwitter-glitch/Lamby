@@ -376,7 +376,19 @@ const Index = () => {
                       : g.description,
                     duration: 12000,
                   });
+                  // Cloud: journal the completion
+                  addJournalEntry('goal_completed', `Goal Completed: ${g.title}`, 
+                    g.unlocksCapability ? `Unlocked ${g.unlocksCapability}. ${g.description}` : g.description, {
+                      goalId: g.id,
+                      steps: g.steps.length,
+                      unlocksCapability: g.unlocksCapability || null,
+                    });
+                  saveGoalToCloud(updated);
+                  setJournalRefresh(v => v + 1);
                 }, 100);
+              } else {
+                // Cloud: sync goal progress
+                saveGoalToCloud(updated);
               }
               return updated;
             }));
