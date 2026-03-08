@@ -579,6 +579,21 @@ const Index = () => {
         <aside className="w-80 border-l border-border bg-card/30 flex flex-col shrink-0 hidden lg:flex">
           <div className="flex border-b border-border shrink-0">
             <button
+              onClick={() => setRightPanel('goals')}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] uppercase tracking-wider font-semibold transition-colors ${
+                rightPanel === 'goals'
+                  ? 'text-primary border-b border-primary bg-primary/5'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Target className="w-3 h-3" /> Goals
+              {goals.filter(g => g.status === 'active' || g.status === 'in-progress').length > 0 && (
+                <span className="text-[9px] px-1 py-0 rounded bg-primary/20 text-primary">
+                  {goals.filter(g => g.status === 'active' || g.status === 'in-progress').length}
+                </span>
+              )}
+            </button>
+            <button
               onClick={() => setRightPanel('chat')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-[10px] uppercase tracking-wider font-semibold transition-colors ${
                 rightPanel === 'chat'
@@ -612,15 +627,14 @@ const Index = () => {
               }`}
             >
               <Shield className="w-3 h-3" /> Mutations
-              {changes.length > 0 && (
-                <span className="text-[9px] px-1 py-0 rounded bg-primary/20 text-primary">
-                  {changes.length}
-                </span>
-              )}
             </button>
           </div>
 
-          {rightPanel === 'chat' ? (
+          {rightPanel === 'goals' ? (
+            <div className="flex-1 overflow-hidden">
+              <GoalsPanel goals={goals} currentGoalId={currentGoalId} />
+            </div>
+          ) : rightPanel === 'chat' ? (
             <div className="flex-1 overflow-hidden">
               <AIChat apiConfig={apiConfig} selectedFile={selectedFile} autoMode={recursionState.isRunning} capabilities={recursionState.capabilities} />
             </div>
