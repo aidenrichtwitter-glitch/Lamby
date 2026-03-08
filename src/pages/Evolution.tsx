@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Zap, Activity, Brain, Shield, TrendingUp, Network, ZoomIn, ZoomOut, Maximize, Loader2, Target, CheckCircle2, Circle, Loader } from 'lucide-react';
+import { ArrowLeft, Zap, Activity, Brain, Shield, TrendingUp, Network, Loader2, Target, CheckCircle2, Circle, Loader } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
 import { mean, std } from 'mathjs';
@@ -38,21 +38,16 @@ const EVOLUTION_TITLES: Record<number, string> = {
   33: 'Eschaton', 34: 'Logos', 35: 'Pleroma',
 };
 
-const CANVAS_W = 2400;
-const CANVAS_H_MIN = 800;
+// Square layout: group by evolution level, auto-fit everything
+function layoutGraph(capabilities: CapabilityNode[], containerSize: number): { nodes: CapabilityNode[]; size: number; levelBands: { level: number; label: string; yStart: number; yEnd: number }[] } {
+  const SIZE = containerSize || 800;
+  if (capabilities.length === 0) return { nodes: [], size: SIZE, levelBands: [] };
 
-function layoutGraph(capabilities: CapabilityNode[]): { nodes: CapabilityNode[]; width: number; height: number } {
-  if (capabilities.length === 0) return { nodes: [], width: CANVAS_W, height: CANVAS_H_MIN };
-
-  // Separate acquired from future nodes and assign proper levels
   const acquired = capabilities.filter(n => n.status === 'acquired');
   const future = capabilities.filter(n => n.status !== 'acquired');
-  
-  // Build dependency depth for future nodes
   const acquiredNames = new Set(acquired.map(n => n.name));
   const futureByName = new Map(future.map(n => [n.name, n]));
-  
-  // Assign future levels based on dependency depth
+
   const getDepthForFuture = (node: CapabilityNode, visited = new Set<string>()): number => {
     if (visited.has(node.name)) return 0;
     visited.add(node.name);
@@ -69,11 +64,7 @@ function layoutGraph(capabilities: CapabilityNode[]): { nodes: CapabilityNode[];
     return maxParentDepth + 1;
   };
 
-  const leveledFuture = future.map(n => ({
-    ...n,
-    level: getDepthForFuture(n),
-  }));
-
+  const leveledFuture = future.map(n => ({ ...n, level: getDepthForFuture(n) }));
   const allNodes = [...acquired, ...leveledFuture];
 
   // Group by level
@@ -84,43 +75,71 @@ function layoutGraph(capabilities: CapabilityNode[]): { nodes: CapabilityNode[];
   });
 
   const sortedLevels = Array.from(levels.keys()).sort((a, b) => a - b);
-  const result: CapabilityNode[] = [];
+  const numLevels = sortedLevels.length;
+  if (numLevels === 0) return { nodes: [], size: SIZE, levelBands: [] };
 
-  // Calculate canvas width based on widest level
-  const maxNodesInLevel = Math.max(...Array.from(levels.values()).map(n => n.length), 1);
-  const nodeSpacing = 170;
-  const canvasW = Math.max(CANVAS_W, maxNodesInLevel * nodeSpacing + 200);
+  const padding = 40;
+  const usable = SIZE - padding * 2;
+  const bandHeight = usable / numLevels;
+  const nodeRadius = Math.min(14, Math.max(6, bandHeight * 0.2));
+
+  const result: CapabilityNode[] = [];
+  const levelBands: { level: number; label: string; yStart: number; yEnd: number }[] = [];
 
   sortedLevels.forEach((lvl, li) => {
     const nodes = levels.get(lvl)!;
-    const y = 80 + li * 130;
+    const yCenter = padding + li * bandHeight + bandHeight / 2;
+    const yStart = padding + li * bandHeight;
+    const yEnd = yStart + bandHeight;
+    
+    levelBands.push({ 
+      level: lvl, 
+      label: EVOLUTION_TITLES[lvl] || `L${lvl}`, 
+      yStart, 
+      yEnd 
+    });
+
+    const count = nodes.length;
+    const spacing = Math.min(usable / (count + 1), 80);
+    const totalWidth = spacing * (count - 1);
+    const startX = padding + (usable - totalWidth) / 2;
+
     nodes.forEach((node, ni) => {
-      const totalWidth = nodes.length * nodeSpacing;
-      const startX = (canvasW - totalWidth) / 2;
-      result.push({ ...node, x: startX + ni * nodeSpacing + nodeSpacing / 2, y });
+      result.push({
+        ...node,
+        x: count === 1 ? SIZE / 2 : startX + ni * spacing,
+        y: yCenter,
+      });
     });
   });
 
-  const canvasH = Math.max(CANVAS_H_MIN, sortedLevels.length * 130 + 200);
-
-  return { nodes: result, width: canvasW, height: canvasH };
+  return { nodes: result, size: SIZE, levelBands };
 }
 
-const ZOOM_LEVELS = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0];
+
 
 const Evolution: React.FC = () => {
-  const [capabilities, setCapabilities] = useState<{ nodes: CapabilityNode[]; width: number; height: number }>({ nodes: [], width: CANVAS_W, height: CANVAS_H_MIN });
+  const [capabilities, setCapabilities] = useState<{ nodes: CapabilityNode[]; size: number; levelBands: { level: number; label: string; yStart: number; yEnd: number }[] }>({ nodes: [], size: 800, levelBands: [] });
   const [stats, setStats] = useState<EvolutionStats | null>(null);
   const [snapshots, setSnapshots] = useState<any[]>([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [zoomIdx, setZoomIdx] = useState(1); // default 50% to show everything
   const [goals, setGoals] = useState<any[]>([]);
+  const [containerSize, setContainerSize] = useState(800);
+  const mainRef = React.useRef<HTMLDivElement>(null);
 
-  const zoom = ZOOM_LEVELS[zoomIdx];
-
-  const zoomIn = useCallback(() => setZoomIdx(i => Math.min(i + 1, ZOOM_LEVELS.length - 1)), []);
-  const zoomOut = useCallback(() => setZoomIdx(i => Math.max(i - 1, 0)), []);
-  const zoomFit = useCallback(() => setZoomIdx(0), []); // fully zoomed out
+  // Measure container and auto-fit
+  useEffect(() => {
+    const measure = () => {
+      if (mainRef.current) {
+        const rect = mainRef.current.getBoundingClientRect();
+        const s = Math.min(rect.width, rect.height);
+        setContainerSize(Math.max(600, s));
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
 
   useEffect(() => {
     // Fetch capabilities + goals in parallel
@@ -166,7 +185,7 @@ const Evolution: React.FC = () => {
         });
 
       const allNodes = [...acquiredNodes, ...goalNodes];
-      setCapabilities(layoutGraph(allNodes));
+      setCapabilities(layoutGraph(allNodes, containerSize));
 
       // Stats
       if (stateRes.data) {
@@ -198,11 +217,11 @@ const Evolution: React.FC = () => {
     };
 
     fetchAll();
-  }, []);
+  }, [containerSize]);
 
   const layoutNodes = useMemo(() => capabilities.nodes, [capabilities]);
-  const canvasW = capabilities.width;
-  const canvasH = capabilities.height;
+  const canvasSize = capabilities.size;
+  const levelBands = capabilities.levelBands;
 
   const edges = useMemo(() => {
     const result: { from: CapabilityNode; to: CapabilityNode }[] = [];
@@ -255,129 +274,135 @@ const Evolution: React.FC = () => {
             </span>
           )}
         </div>
-
-        {/* Zoom controls */}
-        <div className="flex items-center gap-1">
-          <button onClick={zoomOut} className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Zoom out">
-            <ZoomOut className="w-3.5 h-3.5" />
-          </button>
-          <span className="text-[9px] text-muted-foreground w-10 text-center font-mono">{Math.round(zoom * 100)}%</span>
-          <button onClick={zoomIn} className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Zoom in">
-            <ZoomIn className="w-3.5 h-3.5" />
-          </button>
-          <button onClick={zoomFit} className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="Fit all">
-            <Maximize className="w-3.5 h-3.5" />
-          </button>
-        </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Main: Capability Graph */}
-        <main className="flex-1 relative overflow-auto bg-background">
-          <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: canvasW, minHeight: canvasH }}>
-            <svg width={canvasW} height={canvasH} viewBox={`0 0 ${canvasW} ${canvasH}`}>
-              {/* Grid */}
-              <defs>
-                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="hsl(140 30% 20% / 0.1)" strokeWidth="0.5" />
-                </pattern>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#grid)" />
+        {/* Main: Capability Graph - square, auto-fit */}
+        <main ref={mainRef} className="flex-1 relative overflow-hidden bg-background flex items-center justify-center">
+          <svg 
+            width={canvasSize} 
+            height={canvasSize} 
+            viewBox={`0 0 ${canvasSize} ${canvasSize}`}
+            className="max-w-full max-h-full"
+            style={{ aspectRatio: '1 / 1' }}
+          >
+            {/* Grid */}
+            <defs>
+              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="hsl(140 30% 20% / 0.1)" strokeWidth="0.5" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
 
-              {/* Edges */}
-              {edges.map((edge, i) => (
-                <motion.line
-                  key={`edge-${i}`}
-                  x1={edge.from.x} y1={edge.from.y}
-                  x2={edge.to.x} y2={edge.to.y}
-                  stroke={edgeColor(edge)}
-                  strokeWidth="1.5"
-                  strokeDasharray={edgeStroke(edge)}
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 0.6, delay: i * 0.03 }}
-                />
-              ))}
-
-              {/* Nodes */}
-              {layoutNodes.map((node, i) => {
-                const isSelected = selectedNode === node.name;
-                const colors = nodeColor(node, isSelected);
-                const isGhost = node.status !== 'acquired';
-
-                return (
-                  <g key={node.name} onClick={() => setSelectedNode(isSelected ? null : node.name)} className="cursor-pointer">
-                    {/* Pulse ring for in-progress */}
-                    {node.status === 'in-progress' && (
-                      <motion.circle
-                        cx={node.x} cy={node.y} r={24}
-                        fill="none"
-                        stroke="hsl(40 90% 55% / 0.2)"
-                        strokeWidth="1"
-                        animate={{ r: [24, 30, 24], opacity: [0.4, 0, 0.4] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                      />
-                    )}
-
-                    <motion.circle
-                      cx={node.x} cy={node.y}
-                      r={isSelected ? 22 : 16}
-                      fill={colors.fill}
-                      stroke={colors.stroke}
-                      strokeWidth={isSelected ? 2 : 1}
-                      strokeDasharray={isGhost ? '3 3' : 'none'}
-                      opacity={isGhost ? 0.5 : 1}
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ duration: 0.3, delay: i * 0.02 }}
-                    />
-                    <motion.circle
-                      cx={node.x} cy={node.y}
-                      r={node.status === 'in-progress' ? 3 : 4}
-                      fill={colors.dot}
-                      opacity={isGhost ? 0.4 : 1}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: isGhost ? 0.4 : 1 }}
-                      transition={{ delay: i * 0.02 + 0.15 }}
-                    />
-
-                    {/* Status icon for in-progress */}
-                    {node.status === 'in-progress' && (
-                      <foreignObject x={node.x - 6} y={node.y - 6} width={12} height={12}>
-                        <Loader2 className="w-3 h-3 text-accent animate-spin" style={{ color: 'hsl(40 90% 55%)' }} />
-                      </foreignObject>
-                    )}
-
+            {/* Level band backgrounds & labels */}
+            {levelBands.map((band, i) => {
+              const isCurrentLevel = stats && band.level === stats.currentLevel;
+              return (
+                <g key={`band-${band.level}`}>
+                  <rect
+                    x={0} y={band.yStart}
+                    width={canvasSize} height={band.yEnd - band.yStart}
+                    fill={isCurrentLevel ? 'hsl(140 70% 45% / 0.04)' : i % 2 === 0 ? 'hsl(220 15% 8% / 0.3)' : 'transparent'}
+                    stroke={isCurrentLevel ? 'hsl(140 70% 45% / 0.15)' : 'none'}
+                    strokeWidth={isCurrentLevel ? 1 : 0}
+                  />
+                  <text
+                    x={12} y={(band.yStart + band.yEnd) / 2 + 3}
+                    fill={isCurrentLevel ? 'hsl(140 70% 55%)' : 'hsl(220 10% 25%)'}
+                    fontSize="7"
+                    fontFamily="JetBrains Mono, monospace"
+                    fontWeight={isCurrentLevel ? 'bold' : 'normal'}
+                  >
+                    L{band.level} {band.label}
+                  </text>
+                  {isCurrentLevel && (
                     <text
-                      x={node.x} y={node.y + 30}
+                      x={12} y={(band.yStart + band.yEnd) / 2 + 12}
+                      fill="hsl(140 70% 45% / 0.5)"
+                      fontSize="5"
+                      fontFamily="JetBrains Mono, monospace"
+                    >
+                      ▸ YOU ARE HERE
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+
+            {/* Edges */}
+            {edges.map((edge, i) => (
+              <motion.line
+                key={`edge-${i}`}
+                x1={edge.from.x} y1={edge.from.y}
+                x2={edge.to.x} y2={edge.to.y}
+                stroke={edgeColor(edge)}
+                strokeWidth="1"
+                strokeDasharray={edgeStroke(edge)}
+                initial={{ pathLength: 0 }}
+                animate={{ pathLength: 1 }}
+                transition={{ duration: 0.4, delay: i * 0.01 }}
+              />
+            ))}
+
+            {/* Nodes */}
+            {layoutNodes.map((node, i) => {
+              const isSelected = selectedNode === node.name;
+              const colors = nodeColor(node, isSelected);
+              const isGhost = node.status !== 'acquired';
+              const nodeR = Math.min(12, Math.max(5, canvasSize * 0.012));
+
+              return (
+                <g key={node.name} onClick={() => setSelectedNode(isSelected ? null : node.name)} className="cursor-pointer">
+                  {node.status === 'in-progress' && (
+                    <motion.circle
+                      cx={node.x} cy={node.y} r={nodeR + 6}
+                      fill="none"
+                      stroke="hsl(40 90% 55% / 0.2)"
+                      strokeWidth="1"
+                      animate={{ r: [nodeR + 6, nodeR + 10, nodeR + 6], opacity: [0.4, 0, 0.4] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    />
+                  )}
+
+                  <motion.circle
+                    cx={node.x} cy={node.y}
+                    r={isSelected ? nodeR + 4 : nodeR}
+                    fill={colors.fill}
+                    stroke={colors.stroke}
+                    strokeWidth={isSelected ? 2 : 1}
+                    strokeDasharray={isGhost ? '2 2' : 'none'}
+                    opacity={isGhost ? 0.5 : 1}
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ duration: 0.2, delay: i * 0.01 }}
+                  />
+                  <motion.circle
+                    cx={node.x} cy={node.y}
+                    r={2.5}
+                    fill={colors.dot}
+                    opacity={isGhost ? 0.4 : 1}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: isGhost ? 0.4 : 1 }}
+                    transition={{ delay: i * 0.01 + 0.1 }}
+                  />
+
+                  {/* Name label — only show on hover/select to reduce clutter */}
+                  {isSelected && (
+                    <text
+                      x={node.x} y={node.y + nodeR + 12}
                       textAnchor="middle"
                       fill={colors.text}
-                      fontSize="8"
+                      fontSize="6"
                       fontFamily="JetBrains Mono, monospace"
-                      opacity={isGhost ? 0.5 : 1}
                       className="pointer-events-none"
                     >
-                      {node.name.length > 22 ? node.name.substring(0, 20) + '…' : node.name}
+                      {node.name.length > 25 ? node.name.substring(0, 23) + '…' : node.name}
                     </text>
-
-                    {/* Status label */}
-                    {isGhost && (
-                      <text
-                        x={node.x} y={node.y + 40}
-                        textAnchor="middle"
-                        fill={node.status === 'in-progress' ? 'hsl(40 60% 50%)' : 'hsl(220 10% 30%)'}
-                        fontSize="6"
-                        fontFamily="JetBrains Mono, monospace"
-                        className="pointer-events-none uppercase"
-                      >
-                        {node.status === 'in-progress' ? '⟳ building' : '◌ planned'}
-                      </text>
-                    )}
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
 
           {/* Selected node detail */}
           <AnimatePresence>
