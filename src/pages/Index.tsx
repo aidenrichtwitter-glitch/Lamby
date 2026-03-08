@@ -393,7 +393,7 @@ const Index = () => {
               onFocus={() => setActivePanel('tree')}
               className="h-full border-0 rounded-none"
             >
-              <FileTree onSelectFile={setSelectedFile} selectedFile={selectedFile} />
+              <FileTree onSelectFile={setSelectedFile} selectedFile={selectedFile} refreshKey={fileTreeVersion} />
             </DesktopWindow>
           </div>
 

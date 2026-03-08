@@ -70,7 +70,7 @@ const TreeItem: React.FC<{
   );
 };
 
-const FileTree: React.FC<FileTreeProps> = ({ onSelectFile, selectedFile }) => {
+const FileTree: React.FC<FileTreeProps> = ({ onSelectFile, selectedFile, refreshKey }) => {
   const tree = getFileTree();
 
   return (
