@@ -192,8 +192,6 @@ const Index = () => {
             }
             // Save capability as a file in src/explorer/
             persistCapability(capRecord, proposal.content);
-            // Mark that we need to refresh the file tree
-            (newState as any)._needsTreeRefresh = true;
             // Level up notification
             const prevLevel = Math.floor(prev.capabilities.length / 3) + 1;
             if (newState.evolutionLevel > prevLevel) {
