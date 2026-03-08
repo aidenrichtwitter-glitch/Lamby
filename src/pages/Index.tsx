@@ -55,6 +55,23 @@ import { installPresetCapabilities } from '@/lib/preinstall';
 
 const PHASE_SEQUENCE: RecursionState['phase'][] = ['scanning', 'reflecting', 'proposing', 'validating', 'applying', 'cooling'];
 
+function updateVirtualRequestsFile(content: string) {
+  const existingIdx = SELF_SOURCE.findIndex(f => f.path === 'src/explorer/requests.txt');
+  const file = {
+    name: 'requests.txt',
+    path: 'src/explorer/requests.txt',
+    content,
+    language: 'plaintext' as const,
+    isModified: true,
+    lastModified: Date.now(),
+  };
+  if (existingIdx >= 0) {
+    SELF_SOURCE[existingIdx] = file;
+  } else {
+    SELF_SOURCE.push(file);
+  }
+}
+
 const Index = () => {
   const { toast } = useToast();
   const [selectedFile, setSelectedFile] = useState<string | null>('src/lib/self-reference.ts');
