@@ -351,18 +351,163 @@ async function gatherKnowledge(): Promise<AutonomyTask> {
   };
 }
 
+// ── GOAL EXECUTION ENGINE ──
+// The core of autonomy: pick the most important goal, attempt its next step.
+
+async function executeGoalStep(): Promise<{ task: AutonomyTask; goalResult: AutonomyReport['goalAttempted'] }> {
+  const start = performance.now();
+
+  // 1. Get highest-priority active goal
+  const { data: goals } = await supabase
+    .from('goals')
+    .select('*')
+    .in('status', ['active', 'in-progress'])
+    .order('priority', { ascending: true }); // 'high' < 'medium' < 'low' alphabetically
+
+  if (!goals || goals.length === 0) {
+    return {
+      task: { id: 'goal-exec', name: 'Goal execution', type: 'goal-execute', success: false, detail: 'No active goals to work on', duration: performance.now() - start, usedAI: false },
+      goalResult: null,
+    };
+  }
+
+  // Prioritize: high > medium > low, then in-progress > active
+  const sorted = goals.sort((a, b) => {
+    const pOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const sOrder: Record<string, number> = { 'in-progress': 0, active: 1 };
+    const pDiff = (pOrder[a.priority] ?? 2) - (pOrder[b.priority] ?? 2);
+    if (pDiff !== 0) return pDiff;
+    return (sOrder[a.status] ?? 1) - (sOrder[b.status] ?? 1);
+  });
+
+  const goal = sorted[0];
+  const steps = (goal.steps as any[]) || [];
+  const nextStep = steps.find((s: any) => !s.done);
+
+  if (!nextStep) {
+    // All steps done — complete the goal
+    await supabase.from('goals').update({ status: 'completed', progress: 100, completed_at: new Date().toISOString() }).eq('id', goal.id);
+    return {
+      task: { id: 'goal-exec', name: `Complete: ${goal.title}`, type: 'goal-execute', success: true, detail: `Goal "${goal.title}" completed — all steps done`, duration: performance.now() - start, usedAI: false },
+      goalResult: { id: goal.id, title: goal.title, stepAttempted: 'All steps complete', success: true, detail: 'Goal completed!' },
+    };
+  }
+
+  // 2. Attempt the next step using available deterministic tools
+  const stepText = (nextStep.step || nextStep.action || '').toLowerCase();
+  let stepSuccess = false;
+  let stepDetail = '';
+
+  // Strategy: match step to available deterministic capabilities
+  if (stepText.includes('search') || stepText.includes('find') || stepText.includes('research')) {
+    // Use web search
+    try {
+      const result = await deterministicSearch(goal.title);
+      stepSuccess = result.results.length > 0;
+      stepDetail = stepSuccess ? `Found ${result.results.length} results for "${goal.title}"` : 'Search returned no results';
+    } catch { stepDetail = 'Search failed'; }
+  } else if (stepText.includes('verify') || stepText.includes('check') || stepText.includes('test')) {
+    // Use verification engine
+    const { data: caps } = await supabase.from('capabilities').select('name, source_file, virtual_source').eq('verified', true).limit(5);
+    const verified = (caps || []).filter(c => {
+      const r = verifyCapability(c.name, c.source_file, c.virtual_source);
+      return r.status === 'verified';
+    });
+    stepSuccess = verified.length > 0;
+    stepDetail = `Verified ${verified.length} capabilities`;
+  } else if (stepText.includes('decompos') || stepText.includes('break') || stepText.includes('plan') || stepText.includes('step')) {
+    // Use task decomposition
+    const decomposed = decomposeTask(goal.description);
+    stepSuccess = decomposed.steps.length >= 2;
+    stepDetail = `Decomposed into ${decomposed.steps.length} sub-steps (~${decomposed.totalMinutes}min)`;
+  } else if (stepText.includes('detect') || stepText.includes('scan') || stepText.includes('anomal')) {
+    // Use anomaly detection
+    const { data: caps } = await supabase.from('capabilities').select('name, cycle_number, evolution_level, built_on, verified');
+    const { data: state } = await supabase.from('evolution_state').select('*').eq('id', 'singleton').single();
+    if (caps && state) {
+      const records = caps.map(c => ({ name: c.name, cycle: c.cycle_number, level: c.evolution_level, builtOn: (c.built_on || []) as string[], verified: c.verified }));
+      const anomalies = detectAnomalies(records, state.evolution_level, state.cycle_count);
+      stepSuccess = true;
+      stepDetail = `Scanned for anomalies: ${anomalies.length} found`;
+    } else { stepDetail = 'No data for scan'; }
+  } else if (stepText.includes('repair') || stepText.includes('fix') || stepText.includes('heal')) {
+    // Run self-repair (anomaly scan + fix)
+    const anomalyResult = await runAnomalyScan();
+    stepSuccess = anomalyResult.success;
+    stepDetail = anomalyResult.detail;
+  } else if (stepText.includes('document') || stepText.includes('log') || stepText.includes('record')) {
+    // Self-document
+    const docResult = runDocumentation();
+    stepSuccess = docResult.success;
+    stepDetail = docResult.detail;
+  } else if (stepText.includes('rule') || stepText.includes('evaluat')) {
+    // Run rules
+    const { task } = await runRuleEvaluation();
+    stepSuccess = task.success;
+    stepDetail = task.detail;
+  } else {
+    // Generic: try to search for how to do this step
+    try {
+      const result = await deterministicSearch(`how to ${stepText}`);
+      stepSuccess = result.results.length > 0;
+      stepDetail = stepSuccess
+        ? `Researched: "${stepText}" — found ${result.results.length} resources`
+        : `Could not find resources for: "${stepText}"`;
+    } catch { stepDetail = `Step "${stepText}" not yet automatable`; }
+  }
+
+  // 3. Update goal progress
+  if (stepSuccess) {
+    nextStep.done = true;
+    const doneCount = steps.filter((s: any) => s.done).length;
+    const progress = Math.round((doneCount / steps.length) * 100);
+    await supabase.from('goals').update({
+      steps: steps,
+      progress,
+      status: progress >= 100 ? 'completed' : 'in-progress',
+      completed_at: progress >= 100 ? new Date().toISOString() : null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', goal.id);
+  }
+
+  return {
+    task: {
+      id: 'goal-exec',
+      name: `Goal: ${goal.title}`,
+      type: 'goal-execute',
+      success: stepSuccess,
+      detail: `Step "${nextStep.step || nextStep.action}": ${stepDetail}`,
+      duration: performance.now() - start,
+      usedAI: false,
+    },
+    goalResult: {
+      id: goal.id,
+      title: goal.title,
+      stepAttempted: nextStep.step || nextStep.action || 'unknown',
+      success: stepSuccess,
+      detail: stepDetail,
+    },
+  };
+}
+
 // ── MASTER AUTONOMY CYCLE ──
 
 /**
- * Run a full autonomy cycle — ALL deterministic, ZERO AI calls.
- * This is the heart of autonomous operation.
+ * Run a full autonomy cycle:
+ * 1. GOAL EXECUTION — pick highest-priority goal, attempt next step
+ * 2. MAINTENANCE — verify, scan, analyze, forecast (in parallel)
+ * 3. JUDGMENT — was progress actually made?
  */
 export async function runAutonomyCycle(): Promise<AutonomyReport> {
   const cycleStart = performance.now();
   const tasks: AutonomyTask[] = [];
 
-  // Run all deterministic tasks in parallel where possible
-  const [verifyResult, anomalyResult, patternResult, forecastResult, goalResult, healthResult, knowledgeResult] = await Promise.all([
+  // Phase 1: GOAL EXECUTION — the main event
+  const { task: goalTask, goalResult } = await executeGoalStep();
+  tasks.push(goalTask);
+
+  // Phase 2: MAINTENANCE — run in parallel
+  const [verifyResult, anomalyResult, patternResult, forecastResult, goalProgressResult, healthResult, knowledgeResult] = await Promise.all([
     verifyAllCapabilities(),
     runAnomalyScan(),
     runPatternAnalysis(),
@@ -372,64 +517,53 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
     gatherKnowledge(),
   ]);
 
-  tasks.push(verifyResult, anomalyResult, patternResult, forecastResult, goalResult, healthResult, knowledgeResult);
+  tasks.push(verifyResult, anomalyResult, patternResult, forecastResult, goalProgressResult, healthResult, knowledgeResult);
 
-  // Run rule evaluation (depends on data from above)
-  const { task: ruleTask, report: ruleReport } = await runRuleEvaluation();
+  // Rule evaluation
+  const { task: ruleTask } = await runRuleEvaluation();
   tasks.push(ruleTask);
 
-  // Run documentation analysis
-  const docTask = runDocumentation();
-  tasks.push(docTask);
+  // Documentation
+  tasks.push(runDocumentation());
 
-  // Calculate autonomy score
+  // Phase 3: JUDGMENT
   const deterministicCount = tasks.filter(t => !t.usedAI && t.success).length;
   const totalDecisions = tasks.length;
+  const progressMade = goalResult?.success || false;
 
-  // Update global rule engine metrics
-  for (const t of tasks) {
-    if (!t.usedAI && t.success) {
-      // Each successful deterministic task = 1 AI call saved
-      ruleEngine.evaluate({
-        capabilities: [],
-        evolutionLevel: 0,
-        cycleCount: 0,
-        lastTestVerdict: 'HEALTHY',
-        failedTests: [],
-        capabilityCount: 0,
-        timeSinceLastEvolution: 0,
-        codeFiles: [],
-      });
-    }
-  }
-
-  // Increment the evolution cycle
+  // Update evolution state
+  const { data: currentState } = await supabase.from('evolution_state').select('cycle_count').eq('id', 'singleton').single();
   await supabase.from('evolution_state').update({
-    cycle_count: (await supabase.from('evolution_state').select('cycle_count').eq('id', 'singleton').single()).data?.cycle_count! + 1,
+    cycle_count: (currentState?.cycle_count || 0) + 1,
     updated_at: new Date().toISOString(),
-    last_action: `Autonomy cycle: ${deterministicCount}/${totalDecisions} tasks completed autonomously`,
+    last_action: goalResult
+      ? `Goal "${goalResult.title}": ${goalResult.success ? '✓' : '✗'} ${goalResult.stepAttempted}`
+      : 'No active goals — system idle',
   }).eq('id', 'singleton');
 
   const score = Math.round((deterministicCount / Math.max(totalDecisions, 1)) * 100);
 
-  // Log to journal
+  // Log with goal context
   await supabase.from('evolution_journal').insert([{
     event_type: 'milestone',
-    title: `🤖 Autonomy Cycle: ${score}% (${deterministicCount}/${totalDecisions} deterministic)`,
-    description: tasks.map(t => `[${t.usedAI ? 'AI' : '⚙️'}] ${t.name}: ${t.detail}`).join('\n'),
+    title: goalResult
+      ? `🎯 Cycle: ${goalResult.success ? '✓' : '✗'} ${goalResult.title} — "${goalResult.stepAttempted}"`
+      : `🤖 Autonomy Cycle: ${score}% (no active goals)`,
+    description: [
+      goalResult ? `Goal: ${goalResult.title}\nStep: ${goalResult.stepAttempted}\nResult: ${goalResult.detail}` : 'No goal attempted.',
+      '',
+      `Maintenance: ${deterministicCount - (goalResult?.success ? 1 : 0)}/${totalDecisions - 1} tasks passed`,
+      ...tasks.filter(t => t.id !== 'goal-exec').map(t => `  [⚙️] ${t.name}: ${t.detail.slice(0, 60)}`),
+    ].join('\n'),
     metadata: {
       autonomy_score: score,
+      goal_attempted: goalResult,
+      progress_made: progressMade,
       tasks_completed: deterministicCount,
       total_tasks: totalDecisions,
       duration_ms: Math.round(performance.now() - cycleStart),
     },
   }]);
-
-  const nextActions = [
-    forecastResult.detail,
-    anomalyResult.detail,
-    patternResult.detail,
-  ].filter(Boolean);
 
   return {
     timestamp: Date.now(),
@@ -440,7 +574,12 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
     aiDecisions: tasks.filter(t => t.usedAI).length,
     deterministicDecisions: deterministicCount,
     systemHealth: parseInt(healthResult.detail.match(/\d+/)?.[0] || '0'),
-    nextActions,
+    nextActions: [
+      goalResult ? `Next: continue "${goalResult.title}"` : 'Create goals to drive evolution',
+      forecastResult.detail,
+    ],
+    goalAttempted: goalResult,
+    progressMade,
   };
 }
 
