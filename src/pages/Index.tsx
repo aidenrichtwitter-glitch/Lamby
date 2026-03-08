@@ -24,6 +24,7 @@ import {
   requestGoalDream,
   requestGoalWork,
   requestGenerateRequests,
+  requestSageMode,
   saveCapabilities,
   persistCapability,
   isRateLimited,
