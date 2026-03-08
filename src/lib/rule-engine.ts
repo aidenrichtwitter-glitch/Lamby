@@ -107,13 +107,13 @@ const BUILT_IN_RULES: Rule[] = [
     id: 'rule-stagnation-detect',
     name: 'Evolution Stagnation Alert',
     category: 'maintain',
-    description: 'Alert when no new capabilities for 20+ cycles',
+    description: 'Alert when no evolution activity for extended period',
     priority: 70,
-    condition: (ctx) => ctx.timeSinceLastEvolution > 120_000 && ctx.cycleCount > 20,
-    action: () => ({
+    condition: (ctx) => ctx.timeSinceLastEvolution > 300_000 && ctx.cycleCount > 5, // 5 minutes, not 2
+    action: (ctx) => ({
       type: 'alert',
-      description: 'Evolution stagnation: no new capabilities in 20+ cycles. Consider new mutation strategies.',
-      severity: 'warning',
+      description: `Evolution quiet for ${Math.round(ctx.timeSinceLastEvolution / 60000)}min. Run autonomy cycle to advance.`,
+      severity: 'info',
     }),
     successCount: 0,
     failCount: 0,
