@@ -343,7 +343,6 @@ ${file.content}
 Respond with ONLY valid JSON:
 {"content": "complete new file content with REAL working code", "description": "what I built", "capability": "name-of-new-capability", "builtOn": ["cap1", "cap2"]}`;
 };
-};
 
 export interface AIImprovementError {
   type: 'rate-limited' | 'credits-exhausted' | 'network' | 'parse' | 'unknown';
