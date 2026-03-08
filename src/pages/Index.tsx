@@ -561,15 +561,26 @@ const Index = () => {
 
       aiRequest.then(({ result, error }) => {
         if (error) {
-          const backoff = error.type === 'rate-limited' ? calculateBackoff(state.rateLimitBackoff) : 5000;
+          const isCreditsExhausted = error.type === 'credits-exhausted';
+          const isRateLimitError = error.type === 'rate-limited';
+          // Credits exhausted: wait 5 minutes. Rate limited: exponential backoff. Other: 5s.
+          const backoff = isCreditsExhausted ? 300000 : isRateLimitError ? calculateBackoff(state.rateLimitBackoff) : 5000;
           const retryAfter = error.retryAfter || backoff;
           setRecursionState(prev => ({
             ...prev,
-            phase: 'cooling' as any,
-            rateLimitBackoff: error.type === 'rate-limited' ? backoff : prev.rateLimitBackoff,
-            rateLimitUntil: error.type === 'rate-limited' ? Date.now() + retryAfter : prev.rateLimitUntil,
-            lastAction: `⏳ ${error.message}`,
-            log: [...prev.log, createLogEntry('cooling' as any, `⚠ ${error.message}. Auto-resuming.`, 'warning')],
+            phase: (isCreditsExhausted || isRateLimitError) ? 'rate-limited' as any : 'cooling' as any,
+            rateLimitBackoff: isRateLimitError ? backoff : isCreditsExhausted ? 300000 : prev.rateLimitBackoff,
+            rateLimitUntil: (isCreditsExhausted || isRateLimitError) ? Date.now() + retryAfter : prev.rateLimitUntil,
+            lastAction: isCreditsExhausted 
+              ? `💤 Credits exhausted — sleeping 5 min then retrying`
+              : `⏳ ${error.message}`,
+            log: [...prev.log, createLogEntry(
+              (isCreditsExhausted || isRateLimitError) ? 'rate-limited' as any : 'cooling' as any,
+              isCreditsExhausted 
+                ? `⚠ Credits exhausted. Pausing for 5 minutes before retrying.`
+                : `⚠ ${error.message}. Auto-resuming.`, 
+              'warning'
+            )],
             _awaitingAI: false,
             _proposal: null,
           } as any));
