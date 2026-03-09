@@ -573,28 +573,47 @@ const Evolution: React.FC = () => {
             </defs>
             <rect width="100%" height="100%" fill="url(#grid)" />
 
-            {levelBands.map((band, i) => {
-              const isTopDepth = band.level === Math.max(...levelBands.map(b => b.level));
-              return (
-                <g key={`band-${band.level}`}>
-                  <rect
-                    x={0} y={band.yStart}
-                    width={canvasSize} height={band.yEnd - band.yStart}
-                    fill={i % 2 === 0 ? 'hsl(220 15% 8% / 0.3)' : 'transparent'}
-                    stroke="none"
-                  />
+            {/* Nested zone squares — render largest first */}
+            {[...zones].reverse().map((zone) => (
+              <g key={zone.key}>
+                <rect
+                  x={zone.x}
+                  y={zone.y}
+                  width={zone.w}
+                  height={zone.h}
+                  fill={zone.color}
+                  stroke={zone.border}
+                  strokeWidth={1}
+                  rx={4}
+                />
+                {/* Zone label — bottom-right corner */}
+                <text
+                  x={zone.x + zone.w - 8}
+                  y={zone.y + 14}
+                  textAnchor="end"
+                  fill={zone.border}
+                  fontSize="9"
+                  fontFamily="JetBrains Mono, monospace"
+                  fontWeight="bold"
+                  opacity={0.7}
+                >
+                  {zone.label}
+                </text>
+                {zone.nodeCount > 0 && (
                   <text
-                    x={12} y={(band.yStart + band.yEnd) / 2 + 3}
-                    fill={isTopDepth ? 'hsl(140 70% 55%)' : 'hsl(220 10% 25%)'}
+                    x={zone.x + zone.w - 8}
+                    y={zone.y + 24}
+                    textAnchor="end"
+                    fill={zone.border}
                     fontSize="7"
                     fontFamily="JetBrains Mono, monospace"
-                    fontWeight={isTopDepth ? 'bold' : 'normal'}
+                    opacity={0.4}
                   >
-                    {band.label}
+                    {zone.nodeCount} node{zone.nodeCount !== 1 ? 's' : ''}
                   </text>
-                </g>
-              );
-            })}
+                )}
+              </g>
+            ))}
 
             {edges.map((edge, i) => (
               <motion.line
