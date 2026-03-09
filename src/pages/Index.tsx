@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { Settings, Terminal, Brain, Shield, Activity, FileCode, RefreshCw, Eye, Zap, Clock, Target, ScrollText, Network, Rocket, Code2 } from 'lucide-react';
+import { Settings, Terminal, Brain, Shield, Activity, FileCode, RefreshCw, Eye, Zap, Clock, Target, ScrollText, Network, Rocket, Code2, Pause, Play, ShieldAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import DesktopWindow from '@/components/DesktopWindow';
 import FileTree from '@/components/FileTree';
