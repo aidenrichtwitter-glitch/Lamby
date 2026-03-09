@@ -428,8 +428,14 @@ async function testReliable(): Promise<DimensionResult> {
     .single();
   checks.push({ name: 'self-repair', pass: !!repairCap, detail: repairCap ? 'Self-repair capability active' : 'No self-repair' });
 
-  // Check: Safety engine operational
-  checks.push({ name: 'safety-active', pass: true, detail: 'Safety engine validates all changes' });
+  // Check: Safety engine operational — actually test it
+  try {
+    const safetyResult = validateChange('export function safe() { return true; }', 'test.ts');
+    const safetyWorks = Array.isArray(safetyResult) && !safetyResult.some(c => c.severity === 'error');
+    checks.push({ name: 'safety-active', pass: safetyWorks, detail: safetyWorks ? 'Safety engine validates changes correctly' : 'Safety engine flagged clean code as error' });
+  } catch {
+    checks.push({ name: 'safety-active', pass: false, detail: 'Safety engine threw an exception' });
+  }
 
   const passed = checks.filter(c => c.pass).length;
   const score = Math.round((passed / checks.length) * 100);
