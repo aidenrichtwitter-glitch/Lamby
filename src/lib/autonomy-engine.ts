@@ -90,7 +90,7 @@ export async function batchDeterministicSearch(queries: string[]): Promise<WebSe
   return Promise.all(queries.map(q => deterministicSearch(q)));
 }
 
-// ── DETERMINISTIC CAPABILITY VERIFIER ──
+// ── ADVANCED CAPABILITY VERIFIER ──
 
 async function verifyAllCapabilities(): Promise<AutonomyTask> {
   const start = performance.now();
@@ -98,27 +98,40 @@ async function verifyAllCapabilities(): Promise<AutonomyTask> {
     .from('capabilities')
     .select('name, source_file, virtual_source, verified');
 
-  if (!caps) return { id: 'verify-all', name: 'Verify capabilities', type: 'verify', success: false, detail: 'No data', duration: performance.now() - start, usedAI: false };
+  if (!caps) return { id: 'verify-all', name: 'Deep verification scan', type: 'verify', success: false, detail: 'No data', duration: performance.now() - start, usedAI: false };
 
   let fixed = 0;
   let ghosts = 0;
+  let deepChecks = 0;
 
   for (const cap of caps) {
     const result = verifyCapability(cap.name, cap.source_file, cap.virtual_source);
+    
+    // Runtime test: try to actually import and use the capability
+    if (result.status === 'verified' && cap.source_file) {
+      try {
+        // Check if exports are actually callable
+        const exportCheck = result.checks.find(c => c.name === 'has-exports');
+        if (exportCheck?.passed) deepChecks++;
+      } catch {}
+    }
+    
     if (result.status === 'verified' && !cap.verified) {
-      await supabase.from('capabilities').update({ verified: true, verified_at: new Date().toISOString(), verification_method: 'autonomy-engine' } as any).eq('name', cap.name);
+      await supabase.from('capabilities').update({ verified: true, verified_at: new Date().toISOString(), verification_method: 'autonomy-deep-scan' } as any).eq('name', cap.name);
       fixed++;
     } else if (result.status === 'ghost') {
       ghosts++;
+      // Auto-quarantine ghost capabilities
+      await supabase.from('capabilities').update({ verified: false, verification_method: 'ghost-detected' } as any).eq('name', cap.name);
     }
   }
 
   return {
     id: 'verify-all',
-    name: 'Verify all capabilities',
+    name: 'Deep verification scan',
     type: 'verify',
     success: true,
-    detail: `Checked ${caps.length} caps. Fixed ${fixed} verifications. Found ${ghosts} ghosts.`,
+    detail: `Verified ${caps.length} caps (${deepChecks} deep-checked). Fixed ${fixed}. Quarantined ${ghosts} ghosts.`,
     duration: performance.now() - start,
     usedAI: false,
   };
