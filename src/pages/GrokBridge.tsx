@@ -133,7 +133,7 @@ function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: strin
   const [blocks, setBlocks] = useState<ExtractedBlock[]>([]);
   const [responseContext, setResponseContext] = useState<string>('');
   const [contextSections, setContextSections] = useState<string[]>([]);
-  const [showContext, setShowContext] = useState(false);
+  const [showContext, setShowContext] = useState(true);
   const [lastClipboard, setLastClipboard] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const [flash, setFlash] = useState(false);
@@ -144,16 +144,15 @@ function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: strin
   const extractFromText = useCallback((text: string) => {
     if (text === lastClipboard || text.length < 10) return;
     setLastClipboard(text);
+    setResponseContext(text);
+    setContextSections(extractContextSections(text));
     const parsed = parseCodeBlocks(text);
-    if (parsed.length === 0) return;
     const newBlocks: ExtractedBlock[] = parsed.map(b => ({
       ...b,
       id: crypto.randomUUID(),
       applied: false,
     }));
     setBlocks(newBlocks);
-    setResponseContext(text);
-    setContextSections(extractContextSections(text));
     setCollapsed(false);
     setShowPasteBox(false);
     setFlash(true);
@@ -293,7 +292,7 @@ function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: strin
             </div>
           )}
 
-          {contextSections.length > 0 && (
+          {responseContext && (
             <div className="rounded-lg border border-border/30 bg-card/30 overflow-hidden">
               <button
                 onClick={() => setShowContext(c => !c)}
@@ -302,18 +301,18 @@ function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: strin
               >
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-3 h-3 text-primary/60" />
-                  <span className="font-medium">Grok Response Context</span>
-                  <span className="text-[8px] text-muted-foreground/50">{contextSections.length} section{contextSections.length > 1 ? 's' : ''}</span>
+                  <span className="font-medium">Full Grok Response</span>
+                  <span className="text-[8px] text-muted-foreground/50">
+                    {blocks.length} code block{blocks.length !== 1 ? 's' : ''} · {contextSections.length} text section{contextSections.length !== 1 ? 's' : ''}
+                  </span>
                 </div>
                 {showContext ? <ChevronUp className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />}
               </button>
               {showContext && (
-                <div className="px-3 py-2 border-t border-border/20 space-y-2 max-h-48 overflow-auto">
-                  {contextSections.map((section, i) => (
-                    <div key={i} className="text-[10px] text-foreground/70 leading-relaxed whitespace-pre-wrap">
-                      {section.slice(0, 1000)}{section.length > 1000 ? '\n...' : ''}
-                    </div>
-                  ))}
+                <div className="px-3 py-2 border-t border-border/20 max-h-64 overflow-auto">
+                  <div className="text-[10px] text-foreground/70 leading-relaxed whitespace-pre-wrap" data-testid="text-full-response">
+                    {responseContext}
+                  </div>
                 </div>
               )}
             </div>
