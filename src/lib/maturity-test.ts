@@ -20,6 +20,7 @@ import { deterministicSearch } from './autonomy-engine';
 import { ruleEngine } from './rule-engine';
 import { emitStormProcess } from '@/components/TerminalStorm';
 import { decomposeTask } from './task-decomposition';
+import { validateChange } from './safety-engine';
 
 export type MaturityDimension =
   | 'conversational'
