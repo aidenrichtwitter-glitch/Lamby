@@ -1566,7 +1566,7 @@ const GrokBridge: React.FC = () => {
   }, []);
 
   return (
-    <div className="h-full flex flex-col bg-background text-foreground font-mono overflow-y-auto">
+    <div className="h-full overflow-y-auto bg-background text-foreground font-mono">
       {pendingApply && (
         <ApplyConfirmDialog
           pending={pendingApply}
