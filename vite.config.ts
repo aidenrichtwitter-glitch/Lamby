@@ -1,7 +1,60 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { VitePWA } from "vite-plugin-pwa";
+
+function sourceDownloadPlugin(): Plugin {
+  return {
+    name: "source-download",
+    configureServer(server) {
+      server.middlewares.use("/api/download-source", async (_req, res) => {
+        try {
+          const archiver = (await import("archiver")).default;
+          const projectRoot = process.cwd();
+
+          res.setHeader("Content-Type", "application/zip");
+          res.setHeader("Content-Disposition", "attachment; filename=lambda-recursive-source.zip");
+
+          const archive = archiver("zip", { zlib: { level: 9 } });
+          archive.pipe(res);
+
+          const includeDirs = ["src", "public", "supabase", "electron-browser"];
+          const includeFiles = [
+            "package.json", "package-lock.json", "tsconfig.json", "tsconfig.app.json",
+            "tsconfig.node.json", "vite.config.ts", "tailwind.config.ts", "postcss.config.js",
+            "index.html", "eslint.config.js", ".env", ".env.example", "replit.md",
+            "components.json"
+          ];
+
+          for (const dir of includeDirs) {
+            const fs = await import("fs");
+            const dirPath = path.join(projectRoot, dir);
+            if (fs.existsSync(dirPath)) {
+              archive.directory(dirPath, dir, (entry) => {
+                if (entry.name.includes("node_modules") || entry.name.includes(".cache")) return false;
+                return entry;
+              });
+            }
+          }
+
+          for (const file of includeFiles) {
+            const fs = await import("fs");
+            const filePath = path.join(projectRoot, file);
+            if (fs.existsSync(filePath)) {
+              archive.file(filePath, { name: file });
+            }
+          }
+
+          await archive.finalize();
+        } catch (err) {
+          console.error("Download source error:", err);
+          res.statusCode = 500;
+          res.end("Failed to create source archive");
+        }
+      });
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -15,6 +68,7 @@ export default defineConfig(({ mode }) => ({
   },
   plugins: [
     react(),
+    sourceDownloadPlugin(),
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "pwa-icon-512.png"],

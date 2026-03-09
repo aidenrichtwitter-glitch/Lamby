@@ -65,10 +65,11 @@ supabase/
 - **Desktop build**: `npm run electron:build` — builds Vite then packages Electron
 - **Web mode**: Sites open in new browser tabs (fallback when not in Electron)
 - Detection: `typeof window.require === 'function'` → Electron; otherwise web mode
-- The `src-tauri/` directory exists but is NOT the active desktop approach
+- Tauri has been fully removed from the project
 
 ## Development
 - Dev server: `npx vite` (port 5000) — web-only mode
 - Desktop dev: `npm run electron:dev` — full desktop experience
 - Build: `npm run build`
+- Download source: Click "Download Source" in the sidebar to get a zip of all project files (excludes node_modules, .git)
 - The app connects to an existing hosted Supabase project for its database and edge functions
