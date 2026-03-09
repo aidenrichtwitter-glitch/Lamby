@@ -14,6 +14,7 @@ import { validateChange } from './safety-engine';
 import { SELF_SOURCE } from './self-source';
 import { decomposeTask } from './task-decomposition';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchEvolutionState } from './evolution-bridge';
 
 export interface SelfReflection {
   question: string;
@@ -608,14 +609,26 @@ async function executeGoalStep(): Promise<{ task: AutonomyTask; goalResult: Auto
     stepSuccess = task.success;
     stepDetail = task.detail;
   } else {
-    // Generic: try to search for how to do this step
-    try {
-      const result = await deterministicSearch(`how to ${stepText}`);
-      stepSuccess = result.results.length > 0;
-      stepDetail = stepSuccess
-        ? `Researched: "${stepText}" — found ${result.results.length} resources`
-        : `Could not find resources for: "${stepText}"`;
-    } catch { stepDetail = `Step "${stepText}" not yet automatable`; }
+    const codeKeywords = ['implement', 'build', 'create', 'code', 'write', 'add', 'develop', 'generate', 'construct', 'design'];
+    const isCodeStep = codeKeywords.some(k => stepText.includes(k));
+
+    if (isCodeStep) {
+      try {
+        const evoState = await fetchEvolutionState();
+        stepDetail = `Code step queued for Grok evolution (L${evoState.evolutionLevel}, ${evoState.capabilities.length} caps). Use Evolution Context in AI Bridge to execute.`;
+        stepSuccess = false;
+      } catch (err) {
+        stepDetail = `Evolution state error: ${err instanceof Error ? err.message : 'unknown'}`;
+      }
+    } else {
+      try {
+        const result = await deterministicSearch(`how to ${stepText}`);
+        stepSuccess = result.results.length > 0;
+        stepDetail = stepSuccess
+          ? `Researched: "${stepText}" — found ${result.results.length} resources`
+          : `Could not find resources for: "${stepText}"`;
+      } catch { stepDetail = `Step "${stepText}" not yet automatable`; }
+    }
   }
 
   // 3. Update goal progress

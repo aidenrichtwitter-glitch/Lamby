@@ -36,6 +36,8 @@ src/
 │   ├── cloud-memory.ts        # Supabase persistence layer
 │   ├── safety-engine.ts       # Change validation
 │   ├── self-source.ts         # Virtual file system
+│   ├── evolution-bridge.ts    # Grok↔Evolution pipeline (context builder, Grok API caller, code applicator, plan manager)
+│   ├── autonomy-engine.ts     # Autonomous goal execution (code-gen steps route through Grok evolution)
 │   └── [50+ capability libs]  # Auto-generated capability modules
 electron-browser/              # Grok Desktop Electron app (based on AnRkey/Grok-Desktop)
 ├── src/main.js                # Electron main process

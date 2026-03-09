@@ -1,9 +1,14 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, RefreshCw, Zap } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Zap, Dna, Trash2, Play, CheckCircle, XCircle, Clock, FileCode, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { getEvolutionTitle } from '@/lib/evolution-titles';
+import {
+  loadEvolutionPlan, clearEvolutionPlan, loadEvolutionHistory,
+  runGrokEvolutionCycle,
+  type EvolutionPlan, type EvolutionCycleResult,
+} from '@/lib/evolution-bridge';
 
 const PROCESSES = [
   { id: 'prev-notes', label: 'Review Notes', description: 'Check previous evolution notes & learnings' },
@@ -38,6 +43,15 @@ const PatternAnalysis: React.FC = () => {
   const [totalCycles, setTotalCycles] = useState(0);
   const [activePhase, setActivePhase] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [plan, setPlan] = useState<EvolutionPlan | null>(loadEvolutionPlan());
+  const [showPlan, setShowPlan] = useState(true);
+  const [cycleRunning, setCycleRunning] = useState(false);
+  const [cycleStatus, setCycleStatus] = useState<string>('');
+  const [cycleResult, setCycleResult] = useState<EvolutionCycleResult | null>(null);
+  const [grokStream, setGrokStream] = useState<string>('');
+  const [showGrokPanel, setShowGrokPanel] = useState(false);
+  const [showResponse, setShowResponse] = useState(false);
+  const streamRef = useRef<HTMLPreElement>(null);
 
   const fetchData = useCallback(async () => {
     const [stateRes, capRes] = await Promise.all([
@@ -54,6 +68,53 @@ const PatternAnalysis: React.FC = () => {
     fetchData();
     const interval = setInterval(fetchData, 8000);
     return () => clearInterval(interval);
+  }, [fetchData]);
+
+  const runEvolutionCycle = useCallback(async () => {
+    setCycleRunning(true);
+    setCycleResult(null);
+    setGrokStream('');
+    setShowGrokPanel(true);
+    setCycleStatus('Starting evolution cycle...');
+
+    try {
+      let context = `=== PROJECT CONTEXT ===\nGuardian AI ("λ Recursive") — React + TypeScript + Vite desktop IDE with Electron.\n`;
+      try {
+        const res = await fetch('/api/read-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filePath: 'src/lib/evolution-bridge.ts' }),
+        });
+        if (res.ok) {
+          const d = await res.json();
+          context += `\nEvolution bridge source:\n${(d.content || '').slice(0, 2000)}\n`;
+        }
+      } catch {}
+
+      const result = await runGrokEvolutionCycle(
+        context,
+        'grok-3',
+        (delta) => {
+          setGrokStream(prev => {
+            const updated = prev + delta;
+            requestAnimationFrame(() => {
+              streamRef.current?.scrollTo(0, streamRef.current.scrollHeight);
+            });
+            return updated;
+          });
+        },
+        (status) => setCycleStatus(status),
+      );
+
+      setCycleResult(result);
+      setPlan(loadEvolutionPlan());
+      setCycleStatus(`Done — ${result.blocks.filter(b => b.status === 'applied').length} files applied, L${result.newLevel}`);
+      fetchData();
+    } catch (e: any) {
+      setCycleStatus(`Error: ${e.message}`);
+    } finally {
+      setCycleRunning(false);
+    }
   }, [fetchData]);
 
   // Single ring — all 18 in one circle, sequentially connected
@@ -99,9 +160,26 @@ const PatternAnalysis: React.FC = () => {
               L{currentLevel} {getEvolutionTitle(currentLevel)} · {totalCaps} caps · {totalCycles} cycles
             </span>
           </div>
-          <Link to="/evolution" className="text-[9px] px-2 py-1 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors">
-            Dashboard
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="button-run-evolution"
+              onClick={runEvolutionCycle}
+              disabled={cycleRunning}
+              className="text-[9px] px-3 py-1 rounded bg-[hsl(280_80%_55%)] text-white hover:bg-[hsl(280_80%_45%)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 font-semibold"
+            >
+              {cycleRunning ? (
+                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+                  <RefreshCw className="w-3 h-3" />
+                </motion.div>
+              ) : (
+                <Play className="w-3 h-3" />
+              )}
+              {cycleRunning ? 'Running...' : 'Run Grok Evolution'}
+            </button>
+            <Link to="/evolution" className="text-[9px] px-2 py-1 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors">
+              Dashboard
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -120,6 +198,66 @@ const PatternAnalysis: React.FC = () => {
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 To continuously self-improve through autonomous cycles of introspection, mutation, and verification — building new capabilities while preserving safety and coherence.
               </p>
+            </div>
+          </div>
+
+          {/* Grok Evolution Plan panel */}
+          <div className="absolute top-4 right-4 z-20 max-w-sm">
+            <div className="bg-card/80 backdrop-blur-sm border border-[hsl(280_80%_55%/0.3)] rounded-lg shadow-lg overflow-hidden">
+              <button
+                onClick={() => setShowPlan(p => !p)}
+                className="w-full px-4 py-2 flex items-center justify-between text-left hover:bg-[hsl(280_80%_55%/0.05)] transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Dna className="w-3.5 h-3.5 text-[hsl(280_80%_65%)]" />
+                  <span className="text-[10px] font-semibold text-[hsl(280_80%_65%)] uppercase tracking-wider">
+                    {plan ? 'Next Evolution Plan' : 'No Plan Yet'}
+                  </span>
+                  {plan && <span className="w-1.5 h-1.5 rounded-full bg-[hsl(280_80%_55%)] animate-pulse" />}
+                </div>
+                <span className="text-[9px] text-muted-foreground">{showPlan ? '−' : '+'}</span>
+              </button>
+              {showPlan && (
+                <div className="px-4 pb-3 space-y-2">
+                  {plan ? (
+                    <>
+                      <p className="text-[10px] text-foreground/80 leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto">
+                        {plan.prompt}
+                      </p>
+                      {plan.plannedCapabilities.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {plan.plannedCapabilities.map((cap, i) => (
+                            <span key={i} className="text-[8px] px-1.5 py-0.5 rounded bg-[hsl(280_80%_55%/0.15)] text-[hsl(280_80%_65%)] border border-[hsl(280_80%_55%/0.2)]">
+                              {cap}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {plan.plannedFiles.length > 0 && (
+                        <p className="text-[9px] text-muted-foreground">
+                          Files: {plan.plannedFiles.join(', ')}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between pt-1 border-t border-border/30">
+                        <span className="text-[8px] text-muted-foreground/50">
+                          From L{plan.level} · {new Date(plan.createdAt).toLocaleDateString()}
+                        </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); clearEvolutionPlan(); setPlan(null); }}
+                          className="text-[8px] flex items-center gap-1 text-muted-foreground/40 hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="w-2.5 h-2.5" /> Clear
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-[10px] text-muted-foreground/50 text-center py-2">
+                      <p>No evolution plan saved yet.</p>
+                      <p className="mt-1">Go to <Link to="/grok-bridge" className="text-[hsl(280_80%_65%)] hover:underline">AI Bridge</Link> and click <strong>Evolution Context</strong> to start.</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
@@ -266,6 +404,93 @@ const PatternAnalysis: React.FC = () => {
           )}
         </div>
       )}
+
+      <AnimatePresence>
+        {showGrokPanel && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="border-t border-[hsl(280_80%_55%/0.3)] bg-card/95 backdrop-blur-sm shrink-0 overflow-hidden"
+          >
+            <div className="px-4 py-2">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Dna className="w-3.5 h-3.5 text-[hsl(280_80%_65%)]" />
+                  <span className="text-[10px] font-bold text-[hsl(280_80%_65%)] uppercase tracking-wider">Grok Evolution</span>
+                  {cycleStatus && (
+                    <span data-testid="text-cycle-status" className="text-[9px] text-muted-foreground">{cycleStatus}</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowGrokPanel(false)}
+                  className="text-[9px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+
+              {cycleResult && cycleResult.blocks.length > 0 && (
+                <div className="space-y-1 mb-2 max-h-40 overflow-y-auto">
+                  {cycleResult.blocks.map((block, i) => (
+                    <div
+                      key={i}
+                      data-testid={`block-result-${i}`}
+                      className="flex items-center gap-2 px-2 py-1 rounded bg-background/50 border border-border/30"
+                    >
+                      {block.status === 'applied' && <CheckCircle className="w-3 h-3 text-green-500 shrink-0" />}
+                      {block.status === 'rejected' && <XCircle className="w-3 h-3 text-red-500 shrink-0" />}
+                      {block.status === 'validated' && <Clock className="w-3 h-3 text-yellow-500 shrink-0" />}
+                      {block.status === 'pending' && <Clock className="w-3 h-3 text-muted-foreground shrink-0" />}
+                      <FileCode className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <span className="text-[9px] font-mono text-foreground/80 truncate">{block.filePath}</span>
+                      <span className={`text-[8px] px-1.5 py-0.5 rounded ml-auto shrink-0 ${
+                        block.status === 'applied' ? 'bg-green-500/10 text-green-400' :
+                        block.status === 'rejected' ? 'bg-red-500/10 text-red-400' :
+                        'bg-yellow-500/10 text-yellow-400'
+                      }`}>
+                        {block.status}
+                      </span>
+                      {block.error && <span className="text-[8px] text-red-400 truncate max-w-[200px]">{block.error}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {cycleResult && (
+                <div className="flex items-center gap-3 text-[9px] text-muted-foreground mb-2">
+                  {cycleResult.capabilitiesRegistered.length > 0 && (
+                    <span className="text-[hsl(280_80%_65%)]">{cycleResult.capabilitiesRegistered.length} new capabilities</span>
+                  )}
+                  {cycleResult.planSaved && <span className="text-[hsl(280_80%_65%)]">Next plan saved</span>}
+                  <span>Level {cycleResult.newLevel}</span>
+                </div>
+              )}
+
+              {grokStream && (
+                <div>
+                  <button
+                    onClick={() => setShowResponse(r => !r)}
+                    className="flex items-center gap-1 text-[9px] text-muted-foreground hover:text-foreground transition-colors mb-1"
+                  >
+                    {showResponse ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    {showResponse ? 'Hide' : 'Show'} Grok Response ({grokStream.length} chars)
+                  </button>
+                  {showResponse && (
+                    <pre
+                      ref={streamRef}
+                      className="text-[9px] font-mono text-foreground/70 bg-background/50 border border-border/30 rounded p-2 max-h-48 overflow-auto whitespace-pre-wrap"
+                    >
+                      {grokStream}
+                      {cycleRunning && <span className="animate-pulse text-[hsl(280_80%_65%)]">|</span>}
+                    </pre>
+                  )}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -2,12 +2,23 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import {
   Send, Shield, Check, AlertTriangle, Undo2, FileCode, Sparkles, Bot,
   User, Loader2, Code2, Trash2, ChevronDown, Globe, MessageSquare,
-  Clipboard, ClipboardCheck, Zap, X, ChevronUp, ChevronDown as ChevronDownIcon
+  Clipboard, ClipboardCheck, Zap, X, ChevronUp, ChevronDown as ChevronDownIcon,
+  Dna
 } from 'lucide-react';
 import { validateChange } from '@/lib/safety-engine';
 import { SELF_SOURCE } from '@/lib/self-source';
 import { SafetyCheck } from '@/lib/self-reference';
 import { parseCodeBlocks, ParsedBlock, isLikelySnippet, mergeCSSVariables } from '@/lib/code-parser';
+import {
+  fetchEvolutionState,
+  buildEvolutionContext,
+  loadEvolutionPlan,
+  extractNextPlan,
+  saveEvolutionPlan,
+  registerEvolutionResults,
+  type EvolutionState,
+  type EvolutionPlan,
+} from '@/lib/evolution-bridge';
 
 const isElectron = typeof window !== 'undefined' && typeof (window as any).require === 'function';
 
@@ -129,7 +140,7 @@ function extractContextSections(fullText: string): string[] {
   return sections;
 }
 
-function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: string, code: string) => void; onApplyAll?: (blocks: { filePath: string; code: string }[]) => void }) {
+function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApply: (filePath: string, code: string) => void; onApplyAll?: (blocks: { filePath: string; code: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void }) {
   const [blocks, setBlocks] = useState<ExtractedBlock[]>([]);
   const [responseContext, setResponseContext] = useState<string>('');
   const [contextSections, setContextSections] = useState<string[]>([]);
@@ -157,7 +168,8 @@ function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: strin
     setShowPasteBox(false);
     setFlash(true);
     setTimeout(() => setFlash(false), 400);
-  }, [lastClipboard]);
+    if (onResponseCaptured) onResponseCaptured(text);
+  }, [lastClipboard, onResponseCaptured]);
 
   const readClipboard = useCallback(async () => {
     try {
@@ -529,9 +541,10 @@ interface GrokDesktopBrowserProps {
   setCustomUrl: (url: string) => void;
   onApply: (filePath: string, code: string) => void;
   onApplyAll?: (blocks: { filePath: string; code: string }[]) => void;
+  onResponseCaptured?: (fullResponse: string) => void;
 }
 
-function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl, onApply, onApplyAll }: GrokDesktopBrowserProps) {
+function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl, onApply, onApplyAll, onResponseCaptured }: GrokDesktopBrowserProps) {
   const webviewRef = useRef<any>(null);
   const [loading, setLoading] = useState(true);
   const initialUrlRef = useRef(browserUrl);
@@ -612,7 +625,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
             </p>
           </div>
         </div>
-        <ClipboardExtractor onApply={onApply} onApplyAll={onApplyAll} />
+        <ClipboardExtractor onApply={onApply} onApplyAll={onApplyAll} onResponseCaptured={onResponseCaptured} />
       </div>
     );
   }
@@ -671,7 +684,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
         )}
       </div>
 
-      <ClipboardExtractor onApply={onApply} onApplyAll={onApplyAll} />
+      <ClipboardExtractor onApply={onApply} onApplyAll={onApplyAll} onResponseCaptured={onResponseCaptured} />
     </div>
   );
 }
@@ -694,6 +707,29 @@ const GrokBridge: React.FC = () => {
   const [customUrl, setCustomUrl] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [evolutionLoading, setEvolutionLoading] = useState(false);
+  const [evolutionState, setEvolutionState] = useState<EvolutionState | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<EvolutionPlan | null>(loadEvolutionPlan());
+  const [isEvolutionResponse, setIsEvolutionResponse] = useState(false);
+  const lastFullResponseRef = useRef<string>('');
+
+  const handleEvolutionApply = useCallback(async (fullResponse: string, appliedFiles: string[]) => {
+    if (!isEvolutionResponse || appliedFiles.length === 0) return;
+    try {
+      const state = evolutionState || await fetchEvolutionState();
+      const result = await registerEvolutionResults(appliedFiles, fullResponse, state);
+      setCurrentPlan(loadEvolutionPlan());
+      const parts: string[] = [];
+      if (result.capabilitiesRegistered.length > 0) parts.push(`${result.capabilitiesRegistered.length} capabilities registered`);
+      if (result.planSaved) parts.push('next evolution plan saved');
+      parts.push(`L${result.newLevel}`);
+      setStatusMessage(`⚡ Evolution updated: ${parts.join(' · ')}`);
+      const updatedState = await fetchEvolutionState();
+      setEvolutionState(updatedState);
+    } catch (e: any) {
+      setStatusMessage(`⚠ Evolution tracking error: ${e.message}`);
+    }
+  }, [isEvolutionResponse, evolutionState]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
   useEffect(() => { saveConversations(conversations); }, [conversations]);
@@ -894,11 +930,16 @@ const GrokBridge: React.FC = () => {
         timestamp: Date.now(),
         backupPath: lastBackupPathRef.current,
       }]);
+
+      if (isEvolutionResponse && lastFullResponseRef.current) {
+        handleEvolutionApply(lastFullResponseRef.current, [filePath]);
+        setIsEvolutionResponse(false);
+      }
     } catch (e: any) {
       setApplyStage('error');
       setApplyStageMessage(`Error: ${e.message || 'Unknown failure'}`);
     }
-  }, [pendingApply]);
+  }, [pendingApply, isEvolutionResponse, handleEvolutionApply]);
 
   const rollbackPending = useCallback(async () => {
     if (!pendingApply) { setPendingApply(null); return; }
@@ -1159,9 +1200,11 @@ const GrokBridge: React.FC = () => {
 
       setProjectContext(context);
       setContextLoading(false);
+      return context;
     } catch (e: any) {
       setContextLoading(false);
       setStatusMessage(`⚠ Context build failed: ${e.message}`);
+      return '';
     }
   }, [lastErrors]);
 
@@ -1190,6 +1233,38 @@ const GrokBridge: React.FC = () => {
       }
     }
   }, [projectContext]);
+
+  const copyEvolutionContext = useCallback(async () => {
+    setEvolutionLoading(true);
+    try {
+      const ctx = projectContext || await buildProjectContext();
+      const state = await fetchEvolutionState();
+      setEvolutionState(state);
+      const plan = loadEvolutionPlan();
+      setCurrentPlan(plan);
+      const fullContext = buildEvolutionContext(ctx, state, plan);
+      try {
+        if (isElectron) {
+          const { clipboard } = (window as any).require('electron');
+          clipboard.writeText(fullContext);
+        } else {
+          await navigator.clipboard.writeText(fullContext);
+        }
+        setStatusMessage(
+          plan
+            ? `✓ Evolution context copied (L${state.evolutionLevel}, ${state.capabilities.length} caps, plan included) — paste into Grok`
+            : `✓ Evolution context copied (L${state.evolutionLevel}, ${state.capabilities.length} caps, no prior plan) — paste into Grok`
+        );
+        setIsEvolutionResponse(true);
+      } catch {
+        setStatusMessage('⚠ Clipboard write failed — try Copy Context instead');
+      }
+    } catch (e: any) {
+      setStatusMessage(`⚠ Evolution context failed: ${e.message}`);
+    } finally {
+      setEvolutionLoading(false);
+    }
+  }, [projectContext, buildProjectContext]);
 
   const buildErrorFeedback = useCallback(async (errorText: string) => {
     setLastErrors(errorText);
@@ -1433,6 +1508,16 @@ const GrokBridge: React.FC = () => {
             {contextLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
             Copy Context
           </button>
+          <button
+            onClick={copyEvolutionContext}
+            disabled={evolutionLoading}
+            data-testid="button-evolution-context"
+            className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] bg-[hsl(280_80%_55%/0.15)] text-[hsl(280_80%_65%)] hover:bg-[hsl(280_80%_55%/0.25)] transition-colors border border-[hsl(280_80%_55%/0.3)] disabled:opacity-40"
+          >
+            {evolutionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Dna className="w-3 h-3" />}
+            Evolution Context
+            {currentPlan && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-[hsl(280_80%_55%)] animate-pulse" />}
+          </button>
           {lastErrors && (
             <button
               onClick={() => buildErrorFeedback(lastErrors)}
@@ -1465,7 +1550,7 @@ const GrokBridge: React.FC = () => {
 
       {/* ── Mode: Browser Chat (Grok Desktop webview) ── */}
       {mode === 'browser' && (
-        <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} />
+        <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} />
       )}
 
       {/* ── Mode: API Chat ── */}
