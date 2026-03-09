@@ -109,9 +109,18 @@ supabase/
   - `src/test/fixtures/` — saved JSON fixtures from live API test runs (for reference/debugging)
 - Shared module: `src/lib/code-parser.ts` — `parseCodeBlocks()` + `ParsedBlock` + `parseDependencies()` + `parseActionItems()` for comprehensive Grok response parsing (used by GrokBridge + tests)
   - Code blocks: detects filenames from inline comments, preceding prose (backtick/bold/heading-wrapped), and "create/save as" patterns
-  - Dependencies: detects npm/yarn/pnpm/bun install commands in code blocks AND prose text
-  - Action items: extracts shell commands, env vars, directory creation, renames, deletions, API key requirements, restart instructions
+  - **Unfenced multi-file format**: Handles Grok's copy-button format (`// file: index.htmlhtml`) where files are concatenated with `// file:` headers and no markdown fences. Language tags appended to filenames are stripped (e.g., `src/App.tsxtsx` → `src/App.tsx` + language `tsx`)
+  - Dependencies: detects npm/yarn/pnpm/bun install commands in code blocks AND prose text (including backtick-wrapped)
+  - Action items: extracts shell commands, env vars, directory creation, renames, deletions, API key requirements, restart instructions, **and program install suggestions** (C++/Python/Node/Rust/Go/Java/Docker/etc.)
+  - **Sequential ordering**: All action items are sorted by their position in the source text, preserving Grok's intended execution order
   - Shell-only code blocks (bash with only install/mkdir/cd commands) are excluded from code blocks since they're already captured as deps/actions
+
+## Program Auto-Install
+- When Grok mentions installing system-level programs (g++, cmake, python, node, rust, docker, ffmpeg, etc.), the parser emits `install` type action items
+- The "Download Programs" button in the Action Required panel triggers `/api/programs/install` (Vite endpoint)
+- The endpoint checks if each program is already installed, then runs the platform-appropriate install command (choco on Windows, brew on macOS, apt-get on Linux)
+- Supports 35+ common programs with install mappings for all 3 platforms
+- Results show per-program status: already installed, newly installed, or error with details
 
 ## Dependency Auto-Install
 - When Grok's response includes a `=== DEPENDENCIES ===` block or `npm install` commands in bash code blocks, the app auto-detects packages

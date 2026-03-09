@@ -197,62 +197,61 @@ function extractFilePathFromPrecedingText(text: string, fenceIndex: number): str
 }
 
 export function parseActionItems(text: string): ActionItem[] {
-  const items: ActionItem[] = [];
+  type PositionedItem = ActionItem & { pos: number };
+  const positioned: PositionedItem[] = [];
   const seen = new Set<string>();
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  const fencedBlocks = new Set<string>();
+  const fenceRanges: [number, number][] = [];
   const fenceRe = /```[\s\S]*?```/g;
   let fm;
   while ((fm = fenceRe.exec(normalized)) !== null) {
-    fencedBlocks.add(`${fm.index}-${fm.index + fm[0].length}`);
+    fenceRanges.push([fm.index, fm.index + fm[0].length]);
   }
 
   function isInsideFence(pos: number): boolean {
-    for (const range of fencedBlocks) {
-      const [start, end] = range.split('-').map(Number);
+    for (const [start, end] of fenceRanges) {
       if (pos >= start && pos < end) return true;
     }
     return false;
   }
 
-  function addItem(item: ActionItem) {
+  function addItem(item: ActionItem, pos: number) {
     const key = `${item.type}:${item.command || item.description}`;
     if (seen.has(key)) return;
     seen.add(key);
-    items.push(item);
+    positioned.push({ ...item, pos });
   }
 
   const shellCmdRe = /```(?:bash|sh|shell|terminal|console|cmd|powershell)\n([\s\S]*?)```/g;
   let sm;
   while ((sm = shellCmdRe.exec(normalized)) !== null) {
     const cmdBlock = sm[1];
+    let lineOffset = sm.index + sm[0].indexOf(sm[1]);
     for (const line of cmdBlock.split('\n')) {
       const trimmed = line.replace(/^\$\s*/, '').trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-
-      if (/^(?:npm|yarn|pnpm|bun)\s+(?:install|i|add)\s/i.test(trimmed)) continue;
-
-      if (/^(?:npm|yarn|pnpm|bun)\s+(?:run|start|test|build|dev)\b/i.test(trimmed)) {
-        addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed });
-      } else if (/^npx\s+/i.test(trimmed)) {
-        addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed });
-      } else if (/^(?:mkdir|touch|rm|mv|cp|cat|echo)\s+/i.test(trimmed)) {
-        if (/^mkdir\s/i.test(trimmed)) {
-          addItem({ type: 'create-dir', description: `Create directory: ${trimmed.replace(/^mkdir\s+(-p\s+)?/i, '')}`, command: trimmed });
+      if (trimmed && !trimmed.startsWith('#')) {
+        if (/^(?:npm|yarn|pnpm|bun)\s+(?:install|i|add)\s/i.test(trimmed)) {
+        } else if (/^(?:npm|yarn|pnpm|bun)\s+(?:run|start|test|build|dev)\b/i.test(trimmed)) {
+          addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed }, lineOffset);
+        } else if (/^npx\s+/i.test(trimmed)) {
+          addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed }, lineOffset);
+        } else if (/^mkdir\s/i.test(trimmed)) {
+          addItem({ type: 'create-dir', description: `Create directory: ${trimmed.replace(/^mkdir\s+(-p\s+)?/i, '')}`, command: trimmed }, lineOffset);
         } else if (/^rm\s/i.test(trimmed)) {
-          addItem({ type: 'delete', description: `Delete: ${trimmed.replace(/^rm\s+(-rf?\s+)?/i, '')}`, command: trimmed });
+          addItem({ type: 'delete', description: `Delete: ${trimmed.replace(/^rm\s+(-rf?\s+)?/i, '')}`, command: trimmed }, lineOffset);
         } else if (/^mv\s/i.test(trimmed)) {
-          addItem({ type: 'rename', description: `Move/rename: ${trimmed.replace(/^mv\s+/i, '')}`, command: trimmed });
-        } else {
-          addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed });
+          addItem({ type: 'rename', description: `Move/rename: ${trimmed.replace(/^mv\s+/i, '')}`, command: trimmed }, lineOffset);
+        } else if (/^(?:touch|cp|cat|echo)\s+/i.test(trimmed)) {
+          addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed }, lineOffset);
+        } else if (/^(?:export|set)\s+\w+=/.test(trimmed)) {
+          const varName = trimmed.match(/^(?:export|set)\s+(\w+)=/)?.[1] || '';
+          addItem({ type: 'env', description: `Set environment variable: ${varName}`, command: trimmed }, lineOffset);
+        } else if (/^(?:cd|node|python|pip)\s+/.test(trimmed)) {
+          addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed }, lineOffset);
         }
-      } else if (/^(?:export|set)\s+\w+=/.test(trimmed)) {
-        const varName = trimmed.match(/^(?:export|set)\s+(\w+)=/)?.[1] || '';
-        addItem({ type: 'env', description: `Set environment variable: ${varName}`, command: trimmed });
-      } else if (/^cd\s+/.test(trimmed) || /^node\s+/.test(trimmed) || /^python\s+/.test(trimmed) || /^pip\s+/.test(trimmed)) {
-        addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed });
       }
+      lineOffset += line.length + 1;
     }
   }
 
@@ -265,100 +264,181 @@ export function parseActionItems(text: string): ActionItem[] {
     let em;
     while ((em = pattern.exec(normalized)) !== null) {
       if (isInsideFence(em.index)) continue;
-      addItem({ type: 'env', description: `Set ${em[1]}=${em[2] || '...'}`, command: `${em[1]}=${em[2]}` });
+      addItem({ type: 'env', description: `Set ${em[1]}=${em[2] || '...'}`, command: `${em[1]}=${em[2]}` }, em.index);
     }
   }
 
+  let runningOffset = 0;
   const proseLines = normalized.split('\n');
   for (let i = 0; i < proseLines.length; i++) {
     const line = proseLines[i].trim();
-    const lineStart = normalized.indexOf(line, i > 0 ? normalized.indexOf(proseLines[i - 1]) : 0);
+    const lineStart = runningOffset;
+    runningOffset += proseLines[i].length + 1;
     if (isInsideFence(lineStart)) continue;
+    if (!line) continue;
 
     const runMatch = line.match(/(?:^[-*•]\s*)?(?:run|execute|type|enter)\s+`([^`]+)`/i);
     if (runMatch) {
       const cmd = runMatch[1];
       if (/^(?:npm|yarn|pnpm|bun|npx|node|python|pip|cargo|go)\s/i.test(cmd)) {
-        if (/^(?:npm|yarn|pnpm|bun)\s+(?:install|i|add)\s/i.test(cmd)) {
-          continue;
+        if (!/^(?:npm|yarn|pnpm|bun)\s+(?:install|i|add)\s/i.test(cmd)) {
+          addItem({ type: 'command', description: `Run: ${cmd}`, command: cmd }, lineStart);
         }
-        addItem({ type: 'command', description: `Run: ${cmd}`, command: cmd });
       }
     }
 
-    const restartMatch = line.match(/(?:restart|reload|refresh)\s+(?:your\s+)?(?:dev\s+)?(?:server|app|application|browser|page)/i);
-    if (restartMatch && !isInsideFence(lineStart)) {
-      addItem({ type: 'manual', description: 'Restart your dev server' });
+    if (/(?:restart|reload|refresh)\s+(?:your\s+)?(?:dev\s+)?(?:server|app|application|browser|page)/i.test(line)) {
+      addItem({ type: 'manual', description: 'Restart your dev server' }, lineStart);
     }
 
     const createDirMatch = line.match(/(?:create|make|add)\s+(?:a\s+)?(?:new\s+)?(?:directory|folder)\s+(?:called\s+)?`([^\s`]+)`/i);
-    if (createDirMatch && !isInsideFence(lineStart) && /[\/\\]|^\w+$/.test(createDirMatch[1]) && !/^(?:for|the|your|a|an|and|or|to|in|it|is|this|that)$/i.test(createDirMatch[1])) {
-      addItem({ type: 'create-dir', description: `Create directory: ${createDirMatch[1]}`, command: `mkdir -p ${createDirMatch[1]}` });
+    if (createDirMatch && /[\/\\]|^\w+$/.test(createDirMatch[1]) && !/^(?:for|the|your|a|an|and|or|to|in|it|is|this|that)$/i.test(createDirMatch[1])) {
+      addItem({ type: 'create-dir', description: `Create directory: ${createDirMatch[1]}`, command: `mkdir -p ${createDirMatch[1]}` }, lineStart);
     }
 
     const renameMatch = line.match(/(?:rename|move)\s+`?([^\s`]+)`?\s+(?:to|→|->)\s+`?([^\s`]+)`?/i);
-    if (renameMatch && !isInsideFence(lineStart)) {
-      addItem({ type: 'rename', description: `Rename ${renameMatch[1]} → ${renameMatch[2]}`, command: `mv ${renameMatch[1]} ${renameMatch[2]}` });
+    if (renameMatch) {
+      addItem({ type: 'rename', description: `Rename ${renameMatch[1]} → ${renameMatch[2]}`, command: `mv ${renameMatch[1]} ${renameMatch[2]}` }, lineStart);
     }
 
     const deleteMatch = line.match(/(?:delete|remove)\s+(?:the\s+)?(?:file\s+)?`?([^\s`]+\.\w+)`?/i);
-    if (deleteMatch && !isInsideFence(lineStart)) {
-      addItem({ type: 'delete', description: `Delete: ${deleteMatch[1]}` });
+    if (deleteMatch) {
+      addItem({ type: 'delete', description: `Delete: ${deleteMatch[1]}` }, lineStart);
     }
 
     const downloadMatch = line.match(/(?:download|fetch|get|grab)\s+(?:the\s+)?(?:\w+\s+)?(?:from\s+)?`?(https?:\/\/[^\s`]+)`?/i);
     if (downloadMatch) {
-      addItem({ type: 'manual', description: `Download from: ${downloadMatch[1]}`, command: downloadMatch[1] });
+      addItem({ type: 'manual', description: `Download from: ${downloadMatch[1]}`, command: downloadMatch[1] }, lineStart);
     }
 
     const apiKeyMatch = line.match(/(?:get|obtain|create|generate|sign\s+up\s+for)\s+(?:an?\s+)?(?:API\s+key|token|secret|credentials)\s+(?:from|at|on)\s+(?:`?([^\s`]+)`?|(\w+))/i);
-    if (apiKeyMatch && !isInsideFence(lineStart)) {
-      addItem({ type: 'manual', description: `Get API key/credentials from ${apiKeyMatch[1] || apiKeyMatch[2]}` });
+    if (apiKeyMatch) {
+      addItem({ type: 'manual', description: `Get API key/credentials from ${apiKeyMatch[1] || apiKeyMatch[2]}` }, lineStart);
+    }
+
+    const programInstallPatterns = [
+      /(?:install|download|set\s*up|get)\s+(?:the\s+)?`?(g\+\+|gcc|clang|cmake|make|python3?|pip3?|node(?:\.?js)?|ruby|rustc?|cargo|go(?:lang)?|java|jdk|dotnet|\.net|php|perl|lua|zig|elixir|erlang|ocaml|haskell|ghc|stack|docker|git|curl|wget|ffmpeg|imagemagick|graphviz|sqlite3?|postgresql|mysql|redis|mongodb|nginx|apache|openssl|pkg-config|autoconf|automake|libtool|flex|bison|nasm|meson|ninja|bazel|gradle|maven|sbt|leiningen|deno|bun)`?/i,
+      /(?:you(?:'ll)?\s+)?need\s+(?:to\s+(?:have\s+)?(?:install(?:ed)?|download(?:ed)?)?\s+)?`?(g\+\+|gcc|clang|cmake|make|python3?|pip3?|node(?:\.?js)?|ruby|rustc?|cargo|go(?:lang)?|java|jdk|dotnet|\.net|php|perl|lua|docker|git|curl|wget|ffmpeg|imagemagick|sqlite3?|postgresql|mysql|redis|mongodb|deno|bun)`?(?:\s+installed)?/i,
+      /(?:requires?|depends?\s+on)\s+`?(g\+\+|gcc|clang|cmake|python3?|node(?:\.?js)?|rustc?|cargo|go(?:lang)?|java|jdk|docker|git|ffmpeg|sqlite3?)`?/i,
+    ];
+    for (const pat of programInstallPatterns) {
+      const pMatch = line.match(pat);
+      if (pMatch) {
+        const program = (pMatch[1] || '').replace(/`/g, '').trim();
+        if (program) {
+          addItem({ type: 'install', description: `Install program: ${program}`, command: program }, lineStart);
+        }
+      }
     }
   }
 
-  return items;
+  positioned.sort((a, b) => a.pos - b.pos);
+  return positioned.map(({ pos, ...item }) => item);
+}
+
+const KNOWN_LANG_TAGS = ['typescript', 'tsx', 'jsx', 'javascript', 'html', 'css', 'scss', 'less', 'json', 'python', 'bash', 'sh', 'shell', 'sql', 'yaml', 'yml', 'toml', 'xml', 'svg', 'vue', 'svelte', 'go', 'rust', 'ruby', 'java', 'kotlin', 'swift', 'cpp', 'glsl', 'graphql', 'proto', 'markdown', 'md', 'prisma', 'dockerfile', 'makefile'];
+
+function parseUnfencedFileBlocks(text: string): ParsedBlock[] {
+  const blocks: ParsedBlock[] = [];
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const headerRe = /^(?:\/\/|#|<!--)\s*(?:file:\s?|filename:\s?|path:\s?)(.+?)(?:-->)?\s*$/gm;
+  const headers: { index: number; rawPath: string }[] = [];
+  let hm;
+  while ((hm = headerRe.exec(normalized)) !== null) {
+    headers.push({ index: hm.index, rawPath: hm[1].trim() });
+  }
+  if (headers.length === 0) return [];
+
+  for (let i = 0; i < headers.length; i++) {
+    const lineEnd = normalized.indexOf('\n', headers[i].index);
+    const codeStart = lineEnd >= 0 ? lineEnd + 1 : headers[i].index + headers[i].rawPath.length;
+    const codeEnd = i + 1 < headers.length ? headers[i + 1].index : normalized.length;
+    const code = normalized.substring(codeStart, codeEnd).trim();
+    if (code.length === 0) continue;
+
+    let rawPath = headers[i].rawPath;
+    let language = 'typescript';
+    for (const tag of KNOWN_LANG_TAGS) {
+      if (rawPath.toLowerCase().endsWith(tag) && rawPath.length > tag.length) {
+        const pathPart = rawPath.slice(0, rawPath.length - tag.length);
+        if (/\.\w+$/.test(pathPart)) {
+          rawPath = pathPart;
+          language = tag;
+          break;
+        }
+      }
+    }
+
+    if (!isValidFilePath(rawPath)) continue;
+
+    const ext = rawPath.match(/\.(\w+)$/)?.[1]?.toLowerCase() || '';
+    if (!language || language === 'typescript') {
+      const extMap: Record<string, string> = {
+        ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx',
+        html: 'html', css: 'css', json: 'json', py: 'python',
+        sql: 'sql', yaml: 'yaml', yml: 'yaml', md: 'markdown',
+        glsl: 'glsl', vue: 'vue', svelte: 'svelte', go: 'go',
+        rs: 'rust', rb: 'ruby', java: 'java', swift: 'swift',
+        sh: 'bash', scss: 'scss', less: 'less',
+      };
+      if (ext && extMap[ext]) language = extMap[ext];
+    }
+
+    blocks.push({ filePath: rawPath, code, language });
+  }
+  return blocks;
 }
 
 export function parseCodeBlocks(text: string): ParsedBlock[] {
   const blocks: ParsedBlock[] = [];
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const regex = new RegExp(
-    `(?:(?:\\/\\/|#|<!--)\\s*(?:file:\\s?)?(${FILE_EXT_PATTERN})\\s*(?:-->)?\\s*\\n)?\`\`\`(\\w+)?\\n([\\s\\S]*?)\`\`\``,
-    'g'
-  );
-  let match;
-  while ((match = regex.exec(normalized)) !== null) {
-    let filePath = match[1] || '';
-    const language = match[2] || 'typescript';
-    let code = match[3].trim();
 
-    if (/^(bash|sh|shell|terminal|console|cmd|powershell)$/i.test(language) && !filePath) {
-      const isOperationalOnly = code.split('\n').every(l => {
-        const t = l.replace(/^\$\s*/, '').trim();
-        return !t || t.startsWith('#') ||
-          /^(?:npm|yarn|pnpm|bun)\s+(?:install|i|add)\s/i.test(t) ||
-          /^(?:npm|yarn|pnpm|bun)\s+(?:run|start|test|build|dev)\b/i.test(t) ||
-          /^npx\s/i.test(t) ||
-          /^(?:mkdir)\s/i.test(t) ||
-          /^cd\s/i.test(t);
-      });
-      if (isOperationalOnly) continue;
-    }
+  const hasFences = /```\w*\n/.test(normalized);
 
-    if (!filePath) {
-      const extracted = extractFilePathFromCode(code);
-      if (extracted.filePath) {
-        filePath = extracted.filePath;
-        code = extracted.cleanedCode;
+  if (hasFences) {
+    const regex = new RegExp(
+      `(?:(?:\\/\\/|#|<!--)\\s*(?:file:\\s?)?(${FILE_EXT_PATTERN})\\s*(?:-->)?\\s*\\n)?\`\`\`(\\w+)?\\n([\\s\\S]*?)\`\`\``,
+      'g'
+    );
+    let match;
+    while ((match = regex.exec(normalized)) !== null) {
+      let filePath = match[1] || '';
+      const language = match[2] || 'typescript';
+      let code = match[3].trim();
+
+      if (/^(bash|sh|shell|terminal|console|cmd|powershell)$/i.test(language) && !filePath) {
+        const isOperationalOnly = code.split('\n').every(l => {
+          const t = l.replace(/^\$\s*/, '').trim();
+          return !t || t.startsWith('#') ||
+            /^(?:npm|yarn|pnpm|bun)\s+(?:install|i|add)\s/i.test(t) ||
+            /^(?:npm|yarn|pnpm|bun)\s+(?:run|start|test|build|dev)\b/i.test(t) ||
+            /^npx\s/i.test(t) ||
+            /^(?:mkdir)\s/i.test(t) ||
+            /^cd\s/i.test(t);
+        });
+        if (isOperationalOnly) continue;
       }
-    }
 
-    if (!filePath) {
-      filePath = extractFilePathFromPrecedingText(normalized, match.index);
-    }
+      if (!filePath) {
+        const extracted = extractFilePathFromCode(code);
+        if (extracted.filePath) {
+          filePath = extracted.filePath;
+          code = extracted.cleanedCode;
+        }
+      }
 
-    if (code.length > 0) blocks.push({ filePath, code, language });
+      if (!filePath) {
+        filePath = extractFilePathFromPrecedingText(normalized, match.index);
+      }
+
+      if (code.length > 0) blocks.push({ filePath, code, language });
+    }
   }
+
+  if (blocks.length === 0) {
+    const unfenced = parseUnfencedFileBlocks(normalized);
+    if (unfenced.length > 0) return unfenced;
+  }
+
   return blocks;
 }

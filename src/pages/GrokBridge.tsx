@@ -153,6 +153,8 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
   const [depsInstalled, setDepsInstalled] = useState(false);
   const [depsError, setDepsError] = useState<string | null>(null);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
+  const [programsInstalling, setProgramsInstalling] = useState(false);
+  const [programResults, setProgramResults] = useState<{ program: string; label: string; installed: boolean; alreadyInstalled: boolean; error?: string }[] | null>(null);
   const [responseContext, setResponseContext] = useState<string>('');
   const [contextSections, setContextSections] = useState<string[]>([]);
   const [showContext, setShowContext] = useState(false);
@@ -348,7 +350,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
         )}
         <div className="ml-auto flex items-center gap-2">
           {blocks.length > 0 && (
-            <button onClick={() => { setBlocks([]); setActionItems([]); setDetectedDeps({ dependencies: [], devDependencies: [] }); setDepsInstalled(false); setDepsError(null); }} className="p-1 text-muted-foreground/50 hover:text-destructive transition-colors">
+            <button onClick={() => { setBlocks([]); setActionItems([]); setDetectedDeps({ dependencies: [], devDependencies: [] }); setDepsInstalled(false); setDepsError(null); setProgramResults(null); }} className="p-1 text-muted-foreground/50 hover:text-destructive transition-colors">
               <X className="w-3 h-3" />
             </button>
           )}
@@ -421,36 +423,80 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
               <div className="px-3 py-1.5 flex items-center gap-2 border-b border-amber-500/20">
                 <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
                 <span className="text-[10px] font-bold text-amber-300">Action Required</span>
-                <span className="text-[8px] text-amber-400/60">{actionItems.length} step{actionItems.length > 1 ? 's' : ''}</span>
+                <span className="text-[8px] text-amber-400/60">{actionItems.length} step{actionItems.length > 1 ? 's' : ''} — do in order</span>
+                {actionItems.some(a => a.type === 'install') && (
+                  <button
+                    disabled={programsInstalling}
+                    onClick={async () => {
+                      const progs = actionItems.filter(a => a.type === 'install').map(a => a.command!).filter(Boolean);
+                      if (progs.length === 0) return;
+                      setProgramsInstalling(true);
+                      setProgramResults(null);
+                      try {
+                        const res = await fetch('/api/programs/install', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ programs: progs }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok && !data.results) {
+                          setProgramResults([{ program: 'all', label: 'All', installed: false, alreadyInstalled: false, error: data.error || `HTTP ${res.status}` }]);
+                        } else {
+                          setProgramResults(data.results || []);
+                        }
+                      } catch (err: any) {
+                        setProgramResults([{ program: 'all', label: 'All', installed: false, alreadyInstalled: false, error: err.message }]);
+                      } finally {
+                        setProgramsInstalling(false);
+                      }
+                    }}
+                    className="ml-auto flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/20 text-green-300 hover:bg-green-500/30 text-[9px] font-bold transition-colors border border-green-500/30 disabled:opacity-50"
+                    data-testid="button-download-programs"
+                  >
+                    {programsInstalling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                    {programsInstalling ? 'Installing...' : `Download Programs (${actionItems.filter(a => a.type === 'install').length})`}
+                  </button>
+                )}
               </div>
               <div className="px-3 py-2 space-y-1.5">
-                {actionItems.map((item, i) => (
-                  <div key={i} className="flex items-start gap-2 text-[9px]" data-testid={`action-item-${i}`}>
-                    <span className="shrink-0 mt-0.5">
-                      {item.type === 'command' && <Terminal className="w-3 h-3 text-amber-400" />}
-                      {item.type === 'install' && <Download className="w-3 h-3 text-green-400" />}
-                      {item.type === 'env' && <Key className="w-3 h-3 text-blue-400" />}
-                      {item.type === 'create-dir' && <FolderPlus className="w-3 h-3 text-cyan-400" />}
-                      {item.type === 'rename' && <ArrowRightLeft className="w-3 h-3 text-purple-400" />}
-                      {item.type === 'delete' && <Trash2 className="w-3 h-3 text-red-400" />}
-                      {item.type === 'manual' && <AlertCircle className="w-3 h-3 text-amber-400" />}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-foreground/80">{item.description}</span>
-                      {item.command && (
-                        <button
-                          onClick={() => {
-                            navigator.clipboard.writeText(item.command!);
-                          }}
-                          className="ml-2 text-[8px] text-primary/60 hover:text-primary underline cursor-pointer"
-                          data-testid={`button-copy-action-${i}`}
-                        >
-                          copy
-                        </button>
-                      )}
+                {actionItems.map((item, i) => {
+                  const progResult = item.type === 'install' && programResults ? programResults.find(r => r.program === item.command) : null;
+                  return (
+                    <div key={i} className="flex items-start gap-2 text-[9px]" data-testid={`action-item-${i}`}>
+                      <span className="shrink-0 w-4 h-4 rounded-full bg-foreground/10 flex items-center justify-center text-[8px] font-bold text-foreground/50 mt-0.5">
+                        {i + 1}
+                      </span>
+                      <span className="shrink-0 mt-0.5">
+                        {item.type === 'command' && <Terminal className="w-3 h-3 text-amber-400" />}
+                        {item.type === 'install' && <Download className="w-3 h-3 text-green-400" />}
+                        {item.type === 'env' && <Key className="w-3 h-3 text-blue-400" />}
+                        {item.type === 'create-dir' && <FolderPlus className="w-3 h-3 text-cyan-400" />}
+                        {item.type === 'rename' && <ArrowRightLeft className="w-3 h-3 text-purple-400" />}
+                        {item.type === 'delete' && <Trash2 className="w-3 h-3 text-red-400" />}
+                        {item.type === 'manual' && <AlertCircle className="w-3 h-3 text-amber-400" />}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <span className="text-foreground/80">{item.description}</span>
+                        {progResult && (
+                          <span className={`ml-2 text-[8px] ${progResult.installed || progResult.alreadyInstalled ? 'text-green-400' : 'text-red-400'}`}>
+                            {progResult.alreadyInstalled ? '✓ already installed' : progResult.installed ? '✓ installed' : `✗ ${progResult.error || 'failed'}`}
+                          </span>
+                        )}
+                        {item.command && !progResult && (
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(item.command!);
+                            }}
+                            className="ml-2 text-[8px] text-primary/60 hover:text-primary underline cursor-pointer"
+                            data-testid={`button-copy-action-${i}`}
+                          >
+                            copy
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
