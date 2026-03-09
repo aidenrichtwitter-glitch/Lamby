@@ -86,6 +86,19 @@ supabase/
   - **Auto Restart**: After successful batch apply, waits for Vite HMR (2s). IPC handlers `restart-dev-server` and `run-npm-install` available for full restarts / dependency installs.
   - Batch IPC handlers: `batch-write-files`, `batch-rollback`, `batch-git-commit`, `git-log`, `read-files-for-context`, `restart-dev-server`, `run-npm-install`
 
+## Project Management
+- Users can create, select, and delete sub-projects from the AI Bridge page
+- Projects are stored under `projects/<name>/` relative to project root
+- API endpoints in `vite.config.ts`: `/api/projects/list`, `/api/projects/create`, `/api/projects/delete`, `/api/projects/files`, `/api/projects/read-file`, `/api/projects/write-file`, `/api/projects/preview`, `/api/projects/stop-preview`
+- Client-side store: `src/lib/project-manager.ts` — `listProjects`, `createProject`, `deleteProject`, `getProjectFiles`, `readProjectFile`, `writeProjectFile`, `getActiveProject`, `setActiveProject`
+- UI component: `src/components/ProjectExplorer.tsx` — file tree browser for active project
+- When a project is active in GrokBridge:
+  - `applyBlock`/`confirmApply`/`batchApplyAll` write to project directory instead of main app
+  - `buildProjectContext` reads project files instead of SELF_SOURCE
+  - Copy Context includes the project's file tree and key file contents
+  - Preview button spawns a Vite dev server in the project directory on a dynamic port (5100+)
+- Switching to "Main App" restores all original behavior (no project scoping)
+
 ## Testing
 - `npm test` — runs all Vitest tests
 - `npm run test:watch` — watch mode

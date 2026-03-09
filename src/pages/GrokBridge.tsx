@@ -3,7 +3,7 @@ import {
   Send, Shield, Check, AlertTriangle, Undo2, FileCode, Sparkles, Bot,
   User, Loader2, Code2, Trash2, ChevronDown, Globe, MessageSquare,
   Clipboard, ClipboardCheck, Zap, X, ChevronUp, ChevronDown as ChevronDownIcon,
-  Dna
+  Dna, FolderOpen, PanelLeftClose, PanelLeft, Play, ExternalLink
 } from 'lucide-react';
 import { validateChange } from '@/lib/safety-engine';
 import { SELF_SOURCE } from '@/lib/self-source';
@@ -19,6 +19,12 @@ import {
   type EvolutionState,
   type EvolutionPlan,
 } from '@/lib/evolution-bridge';
+import {
+  getActiveProject, setActiveProject as persistActiveProject,
+  readProjectFile, writeProjectFile, getProjectFiles,
+  type ProjectFileNode
+} from '@/lib/project-manager';
+import ProjectExplorer from '@/components/ProjectExplorer';
 
 const isElectron = typeof window !== 'undefined' && typeof (window as any).require === 'function';
 
@@ -707,6 +713,10 @@ const GrokBridge: React.FC = () => {
   const [customUrl, setCustomUrl] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [activeProject, setActiveProjectState] = useState<string | null>(() => getActiveProject());
+  const [showProjectPanel, setShowProjectPanel] = useState(false);
+  const [previewPort, setPreviewPort] = useState<number | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [evolutionLoading, setEvolutionLoading] = useState(false);
   const [evolutionState, setEvolutionState] = useState<EvolutionState | null>(null);
   const [currentPlan, setCurrentPlan] = useState<EvolutionPlan | null>(loadEvolutionPlan());
@@ -730,6 +740,58 @@ const GrokBridge: React.FC = () => {
       setStatusMessage(`⚠ Evolution tracking error: ${e.message}`);
     }
   }, [isEvolutionResponse, evolutionState]);
+
+  const handleSelectProject = useCallback(async (name: string | null) => {
+    if (activeProject && activeProject !== name && previewPort) {
+      try {
+        await fetch('/api/projects/stop-preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: activeProject }),
+        });
+      } catch {}
+    }
+    setActiveProjectState(name);
+    persistActiveProject(name);
+    setAppliedChanges([]);
+    setPreviewPort(null);
+    setProjectContext('');
+    setStatusMessage(name ? `Project: ${name}` : 'Switched to Main App');
+  }, [activeProject, previewPort]);
+
+  const startPreview = useCallback(async () => {
+    if (!activeProject) return;
+    setPreviewLoading(true);
+    try {
+      const res = await fetch('/api/projects/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: activeProject }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPreviewPort(data.port);
+        setStatusMessage(`Preview started on port ${data.port}`);
+      } else {
+        setStatusMessage('Failed to start preview');
+      }
+    } catch (e: any) {
+      setStatusMessage(`Preview error: ${e.message}`);
+    }
+    setPreviewLoading(false);
+  }, [activeProject]);
+
+  const stopPreview = useCallback(async () => {
+    if (!activeProject) return;
+    try {
+      await fetch('/api/projects/stop-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: activeProject }),
+      });
+    } catch {}
+    setPreviewPort(null);
+  }, [activeProject]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
   useEffect(() => { saveConversations(conversations); }, [conversations]);
@@ -812,7 +874,15 @@ const GrokBridge: React.FC = () => {
     let exists = false;
 
     try {
-      if (isElectron) {
+      if (activeProject) {
+        try {
+          oldContent = await readProjectFile(activeProject, filePath);
+          exists = true;
+        } catch {
+          oldContent = '';
+          exists = false;
+        }
+      } else if (isElectron) {
         const { ipcRenderer } = (window as any).require('electron');
         const readResult = await ipcRenderer.invoke('read-file', { filePath });
         if (!readResult.success) { setStatusMessage(`⚠ ${readResult.error}`); return; }
@@ -860,13 +930,24 @@ const GrokBridge: React.FC = () => {
     setApplyStageMessage(mergeNote);
     setApplyCompileError('');
     lastBackupPathRef.current = '';
-  }, []);
+  }, [activeProject]);
 
   const confirmApply = useCallback(async () => {
     if (!pendingApply) return;
     const { filePath, newContent, oldContent } = pendingApply;
     try {
-      if (isElectron) {
+      if (activeProject) {
+        setApplyStage('writing');
+        try {
+          await writeProjectFile(activeProject, filePath, newContent);
+        } catch (e: any) {
+          setApplyStage('error');
+          setApplyStageMessage(`Write failed: ${e.message}`);
+          return;
+        }
+        setApplyStage('done');
+        setApplyStageMessage(`Written to ${activeProject}/${filePath}`);
+      } else if (isElectron) {
         const { ipcRenderer } = (window as any).require('electron');
 
         setApplyStage('writing');
@@ -914,17 +995,19 @@ const GrokBridge: React.FC = () => {
         setApplyStageMessage(`Written to ${filePath} (${writeData.bytesWritten} bytes)`);
       }
 
-      const existing = SELF_SOURCE.find(f => f.path === filePath);
-      if (existing) { existing.content = newContent; existing.isModified = true; existing.lastModified = Date.now(); }
-      else {
-        const name = filePath.split('/').pop() || filePath;
-        const ext = name.split('.').pop() || 'ts';
-        const langMap: Record<string, string> = { ts: 'typescript', tsx: 'typescriptreact', js: 'javascript', css: 'css', json: 'json' };
-        SELF_SOURCE.push({ name, path: filePath, content: newContent, language: langMap[ext] || 'plaintext', isModified: true, lastModified: Date.now() });
+      if (!activeProject) {
+        const existing = SELF_SOURCE.find(f => f.path === filePath);
+        if (existing) { existing.content = newContent; existing.isModified = true; existing.lastModified = Date.now(); }
+        else {
+          const name = filePath.split('/').pop() || filePath;
+          const ext = name.split('.').pop() || 'ts';
+          const langMap: Record<string, string> = { ts: 'typescript', tsx: 'typescriptreact', js: 'javascript', css: 'css', json: 'json' };
+          SELF_SOURCE.push({ name, path: filePath, content: newContent, language: langMap[ext] || 'plaintext', isModified: true, lastModified: Date.now() });
+        }
       }
 
       setAppliedChanges(prev => [...prev, {
-        filePath,
+        filePath: activeProject ? `${activeProject}/${filePath}` : filePath,
         previousContent: oldContent,
         newContent,
         timestamp: Date.now(),
@@ -939,10 +1022,18 @@ const GrokBridge: React.FC = () => {
       setApplyStage('error');
       setApplyStageMessage(`Error: ${e.message || 'Unknown failure'}`);
     }
-  }, [pendingApply, isEvolutionResponse, handleEvolutionApply]);
+  }, [pendingApply, isEvolutionResponse, handleEvolutionApply, activeProject]);
 
   const rollbackPending = useCallback(async () => {
     if (!pendingApply) { setPendingApply(null); return; }
+    if (activeProject) {
+      try {
+        await writeProjectFile(activeProject, pendingApply.filePath, pendingApply.oldContent);
+        setStatusMessage(`↩ Rolled back ${activeProject}/${pendingApply.filePath}`);
+      } catch { setStatusMessage(`⚠ Rollback failed for ${pendingApply.filePath}`); }
+      setPendingApply(null);
+      return;
+    }
     if (!isElectron) {
       try {
         await fetch('/api/write-file', {
@@ -1015,7 +1106,35 @@ const GrokBridge: React.FC = () => {
   const [batchError, setBatchError] = useState('');
 
   const batchApplyAll = useCallback(async (blocks: { filePath: string; code: string }[]) => {
-    if (!isElectron || blocks.length === 0) return;
+    if (blocks.length === 0) return;
+
+    if (activeProject) {
+      setBatchStage('writing');
+      setBatchMessage(`Writing ${blocks.length} file${blocks.length > 1 ? 's' : ''} to ${activeProject}...`);
+      setBatchError('');
+      try {
+        for (const block of blocks) {
+          await writeProjectFile(activeProject, block.filePath, block.code);
+        }
+        setAppliedChanges(prev => [...prev, ...blocks.map(b => ({
+          filePath: `${activeProject}/${b.filePath}`,
+          previousContent: '',
+          newContent: b.code,
+          timestamp: Date.now(),
+        }))]);
+        await buildProjectContext();
+        setBatchStage('done');
+        setBatchMessage(`${blocks.length} files written to ${activeProject}`);
+        setTimeout(() => { setBatchStage('idle'); setBatchMessage(''); }, 4000);
+      } catch (e: any) {
+        setBatchStage('error');
+        setBatchMessage(`Batch write failed: ${e.message}`);
+        setBatchError(e.message);
+      }
+      return;
+    }
+
+    if (!isElectron) return;
     try {
       const { ipcRenderer } = (window as any).require('electron');
 
@@ -1117,7 +1236,7 @@ const GrokBridge: React.FC = () => {
       setBatchStage('error');
       setBatchMessage(`Error: ${e.message || 'Unknown'}`);
     }
-  }, []);
+  }, [activeProject]);
 
   const batchRollback = useCallback(async () => {
     if (!isElectron || batchBackups.length === 0) { setBatchStage('idle'); return; }
@@ -1142,48 +1261,86 @@ const GrokBridge: React.FC = () => {
     setContextLoading(true);
     try {
       let context = `=== PROJECT CONTEXT ===\n`;
-      context += `This is a React + TypeScript + Vite desktop app (Electron) called Guardian AI ("lambda Recursive").\n\n`;
 
-      if (isElectron) {
-        const { ipcRenderer } = (window as any).require('electron');
+      if (activeProject) {
+        context += `This is a project called "${activeProject}" managed by Guardian AI.\n`;
+        context += `All file paths are relative to the project root.\n\n`;
 
-        const [filesResult, gitResult] = await Promise.all([
-          ipcRenderer.invoke('list-project-files'),
-          ipcRenderer.invoke('git-log', { count: 5 }),
-        ]);
+        try {
+          const tree = await getProjectFiles(activeProject);
+          const flatPaths: string[] = [];
+          const collectPaths = (nodes: ProjectFileNode[], prefix = '') => {
+            for (const n of nodes) {
+              const p = prefix ? `${prefix}/${n.name}` : n.name;
+              if (n.type === 'file') flatPaths.push(p);
+              if (n.children) collectPaths(n.children, p);
+            }
+          };
+          collectPaths(tree);
 
-        const fileTree = filesResult.success ? filesResult.files : [];
+          context += `=== FILE TREE ===\n`;
+          context += flatPaths.join('\n') + '\n';
 
-        const keyFiles = fileTree.filter((f: string) =>
-          f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
-          f === 'tailwind.config.ts' || f === 'index.html' ||
-          (f.startsWith('src/') && (f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css')) && !f.includes('lib/capabilities/'))
-        ).slice(0, 20);
+          const keyFiles = flatPaths.filter(f =>
+            f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
+            f === 'index.html' || f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css') || f.endsWith('.html')
+          ).slice(0, 20);
 
-        const contentsResult = await ipcRenderer.invoke('read-files-for-context', {
-          filePaths: keyFiles,
-          maxSizePerFile: 6000,
-        });
-
-        context += `=== FILE TREE ===\n`;
-        context += fileTree.slice(0, 80).join('\n') + '\n';
-        if (fileTree.length > 80) context += `... (${fileTree.length} total files)\n`;
-
-        if (gitResult.success && gitResult.log) {
-          context += `\n=== RECENT GIT LOG ===\n${gitResult.log}\n`;
-        }
-
-        if (contentsResult.success) {
-          for (const file of contentsResult.files) {
-            context += `\n=== ${file.path} ===\n${file.content}\n`;
+          for (const fp of keyFiles) {
+            try {
+              const content = await readProjectFile(activeProject, fp);
+              if (content.length < 8000) {
+                context += `\n=== ${fp} ===\n${content}\n`;
+              }
+            } catch {}
           }
+        } catch {
+          context += `(Could not read project files)\n`;
         }
       } else {
-        context += `=== FILE TREE ===\n`;
-        context += SELF_SOURCE.map(f => f.path).join('\n') + '\n';
+        context += `This is a React + TypeScript + Vite desktop app (Electron) called Guardian AI ("lambda Recursive").\n\n`;
 
-        for (const file of SELF_SOURCE.filter(f => f.content && f.content.length < 8000).slice(0, 15)) {
-          context += `\n=== ${file.path} ===\n${file.content}\n`;
+        if (isElectron) {
+          const { ipcRenderer } = (window as any).require('electron');
+
+          const [filesResult, gitResult] = await Promise.all([
+            ipcRenderer.invoke('list-project-files'),
+            ipcRenderer.invoke('git-log', { count: 5 }),
+          ]);
+
+          const fileTree = filesResult.success ? filesResult.files : [];
+
+          const keyFiles = fileTree.filter((f: string) =>
+            f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
+            f === 'tailwind.config.ts' || f === 'index.html' ||
+            (f.startsWith('src/') && (f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css')) && !f.includes('lib/capabilities/'))
+          ).slice(0, 20);
+
+          const contentsResult = await ipcRenderer.invoke('read-files-for-context', {
+            filePaths: keyFiles,
+            maxSizePerFile: 6000,
+          });
+
+          context += `=== FILE TREE ===\n`;
+          context += fileTree.slice(0, 80).join('\n') + '\n';
+          if (fileTree.length > 80) context += `... (${fileTree.length} total files)\n`;
+
+          if (gitResult.success && gitResult.log) {
+            context += `\n=== RECENT GIT LOG ===\n${gitResult.log}\n`;
+          }
+
+          if (contentsResult.success) {
+            for (const file of contentsResult.files) {
+              context += `\n=== ${file.path} ===\n${file.content}\n`;
+            }
+          }
+        } else {
+          context += `=== FILE TREE ===\n`;
+          context += SELF_SOURCE.map(f => f.path).join('\n') + '\n';
+
+          for (const file of SELF_SOURCE.filter(f => f.content && f.content.length < 8000).slice(0, 15)) {
+            context += `\n=== ${file.path} ===\n${file.content}\n`;
+          }
         }
       }
 
@@ -1206,13 +1363,17 @@ const GrokBridge: React.FC = () => {
       setStatusMessage(`⚠ Context build failed: ${e.message}`);
       return '';
     }
-  }, [lastErrors]);
+  }, [lastErrors, activeProject]);
 
   useEffect(() => {
     if (mode === 'browser') {
       buildProjectContext();
     }
   }, [mode]);
+
+  useEffect(() => {
+    buildProjectContext();
+  }, [activeProject]);
 
   const copyContextToClipboard = useCallback(async () => {
     if (!projectContext) return;
@@ -1478,6 +1639,55 @@ const GrokBridge: React.FC = () => {
           <span className="text-xs font-bold text-foreground">AI Bridge</span>
         </div>
 
+        {/* Project indicator */}
+        <button
+          data-testid="button-toggle-project-panel"
+          onClick={() => setShowProjectPanel(p => !p)}
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] transition-colors border ${
+            activeProject
+              ? 'bg-[hsl(150_60%_40%/0.15)] text-[hsl(150_60%_55%)] border-[hsl(150_60%_40%/0.3)]'
+              : 'bg-secondary/30 text-muted-foreground border-border/30 hover:bg-secondary/50'
+          }`}
+        >
+          <FolderOpen className="w-3 h-3" />
+          {activeProject || 'Main App'}
+          {showProjectPanel ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </button>
+
+        {activeProject && (
+          <div className="flex items-center gap-1">
+            <button
+              data-testid="button-start-preview"
+              onClick={startPreview}
+              disabled={previewLoading}
+              className="flex items-center gap-1 px-2 py-1 rounded text-[9px] bg-[hsl(150_60%_40%/0.15)] text-[hsl(150_60%_55%)] hover:bg-[hsl(150_60%_40%/0.25)] transition-colors border border-[hsl(150_60%_40%/0.3)] disabled:opacity-40"
+            >
+              {previewLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+              Preview
+            </button>
+            {previewPort && (
+              <>
+                <a
+                  href={`http://localhost:${previewPort}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="link-preview"
+                  className="flex items-center gap-1 px-2 py-1 rounded text-[9px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                >
+                  <ExternalLink className="w-3 h-3" /> :{previewPort}
+                </a>
+                <button
+                  data-testid="button-stop-preview"
+                  onClick={stopPreview}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-[9px] bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors border border-destructive/20"
+                >
+                  <X className="w-3 h-3" /> Stop
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Mode toggle */}
         <div className="flex items-center gap-0.5 bg-secondary/40 rounded-lg p-0.5">
           <button
@@ -1550,12 +1760,27 @@ const GrokBridge: React.FC = () => {
 
       {/* ── Mode: Browser Chat (Grok Desktop webview) ── */}
       {mode === 'browser' && (
-        <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} />
+        <div className="flex-1 flex min-h-0">
+          {showProjectPanel && (
+            <div className="w-56 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
+              <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} />
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} />
+          </div>
+        </div>
       )}
 
       {/* ── Mode: API Chat ── */}
       {mode === 'api' && (
         <div className="flex-1 flex min-h-0">
+          {/* Project explorer panel */}
+          {showProjectPanel && (
+            <div className="w-56 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
+              <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} />
+            </div>
+          )}
           {/* Conversations sidebar */}
           <div className="w-52 border-r border-border/30 bg-card/30 flex flex-col shrink-0">
             <div className="p-2 border-b border-border/30">
