@@ -41,9 +41,11 @@ interface Conversation {
 }
 
 const MODELS = [
-  { id: 'grok-3', name: 'Grok 3', desc: 'Most capable' },
+  { id: 'grok-4', name: 'Grok 4', desc: 'Most capable (latest)' },
+  { id: 'grok-3', name: 'Grok 3', desc: 'Powerful reasoning' },
   { id: 'grok-3-mini', name: 'Grok 3 Mini', desc: 'Fast & efficient' },
   { id: 'grok-3-fast', name: 'Grok 3 Fast', desc: 'Speed optimized' },
+  { id: 'grok-2', name: 'Grok 2', desc: 'Balanced' },
 ];
 
 const BROWSER_SITES = [
