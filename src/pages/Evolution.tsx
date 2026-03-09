@@ -130,6 +130,7 @@ const Evolution: React.FC = () => {
   const [maturityReport, setMaturityReport] = useState<MaturityReport | null>(null);
   const [isRunningMaturity, setIsRunningMaturity] = useState(false);
   const [maturityLoop, setMaturityLoop] = useState(false);
+  const [showAutonomyDetails, setShowAutonomyDetails] = useState(false);
   const lifeProofRef = React.useRef(false);
   const maturityRef = React.useRef(false);
   const mainRef = React.useRef<HTMLDivElement>(null);
