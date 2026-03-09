@@ -150,7 +150,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApp
   const [blocks, setBlocks] = useState<ExtractedBlock[]>([]);
   const [responseContext, setResponseContext] = useState<string>('');
   const [contextSections, setContextSections] = useState<string[]>([]);
-  const [showContext, setShowContext] = useState(true);
+  const [showContext, setShowContext] = useState(false);
   const [lastClipboard, setLastClipboard] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const [flash, setFlash] = useState(false);
@@ -160,6 +160,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApp
 
   const extractFromText = useCallback((text: string) => {
     if (text === lastClipboard || text.length < 10) return;
+    if (text.includes('=== PROJECT CONTEXT ===') || text.includes('=== FILE TREE ===') || text.includes('=== EVOLUTION_CONTEXT ===') || text.includes('=== INSTRUCTIONS ===\nWhen suggesting code changes')) return;
     setLastClipboard(text);
     setResponseContext(text);
     setContextSections(extractContextSections(text));
@@ -280,7 +281,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApp
 
       {/* Extracted blocks + context */}
       {!collapsed && (
-        <div className="max-h-96 overflow-auto p-3 space-y-2">
+        <div className="max-h-60 overflow-auto p-3 space-y-2">
           {showPasteBox && (
             <div className="rounded-lg border border-primary/30 bg-card/50 p-3">
               <p className="text-[10px] text-muted-foreground mb-2">Copy Grok's response, then paste it here (Ctrl+V / Cmd+V):</p>
