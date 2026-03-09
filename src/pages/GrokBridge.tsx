@@ -1,8 +1,11 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Shield, Check, AlertTriangle, Undo2, FileCode, Sparkles, Bot, User, Loader2, Code2, Trash2, ChevronDown, Download } from 'lucide-react';
+import { Send, Shield, Check, AlertTriangle, Undo2, FileCode, Sparkles, Bot, User, Loader2, Code2, Trash2, ChevronDown, Download, Globe } from 'lucide-react';
 import { validateChange } from '@/lib/safety-engine';
 import { SELF_SOURCE } from '@/lib/self-source';
 import { SafetyCheck } from '@/lib/self-reference';
+
+// Detect if running inside Tauri
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
