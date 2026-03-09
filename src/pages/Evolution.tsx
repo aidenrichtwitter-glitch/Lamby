@@ -258,6 +258,7 @@ const Evolution: React.FC = () => {
 
     const acquiredNames = new Set(acquiredNodes.map(n => n.name));
 
+    // Goal-based planned nodes
     const goalNodes: CapabilityNode[] = (goalsRes.data || [])
       .filter(g => g.unlocks_capability && !acquiredNames.has(g.unlocks_capability) && g.status !== 'completed')
       .map(g => {
@@ -274,7 +275,31 @@ const Evolution: React.FC = () => {
         };
       });
 
-    const allNodes = [...acquiredNodes, ...goalNodes];
+    // Forecasting tree predictions (not yet acquired, not already a goal node)
+    const goalNodeNames = new Set(goalNodes.map(n => n.name));
+    const currentLevel = stateRes.data?.evolution_level ?? 0;
+    const currentCycles = stateRes.data?.cycle_count ?? 0;
+    const predictions = predictNextEvolutions(
+      acquiredNodes.map(n => n.name),
+      currentLevel,
+      currentCycles
+    );
+    const forecastNodes: CapabilityNode[] = predictions
+      .filter(p => !acquiredNames.has(p.capability) && !goalNodeNames.has(p.capability))
+      .map(p => {
+        const maxLevel = acquiredNodes.length > 0 ? Math.max(...acquiredNodes.map(n => n.level)) : 1;
+        return {
+          name: p.capability,
+          description: p.description,
+          builtOn: p.prerequisites,
+          cycle: 0,
+          level: maxLevel + 2,
+          x: 0, y: 0,
+          status: 'planned' as const,
+        };
+      });
+
+    const allNodes = [...acquiredNodes, ...goalNodes, ...forecastNodes];
     setCapabilities(layoutGraph(allNodes, containerSize));
 
     if (stateRes.data) {
