@@ -336,18 +336,49 @@ const Index = () => {
         const proposal = (prev as any)._proposal;
         const file = SELF_SOURCE[prev.currentFileIndex >= 0 ? prev.currentFileIndex : 0];
         if (proposal && file) {
-          const checks = validateChange(proposal.content, file.path);
-          const hasErrors = checks.some(c => c.severity === 'error');
-          if (hasErrors) {
-            newState.totalRejected = prev.totalRejected + 1;
-            newState.lastAction = `⚠ Change rejected — safety violation`;
-            newLog.push(createLogEntry('validating', `REJECTED: ${checks.filter(c => c.severity === 'error').map(c => c.message).join('; ')}`, 'error', file.path));
-            (newState as any)._proposal = null;
+          // ── Ollama Safety Guard: extra validation layer ──
+          const isOllama = apiConfig.provider === 'ollama';
+          if (isOllama && guardConfig.enabled) {
+            const verdict = validateOllamaChange(file.path, file.content, proposal.content, guardConfig);
+            if (!verdict.allowed) {
+              newState.totalRejected = prev.totalRejected + 1;
+              newState.lastAction = `🛡️ Ollama blocked: ${verdict.reason}`;
+              newLog.push(createLogEntry('validating', `🛡️ GUARD: ${verdict.reason}`, 'error', file.path));
+              (newState as any)._proposal = null;
+            } else {
+              // Passed guard — continue to standard validation
+              const checks = validateChange(proposal.content, file.path);
+              const hasErrors = checks.some(c => c.severity === 'error');
+              if (hasErrors) {
+                newState.totalRejected = prev.totalRejected + 1;
+                newState.lastAction = `⚠ Change rejected — safety violation`;
+                newLog.push(createLogEntry('validating', `REJECTED: ${checks.filter(c => c.severity === 'error').map(c => c.message).join('; ')}`, 'error', file.path));
+                (newState as any)._proposal = null;
+              } else {
+                const warnings = checks.filter(c => c.severity === 'warning');
+                if (verdict.warnings.length > 0) {
+                  newLog.push(createLogEntry('validating', `🛡️ Guard warnings: ${verdict.warnings.join('; ')}`, 'warning', file.path));
+                }
+                newState.lastAction = `Validated. ${warnings.length} warnings.`;
+                newLog.push(createLogEntry('validating', `✓ Safety + Guard passed${warnings.length ? ` (${warnings.length} warnings)` : ''}`, 'success', file.path));
+                (newState as any)._safetyChecks = checks;
+              }
+            }
           } else {
-            const warnings = checks.filter(c => c.severity === 'warning');
-            newState.lastAction = `Validated. ${warnings.length} warnings.`;
-            newLog.push(createLogEntry('validating', `✓ Safety passed${warnings.length ? ` (${warnings.length} warnings)` : ''}`, 'success', file.path));
-            (newState as any)._safetyChecks = checks;
+            // Non-Ollama or guard disabled — original validation
+            const checks = validateChange(proposal.content, file.path);
+            const hasErrors = checks.some(c => c.severity === 'error');
+            if (hasErrors) {
+              newState.totalRejected = prev.totalRejected + 1;
+              newState.lastAction = `⚠ Change rejected — safety violation`;
+              newLog.push(createLogEntry('validating', `REJECTED: ${checks.filter(c => c.severity === 'error').map(c => c.message).join('; ')}`, 'error', file.path));
+              (newState as any)._proposal = null;
+            } else {
+              const warnings = checks.filter(c => c.severity === 'warning');
+              newState.lastAction = `Validated. ${warnings.length} warnings.`;
+              newLog.push(createLogEntry('validating', `✓ Safety passed${warnings.length ? ` (${warnings.length} warnings)` : ''}`, 'success', file.path));
+              (newState as any)._safetyChecks = checks;
+            }
           }
         } else {
           newState.lastAction = 'Nothing to validate';
