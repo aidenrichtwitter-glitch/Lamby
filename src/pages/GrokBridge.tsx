@@ -624,8 +624,8 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
             ))}
           </div>
         </div>
-        <div className="p-8">
-          <div className="flex flex-col items-center justify-center gap-6">
+        <div className="p-8" style={{ minHeight: 'calc(100vh - 10rem)' }}>
+          <div className="flex flex-col items-center justify-center gap-6 h-full">
             <div className="text-center space-y-3 max-w-lg">
               <Globe className="w-10 h-10 text-primary/60 mx-auto" />
               <h2 className="text-base font-bold text-foreground" data-testid="text-browser-status">Web Mode</h2>
