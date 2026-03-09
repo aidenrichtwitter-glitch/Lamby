@@ -698,7 +698,10 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
     docResult
   );
 
-  // Phase 3: JUDGMENT
+  // Phase 3: SELF-REFLECTION — "Are we closer to our goal?"
+  const reflection = await reflectOnCycle(tasks, goalResult, healthResult);
+
+  // Phase 4: JUDGMENT
   const deterministicCount = tasks.filter(t => !t.usedAI && t.success).length;
   const totalDecisions = tasks.length;
   const progressMade = goalResult?.success || false;
@@ -715,7 +718,7 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
 
   const score = Math.round((deterministicCount / Math.max(totalDecisions, 1)) * 100);
 
-  // Log with goal context
+  // Log with goal context AND self-reflection
   await supabase.from('evolution_journal').insert([{
     event_type: 'milestone',
     title: goalResult
@@ -723,6 +726,12 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
       : `🤖 Autonomy Cycle: ${score}% (no active goals)`,
     description: [
       goalResult ? `Goal: ${goalResult.title}\nStep: ${goalResult.stepAttempted}\nResult: ${goalResult.detail}` : 'No goal attempted.',
+      '',
+      `🪞 Self-Reflection: ${reflection.answer}`,
+      `Value: ${reflection.valueScore}% | Life: ${reflection.lifeScore}% | Closer: ${reflection.closerToGoal ? 'YES' : 'NOT YET'}`,
+      '',
+      `Adapted Next Steps:`,
+      ...reflection.adaptedNextSteps.map(s => `  → ${s}`),
       '',
       `Maintenance: ${deterministicCount - (goalResult?.success ? 1 : 0)}/${totalDecisions - 1} tasks passed`,
       ...tasks.filter(t => t.id !== 'goal-exec').map(t => `  [⚙️] ${t.name}: ${t.detail.slice(0, 60)}`),
@@ -734,6 +743,7 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
       tasks_completed: deterministicCount,
       total_tasks: totalDecisions,
       duration_ms: Math.round(performance.now() - cycleStart),
+      self_reflection: reflection,
     },
   }]);
 
@@ -746,12 +756,10 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
     aiDecisions: tasks.filter(t => t.usedAI).length,
     deterministicDecisions: deterministicCount,
     systemHealth: parseInt(healthResult.detail.match(/\d+/)?.[0] || '0'),
-    nextActions: [
-      goalResult ? `Next: continue "${goalResult.title}"` : 'Create goals to drive evolution',
-      forecastResult.detail,
-    ],
+    nextActions: reflection.adaptedNextSteps, // Next steps now driven by self-reflection
     goalAttempted: goalResult,
     progressMade,
+    selfReflection: reflection,
   };
 }
 
