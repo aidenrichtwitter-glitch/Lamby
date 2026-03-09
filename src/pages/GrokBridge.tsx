@@ -1,8 +1,11 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Shield, Check, AlertTriangle, Undo2, FileCode, Sparkles, Bot, User, Loader2, Code2, Trash2, ChevronDown, Download } from 'lucide-react';
+import { Send, Shield, Check, AlertTriangle, Undo2, FileCode, Sparkles, Bot, User, Loader2, Code2, Trash2, ChevronDown, Download, Globe } from 'lucide-react';
 import { validateChange } from '@/lib/safety-engine';
 import { SELF_SOURCE } from '@/lib/self-source';
 import { SafetyCheck } from '@/lib/self-reference';
+
+// Detect if running inside Tauri
+const isTauri = typeof window !== 'undefined' && '__TAURI__' in window;
 
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -427,6 +430,27 @@ const GrokBridge: React.FC = () => {
                 <Sparkles className="w-4 h-4 text-[hsl(var(--terminal-amber))]" />
               </button>
               <h1 className="text-sm font-bold text-foreground">Grok Bridge</h1>
+              
+              {/* Open Grok in native webview (Tauri only) or new tab */}
+              <button
+                onClick={async () => {
+                  if (isTauri) {
+                    try {
+                      const { invoke } = await import('@tauri-apps/api/core');
+                      await invoke('open_grok_window');
+                    } catch (e) {
+                      console.error('Failed to open Grok window:', e);
+                      window.open('https://grok.com', '_blank');
+                    }
+                  } else {
+                    window.open('https://grok.com', '_blank');
+                  }
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[hsl(var(--terminal-amber))]/10 text-[hsl(var(--terminal-amber))] hover:bg-[hsl(var(--terminal-amber))]/20 text-[10px] font-medium transition-colors"
+              >
+                <Globe className="w-3 h-3" />
+                {isTauri ? 'Open Grok Browser' : 'Open grok.com'}
+              </button>
             </div>
 
             {/* Model picker */}
