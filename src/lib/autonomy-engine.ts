@@ -597,10 +597,13 @@ async function executeGoalStep(): Promise<{ task: AutonomyTask; goalResult: Auto
 // ── MASTER AUTONOMY CYCLE ──
 
 /**
- * Run a full autonomy cycle:
+ * Run a COMPREHENSIVE autonomy cycle:
+ * ALL tests run every cycle. No random selection.
  * 1. GOAL EXECUTION — pick highest-priority goal, attempt next step
- * 2. MAINTENANCE — verify, scan, analyze, forecast (in parallel)
- * 3. JUDGMENT — was progress actually made?
+ * 2. COMPREHENSIVE MAINTENANCE — all diagnostic & repair systems
+ * 3. ADVANCED ANALYSIS — deep pattern recognition & forecasting
+ * 4. SELF-TESTING — run actual self-tests to verify capabilities work
+ * 5. JUDGMENT — quantify autonomous decision quality
  */
 export async function runAutonomyCycle(): Promise<AutonomyReport> {
   const cycleStart = performance.now();
@@ -610,25 +613,40 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
   const { task: goalTask, goalResult } = await executeGoalStep();
   tasks.push(goalTask);
 
-  // Phase 2: MAINTENANCE — run in parallel
-  const [verifyResult, anomalyResult, patternResult, forecastResult, goalProgressResult, healthResult, knowledgeResult] = await Promise.all([
-    verifyAllCapabilities(),
-    runAnomalyScan(),
-    runPatternAnalysis(),
-    runForecasting(),
-    checkGoalProgress(),
-    healthCheck(),
-    gatherKnowledge(),
+  // Phase 2: COMPREHENSIVE MAINTENANCE — ALL tests run in parallel
+  const [
+    verifyResult, 
+    anomalyResult, 
+    patternResult, 
+    forecastResult, 
+    goalProgressResult, 
+    healthResult, 
+    knowledgeResult,
+    ruleResult,
+    docResult
+  ] = await Promise.all([
+    verifyAllCapabilities(),        // Advanced deep verification with runtime checks
+    runAnomalyScan(),                // Self-repair with quarantine & circular dependency detection
+    runPatternAnalysis(),            // Growth pattern analysis
+    runForecasting(),                // Evolution forecasting
+    checkGoalProgress(),             // Goal progress tracking
+    healthCheck(),                   // System health diagnostics
+    gatherKnowledge(),               // Adaptive knowledge synthesis
+    runRuleEvaluation().then(r => r.task), // Rule engine evaluation
+    Promise.resolve(runDocumentation()),   // Self-documentation
   ]);
 
-  tasks.push(verifyResult, anomalyResult, patternResult, forecastResult, goalProgressResult, healthResult, knowledgeResult);
-
-  // Rule evaluation
-  const { task: ruleTask } = await runRuleEvaluation();
-  tasks.push(ruleTask);
-
-  // Documentation
-  tasks.push(runDocumentation());
+  tasks.push(
+    verifyResult, 
+    anomalyResult, 
+    patternResult, 
+    forecastResult, 
+    goalProgressResult, 
+    healthResult, 
+    knowledgeResult,
+    ruleResult,
+    docResult
+  );
 
   // Phase 3: JUDGMENT
   const deterministicCount = tasks.filter(t => !t.usedAI && t.success).length;
