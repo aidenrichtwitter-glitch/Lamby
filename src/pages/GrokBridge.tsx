@@ -3,7 +3,7 @@ import {
   Send, Shield, Check, AlertTriangle, Undo2, FileCode, Sparkles, Bot,
   User, Loader2, Code2, Trash2, ChevronDown, Globe, MessageSquare,
   Clipboard, ClipboardCheck, Zap, X, ChevronUp, ChevronDown as ChevronDownIcon,
-  Dna, FolderOpen, PanelLeftClose, PanelLeft, Play, ExternalLink
+  Dna, FolderOpen, PanelLeftClose, PanelLeft, Play, ExternalLink, Download
 } from 'lucide-react';
 import { validateChange } from '@/lib/safety-engine';
 import { SELF_SOURCE } from '@/lib/self-source';
@@ -146,9 +146,12 @@ function extractContextSections(fullText: string): string[] {
   return sections;
 }
 
-function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApply: (filePath: string, code: string) => void; onApplyAll?: (blocks: { filePath: string; code: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void }) {
+function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject }: { onApply: (filePath: string, code: string) => void; onApplyAll?: (blocks: { filePath: string; code: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null }) {
   const [blocks, setBlocks] = useState<ExtractedBlock[]>([]);
   const [detectedDeps, setDetectedDeps] = useState<{ dependencies: string[]; devDependencies: string[] }>({ dependencies: [], devDependencies: [] });
+  const [depsInstalling, setDepsInstalling] = useState(false);
+  const [depsInstalled, setDepsInstalled] = useState(false);
+  const [depsError, setDepsError] = useState<string | null>(null);
   const [responseContext, setResponseContext] = useState<string>('');
   const [contextSections, setContextSections] = useState<string[]>([]);
   const [showContext, setShowContext] = useState(false);
@@ -226,6 +229,52 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApp
     }
   };
 
+  const installDeps = async () => {
+    if (!activeProject || depsInstalling) return;
+    const allDeps = [...detectedDeps.dependencies, ...detectedDeps.devDependencies];
+    if (allDeps.length === 0) return;
+    setDepsInstalling(true);
+    setDepsError(null);
+    setDepsInstalled(false);
+    try {
+      if (isElectron) {
+        const { ipcRenderer } = (window as any).require('electron');
+        const result = await ipcRenderer.invoke('install-project-deps', {
+          projectName: activeProject,
+          dependencies: detectedDeps.dependencies,
+          devDependencies: detectedDeps.devDependencies,
+        });
+        if (result && !result.success) {
+          throw new Error(result.errors?.join('; ') || result.error || 'Install failed');
+        }
+      } else {
+        const res = await fetch('/api/projects/install-deps', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: activeProject,
+            dependencies: detectedDeps.dependencies,
+            devDependencies: detectedDeps.devDependencies,
+          }),
+        });
+        const data = await res.json().catch(() => ({} as any));
+        if (!res.ok) {
+          throw new Error(data.error || `Install failed (${res.status})`);
+        }
+        if (data.success === false) {
+          throw new Error(data.errors?.join('; ') || 'Some packages failed to install');
+        }
+      }
+      setDepsInstalled(true);
+      setTimeout(() => setDepsInstalled(false), 5000);
+    } catch (err: any) {
+      setDepsError(err.message || 'Install failed');
+      setTimeout(() => setDepsError(null), 6000);
+    } finally {
+      setDepsInstalling(false);
+    }
+  };
+
   return (
     <div className={`border-t bg-background/95 backdrop-blur-sm shadow-2xl transition-colors z-20 ${flash ? 'border-primary bg-primary/10' : 'border-primary/30'}`}>
       {/* Toolbar */}
@@ -259,10 +308,35 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApp
           <span className="text-[9px] text-primary/70 ml-1">{blocks.length} block{blocks.length > 1 ? 's' : ''} detected</span>
         )}
         {(detectedDeps.dependencies.length > 0 || detectedDeps.devDependencies.length > 0) && (
-          <span className="text-[9px] text-[hsl(150_60%_55%)] ml-1 flex items-center gap-1" data-testid="text-detected-deps">
-            <Zap className="w-2.5 h-2.5" />
-            {detectedDeps.dependencies.length + detectedDeps.devDependencies.length} dep{detectedDeps.dependencies.length + detectedDeps.devDependencies.length > 1 ? 's' : ''} to install
-          </span>
+          depsInstalled ? (
+            <span className="text-[9px] text-[hsl(150_60%_55%)] ml-1 flex items-center gap-1 px-2 py-1 rounded bg-[hsl(150_60%_55%/0.15)] border border-[hsl(150_60%_55%/0.3)]" data-testid="text-deps-installed">
+              <Check className="w-2.5 h-2.5" />
+              Deps installed
+            </span>
+          ) : depsError ? (
+            <span className="text-[9px] text-red-400 ml-1 flex items-center gap-1 px-2 py-1 rounded bg-red-500/10 border border-red-500/30" data-testid="text-deps-error">
+              <X className="w-2.5 h-2.5" />
+              {depsError}
+            </span>
+          ) : activeProject ? (
+            <button
+              onClick={installDeps}
+              disabled={depsInstalling}
+              data-testid="button-install-deps"
+              className="text-[9px] text-[hsl(150_60%_55%)] ml-1 flex items-center gap-1 px-2 py-1.5 rounded bg-[hsl(150_60%_55%/0.1)] hover:bg-[hsl(150_60%_55%/0.25)] border border-[hsl(150_60%_55%/0.3)] cursor-pointer transition-colors font-bold"
+            >
+              {depsInstalling ? (
+                <><Loader2 className="w-2.5 h-2.5 animate-spin" /> Installing...</>
+              ) : (
+                <><Download className="w-2.5 h-2.5" /> {detectedDeps.dependencies.length + detectedDeps.devDependencies.length} dep{detectedDeps.dependencies.length + detectedDeps.devDependencies.length > 1 ? 's' : ''} to install</>
+              )}
+            </button>
+          ) : (
+            <span className="text-[9px] text-[hsl(150_60%_55%/0.5)] ml-1 flex items-center gap-1" data-testid="text-detected-deps-no-project">
+              <Zap className="w-2.5 h-2.5" />
+              {detectedDeps.dependencies.length + detectedDeps.devDependencies.length} dep{detectedDeps.dependencies.length + detectedDeps.devDependencies.length > 1 ? 's' : ''} (select project to install)
+            </span>
+          )
         )}
         {isElectron && onApplyAll && blocks.filter(b => b.filePath && !b.applied).length > 1 && (
           <button
@@ -558,9 +632,10 @@ interface GrokDesktopBrowserProps {
   onApply: (filePath: string, code: string) => void;
   onApplyAll?: (blocks: { filePath: string; code: string }[]) => void;
   onResponseCaptured?: (fullResponse: string) => void;
+  activeProject?: string | null;
 }
 
-function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl, onApply, onApplyAll, onResponseCaptured }: GrokDesktopBrowserProps) {
+function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl, onApply, onApplyAll, onResponseCaptured, activeProject }: GrokDesktopBrowserProps) {
   const webviewRef = useRef<any>(null);
   const [loading, setLoading] = useState(true);
   const initialUrlRef = useRef(browserUrl);
@@ -643,7 +718,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
             </div>
           </div>
         </div>
-        <ClipboardExtractor onApply={onApply} onApplyAll={onApplyAll} onResponseCaptured={onResponseCaptured} />
+        <ClipboardExtractor onApply={onApply} onApplyAll={onApplyAll} onResponseCaptured={onResponseCaptured} activeProject={activeProject} />
       </div>
     );
   }
@@ -702,7 +777,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
         )}
       </div>
 
-      <ClipboardExtractor onApply={onApply} onApplyAll={onApplyAll} onResponseCaptured={onResponseCaptured} />
+      <ClipboardExtractor onApply={onApply} onApplyAll={onApplyAll} onResponseCaptured={onResponseCaptured} activeProject={activeProject} />
     </div>
   );
 }
@@ -1135,16 +1210,21 @@ const GrokBridge: React.FC = () => {
 
         if (hasDeps) {
           setBatchMessage(`Installing dependencies for ${activeProject}...`);
+          let depsFailed = false;
           try {
             if (isElectron) {
               const { ipcRenderer } = (window as any).require('electron');
-              await ipcRenderer.invoke('install-project-deps', {
+              const result = await ipcRenderer.invoke('install-project-deps', {
                 projectName: activeProject,
                 dependencies: detectedDeps.dependencies,
                 devDependencies: detectedDeps.devDependencies,
               });
+              if (result && !result.success) {
+                depsFailed = true;
+                setStatusMessage(`Dep install errors: ${result.errors?.join('; ') || 'unknown'}`);
+              }
             } else {
-              await fetch('/api/projects/install-deps', {
+              const res = await fetch('/api/projects/install-deps', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1153,10 +1233,18 @@ const GrokBridge: React.FC = () => {
                   devDependencies: detectedDeps.devDependencies,
                 }),
               });
+              const data = await res.json().catch(() => ({} as any));
+              if (!res.ok || data.success === false) {
+                depsFailed = true;
+                setStatusMessage(`Dep install errors: ${data.errors?.join('; ') || data.error || 'unknown'}`);
+              }
             }
-            setStatusMessage(`Installed: ${[...detectedDeps.dependencies, ...detectedDeps.devDependencies].join(', ')}`);
+            if (!depsFailed) {
+              setStatusMessage(`Installed: ${[...detectedDeps.dependencies, ...detectedDeps.devDependencies].join(', ')}`);
+            }
           } catch (depErr: any) {
             console.error('Dependency install failed:', depErr);
+            setStatusMessage(`Dep install failed: ${depErr.message}`);
           }
         }
 
@@ -1811,7 +1899,7 @@ const GrokBridge: React.FC = () => {
               <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} />
             </div>
           )}
-          <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} />
+          <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} />
         </div>
       )}
 

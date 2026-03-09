@@ -380,6 +380,11 @@ function projectManagementPlugin(): Plugin {
           const projectDir = path.resolve(process.cwd(), "projects", name);
           if (!fs.existsSync(projectDir)) { res.statusCode = 404; res.end(JSON.stringify({ error: "Project not found" })); return; }
 
+          const pkgJsonPath = path.join(projectDir, "package.json");
+          if (!fs.existsSync(pkgJsonPath)) {
+            fs.writeFileSync(pkgJsonPath, JSON.stringify({ name, version: "0.0.1", private: true }, null, 2));
+          }
+
           const results: string[] = [];
           const { execFileSync } = await import("child_process");
           const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -387,12 +392,14 @@ function projectManagementPlugin(): Plugin {
           const safeDeps = (dependencies || []).filter((d: string) => validPkg.test(d) && !/[;&|`$(){}]/.test(d));
           const safeDevDeps = (devDependencies || []).filter((d: string) => validPkg.test(d) && !/[;&|`$(){}]/.test(d));
 
+          const errors: string[] = [];
+
           if (safeDeps.length > 0) {
             try {
               execFileSync(npmCmd, ["install", ...safeDeps], { cwd: projectDir, timeout: 60000, stdio: "pipe" });
               results.push(`Installed: ${safeDeps.join(", ")}`);
             } catch (err: any) {
-              results.push(`Failed to install deps: ${err.message}`);
+              errors.push(`Failed to install deps: ${err.message}`);
             }
           }
 
@@ -401,12 +408,14 @@ function projectManagementPlugin(): Plugin {
               execFileSync(npmCmd, ["install", "--save-dev", ...safeDevDeps], { cwd: projectDir, timeout: 60000, stdio: "pipe" });
               results.push(`Installed dev: ${safeDevDeps.join(", ")}`);
             } catch (err: any) {
-              results.push(`Failed to install dev deps: ${err.message}`);
+              errors.push(`Failed to install dev deps: ${err.message}`);
             }
           }
 
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ success: true, results }));
+          const success = errors.length === 0;
+          res.end(JSON.stringify({ success, results, errors }));
+          if (!success) { res.statusCode = 200; }
         } catch (err: any) {
           res.statusCode = 500;
           res.end(JSON.stringify({ error: err.message }));

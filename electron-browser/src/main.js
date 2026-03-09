@@ -936,6 +936,11 @@ function setupIpcHandlers() {
     if (!resolvedDir.startsWith(projectsRoot)) return { success: false, error: 'Invalid project path' };
     if (!fs.existsSync(projectDir)) return { success: false, error: 'Project not found' };
 
+    const pkgJsonPath = path.join(projectDir, 'package.json');
+    if (!fs.existsSync(pkgJsonPath)) {
+      fs.writeFileSync(pkgJsonPath, JSON.stringify({ name: projectName, version: '0.0.1', private: true }, null, 2));
+    }
+
     const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     const validPkg = /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(@[^\s]*)?$/;
     const sanitize = (arr) => (arr || []).filter(d => typeof d === 'string' && validPkg.test(d) && !/[;&|`$(){}]/.test(d));
@@ -943,13 +948,15 @@ function setupIpcHandlers() {
     const safeDevDeps = sanitize(devDependencies);
     const results = [];
 
+    const errors = [];
+
     if (safeDeps.length > 0) {
       try {
         const { execFileSync } = require('child_process');
         execFileSync(npmCmd, ['install', ...safeDeps], { cwd: projectDir, timeout: 60000, stdio: 'pipe' });
         results.push(`Installed: ${safeDeps.join(', ')}`);
       } catch (err) {
-        results.push(`Failed to install deps: ${err.message}`);
+        errors.push(`Failed to install deps: ${err.message}`);
       }
     }
 
@@ -959,11 +966,11 @@ function setupIpcHandlers() {
         execFileSync(npmCmd, ['install', '--save-dev', ...safeDevDeps], { cwd: projectDir, timeout: 60000, stdio: 'pipe' });
         results.push(`Installed dev: ${safeDevDeps.join(', ')}`);
       } catch (err) {
-        results.push(`Failed to install dev deps: ${err.message}`);
+        errors.push(`Failed to install dev deps: ${err.message}`);
       }
     }
 
-    return { success: true, results };
+    return { success: errors.length === 0, results, errors };
   });
 
   // ─── Guardian AI: Read multiple files for context ──────────────────────────
