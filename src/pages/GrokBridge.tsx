@@ -520,81 +520,80 @@ const GrokBridge: React.FC = () => {
           </div>
         </div>
 
-        {/* ═══ Embedded Browser Panel ═══ */}
-        {showBrowser && (
-          <div className="w-1/2 border-l border-border/30 flex flex-col bg-card/20">
-            {/* Browser toolbar */}
-            <div className="border-b border-border/30 bg-card/50 px-3 py-2 flex items-center gap-2 shrink-0">
-              {/* Site quick-select buttons */}
-              <div className="flex items-center gap-1 flex-1 overflow-x-auto">
-                {BROWSER_SITES.map(site => (
-                  <button
-                    key={site.id}
-                    onClick={() => setBrowserUrl(site.url)}
-                    className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] whitespace-nowrap transition-colors ${
-                      browserUrl === site.url
-                        ? 'bg-primary/15 text-primary border border-primary/30'
-                        : 'bg-secondary/30 text-muted-foreground hover:bg-secondary/60 border border-transparent'
-                    }`}
-                  >
-                    <span>{site.icon}</span>
-                    <span>{site.name}</span>
-                  </button>
-                ))}
-              </div>
-              {/* Custom URL input */}
-              <div className="flex items-center gap-1 shrink-0">
-                <input
-                  value={customUrl}
-                  onChange={e => setCustomUrl(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' && customUrl.trim()) {
-                      const url = customUrl.startsWith('http') ? customUrl : `https://${customUrl}`;
-                      setBrowserUrl(url);
-                      setCustomUrl('');
-                    }
-                  }}
-                  placeholder="URL..."
-                  className="w-32 bg-background border border-border/50 rounded px-2 py-1 text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/30"
-                />
+      {/* ═══ Embedded Browser Panel ═══ */}
+      {showBrowser && (
+        <div className="flex-1 flex flex-col bg-card/20 min-w-0">
+          {/* Browser toolbar */}
+          <div className="border-b border-border/30 bg-card/50 px-3 py-2 flex items-center gap-2 shrink-0">
+            {/* Site quick-select buttons */}
+            <div className="flex items-center gap-1 flex-1 overflow-x-auto">
+              {BROWSER_SITES.map(site => (
                 <button
-                  onClick={() => {
-                    if (customUrl.trim()) {
-                      const url = customUrl.startsWith('http') ? customUrl : `https://${customUrl}`;
-                      setBrowserUrl(url);
-                      setCustomUrl('');
-                    }
-                  }}
-                  className="p-1 rounded bg-secondary/50 hover:bg-secondary/80 transition-colors"
+                  key={site.id}
+                  onClick={() => setBrowserUrl(site.url)}
+                  className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] whitespace-nowrap transition-colors ${
+                    browserUrl === site.url
+                      ? 'bg-primary/15 text-primary border border-primary/30'
+                      : 'bg-secondary/30 text-muted-foreground hover:bg-secondary/60 border border-transparent'
+                  }`}
                 >
-                  <Globe className="w-3 h-3 text-muted-foreground" />
+                  <span>{site.icon}</span>
+                  <span>{site.name}</span>
                 </button>
-              </div>
+              ))}
             </div>
-
-            {/* Browser address bar */}
-            <div className="border-b border-border/20 bg-card/30 px-3 py-1.5 flex items-center gap-2">
-              <Globe className="w-3 h-3 text-muted-foreground/50 shrink-0" />
-              <span className="text-[10px] text-muted-foreground/70 truncate flex-1">{browserUrl}</span>
-              {currentSite && (
-                <span className="text-[9px] text-primary/60 shrink-0">{currentSite.name}</span>
-              )}
-            </div>
-
-            {/* Iframe */}
-            <div className="flex-1 relative">
-              <iframe
-                key={browserUrl}
-                src={browserUrl}
-                className="w-full h-full border-0"
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
-                allow="clipboard-write"
-                title="Embedded Browser"
+            {/* Custom URL input */}
+            <div className="flex items-center gap-1 shrink-0">
+              <input
+                value={customUrl}
+                onChange={e => setCustomUrl(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && customUrl.trim()) {
+                    const url = customUrl.startsWith('http') ? customUrl : `https://${customUrl}`;
+                    setBrowserUrl(url);
+                    setCustomUrl('');
+                  }
+                }}
+                placeholder="URL..."
+                className="w-32 bg-background border border-border/50 rounded px-2 py-1 text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/30"
               />
+              <button
+                onClick={() => {
+                  if (customUrl.trim()) {
+                    const url = customUrl.startsWith('http') ? customUrl : `https://${customUrl}`;
+                    setBrowserUrl(url);
+                    setCustomUrl('');
+                  }
+                }}
+                className="p-1 rounded bg-secondary/50 hover:bg-secondary/80 transition-colors"
+              >
+                <Globe className="w-3 h-3 text-muted-foreground" />
+              </button>
             </div>
           </div>
-        )}
-      </div>
+
+          {/* Browser address bar */}
+          <div className="border-b border-border/20 bg-card/30 px-3 py-1.5 flex items-center gap-2">
+            <Globe className="w-3 h-3 text-muted-foreground/50 shrink-0" />
+            <span className="text-[10px] text-muted-foreground/70 truncate flex-1">{browserUrl}</span>
+            {currentSite && (
+              <span className="text-[9px] text-primary/60 shrink-0">{currentSite.name}</span>
+            )}
+          </div>
+
+          {/* Iframe */}
+          <div className="flex-1 relative">
+            <iframe
+              key={browserUrl}
+              src={browserUrl}
+              className="w-full h-full border-0"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"
+              allow="clipboard-write"
+              title="Embedded Browser"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
