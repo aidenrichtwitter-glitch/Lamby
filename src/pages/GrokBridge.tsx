@@ -7,7 +7,7 @@ import {
 import { validateChange } from '@/lib/safety-engine';
 import { SELF_SOURCE } from '@/lib/self-source';
 import { SafetyCheck } from '@/lib/self-reference';
-import { parseCodeBlocks, ParsedBlock } from '@/lib/code-parser';
+import { parseCodeBlocks, ParsedBlock, isLikelySnippet, mergeCSSVariables } from '@/lib/code-parser';
 
 const isElectron = typeof window !== 'undefined' && typeof (window as any).require === 'function';
 
@@ -420,10 +420,13 @@ function ApplyConfirmDialog({
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" data-testid="dialog-apply-confirm">
       <div className="bg-background border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <FileCode className="w-4 h-4 text-primary" />
             <span className="text-sm font-semibold">{pending.exists ? 'Modify' : 'Create'} File</span>
             <span className="text-xs font-mono text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded">{pending.filePath}</span>
+            {stageMessage && stage === 'confirm' && (
+              <span className="text-[10px] text-primary bg-primary/10 px-2 py-0.5 rounded border border-primary/20">{stageMessage}</span>
+            )}
           </div>
           {stage === 'confirm' && (
             <button onClick={onCancel} data-testid="button-cancel-apply" className="p-1 text-muted-foreground hover:text-foreground">
@@ -769,29 +772,17 @@ const GrokBridge: React.FC = () => {
   const applyBlock = useCallback(async (filePath: string, code: string) => {
     if (!filePath) { setStatusMessage('⚠ No file path detected'); return; }
 
-    if (isElectron) {
-      try {
+    let oldContent = '';
+    let exists = false;
+
+    try {
+      if (isElectron) {
         const { ipcRenderer } = (window as any).require('electron');
         const readResult = await ipcRenderer.invoke('read-file', { filePath });
         if (!readResult.success) { setStatusMessage(`⚠ ${readResult.error}`); return; }
-        const oldContent = readResult.content || '';
-        const safetyChecks = validateChange(code, filePath, oldContent);
-        setPendingApply({
-          filePath,
-          newContent: code,
-          oldContent,
-          exists: readResult.exists ?? false,
-          safetyChecks,
-        });
-        setApplyStage('confirm');
-        setApplyStageMessage('');
-        setApplyCompileError('');
-        lastBackupPathRef.current = '';
-      } catch (e: any) {
-        setStatusMessage(`⚠ ${e.message || 'Failed to read file'}`);
-      }
-    } else {
-      try {
+        oldContent = readResult.content || '';
+        exists = readResult.exists ?? false;
+      } else {
         const readRes = await fetch('/api/read-file', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -802,22 +793,37 @@ const GrokBridge: React.FC = () => {
           setStatusMessage(`⚠ Could not read ${filePath}: ${readData.error || 'unknown error'}`);
           return;
         }
-        const oldContent = readData.content || '';
-        const safetyChecks = validateChange(code, filePath, oldContent);
-        setPendingApply({
-          filePath,
-          newContent: code,
-          oldContent,
-          exists: readData.exists ?? false,
-          safetyChecks,
-        });
-        setApplyStage('confirm');
-        setApplyStageMessage('');
-        setApplyCompileError('');
-      } catch (e: any) {
-        setStatusMessage(`⚠ ${e.message || 'Failed to read file'}`);
+        oldContent = readData.content || '';
+        exists = readData.exists ?? false;
+      }
+    } catch (e: any) {
+      setStatusMessage(`⚠ ${e.message || 'Failed to read file'}`);
+      return;
+    }
+
+    let finalContent = code;
+    let mergeNote = '';
+
+    if (exists && isLikelySnippet(code, oldContent) && filePath.endsWith('.css')) {
+      const merged = mergeCSSVariables(code, oldContent);
+      if (merged) {
+        finalContent = merged;
+        mergeNote = ' (smart-merged snippet into existing file)';
       }
     }
+
+    const safetyChecks = validateChange(finalContent, filePath, oldContent);
+    setPendingApply({
+      filePath,
+      newContent: finalContent,
+      oldContent,
+      exists,
+      safetyChecks,
+    });
+    setApplyStage('confirm');
+    setApplyStageMessage(mergeNote);
+    setApplyCompileError('');
+    lastBackupPathRef.current = '';
   }, []);
 
   const confirmApply = useCallback(async () => {
