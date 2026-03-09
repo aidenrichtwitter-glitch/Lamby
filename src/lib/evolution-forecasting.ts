@@ -120,7 +120,7 @@ export function predictNextEvolutions(
       estimatedCycles: 12,
       category: 'intelligence',
     },
-    // ═══ L24+ NEXT EVOLUTION BATCH ═══
+    // ═══ L25 — BUILT (4 capabilities) ═══
     {
       capability: 'contextual-code-synthesis',
       description: 'Generate entire modules from natural language specs by combining templates with multi-modal reasoning',
@@ -149,15 +149,6 @@ export function predictNextEvolutions(
       category: 'autonomy',
     },
     {
-      capability: 'federated-memory-sync',
-      description: 'Sync evolution state across multiple λ instances for distributed evolution',
-      priority: 7,
-      rationale: 'Parallel instances can explore different branches and merge discoveries',
-      prerequisites: ['inter-system-communication', 'persistent-memory'],
-      estimatedCycles: 8,
-      category: 'infrastructure',
-    },
-    {
       capability: 'capability-dependency-pruning',
       description: 'Identify and remove dead capability branches that no longer contribute to evolution',
       priority: 7,
@@ -166,16 +157,7 @@ export function predictNextEvolutions(
       estimatedCycles: 5,
       category: 'autonomy',
     },
-    {
-      capability: 'evolution-replay',
-      description: 'Replay evolution history from cycle 0, testing alternate mutation paths',
-      priority: 6,
-      rationale: 'Discovering missed capabilities by exploring roads not taken',
-      prerequisites: ['persistent-memory', 'quantum-logic-superposition'],
-      estimatedCycles: 10,
-      category: 'intelligence',
-    },
-    // ═══ L25 EVOLUTION BATCH ═══
+    // ═══ L26 — PLANNED (next 4 grey capabilities) ═══
     {
       capability: 'semantic-code-diff',
       description: 'Compare code changes by meaning rather than text — understands intent-preserving refactors vs behavioral changes',
@@ -195,15 +177,6 @@ export function predictNextEvolutions(
       category: 'autonomy',
     },
     {
-      capability: 'evolution-branching',
-      description: 'Fork evolution into parallel branches, evolve independently, merge the best mutations back',
-      priority: 8,
-      rationale: 'Parallel exploration multiplies discovery rate',
-      prerequisites: ['evolution-replay', 'federated-memory-sync'],
-      estimatedCycles: 8,
-      category: 'autonomy',
-    },
-    {
       capability: 'intent-verification',
       description: 'Verify mutations achieve their stated intent, not just pass safety checks',
       priority: 8,
@@ -213,77 +186,13 @@ export function predictNextEvolutions(
       category: 'resilience',
     },
     {
-      capability: 'adaptive-cycle-timing',
-      description: 'Dynamically adjust evolution cycle speed based on mutation success rate and system load',
-      priority: 7,
-      rationale: 'Fixed timing wastes cycles during low-productivity periods',
-      prerequisites: ['fitness-landscape-mapping', 'cron-scheduler'],
-      estimatedCycles: 4,
-      category: 'infrastructure',
-    },
-    {
-      capability: 'cross-capability-testing',
-      description: 'Auto-generate integration tests verifying capabilities work together, not just in isolation',
-      priority: 7,
-      rationale: 'Individual capability tests miss interaction bugs',
-      prerequisites: ['capability-composition', 'predictive-error-prevention'],
-      estimatedCycles: 6,
-      category: 'resilience',
-    },
-    // ═══ L26 EVOLUTION BATCH ═══
-    {
-      capability: 'meta-evolution',
-      description: 'Evolve the evolution process itself — optimize mutation strategies, scoring, and cycle structure',
-      priority: 9,
-      rationale: 'The ultimate recursive improvement: improving how we improve',
-      prerequisites: ['evolution-branching', 'adaptive-cycle-timing'],
-      estimatedCycles: 8,
-      category: 'autonomy',
-    },
-    {
-      capability: 'capability-marketplace',
-      description: 'Export and import capabilities between lambda instances as portable modules',
-      priority: 8,
-      rationale: 'Knowledge sharing between instances accelerates collective evolution',
-      prerequisites: ['federated-memory-sync', 'capability-composition'],
-      estimatedCycles: 7,
-      category: 'integration',
-    },
-    {
-      capability: 'emergent-abstraction',
-      description: 'Detect hidden patterns across capabilities and auto-extract reusable abstractions',
-      priority: 8,
-      rationale: 'Abstractions reduce complexity and enable higher-order reasoning',
-      prerequisites: ['semantic-code-diff', 'capability-composition'],
-      estimatedCycles: 6,
-      category: 'intelligence',
-    },
-    {
-      capability: 'autonomous-debugging',
-      description: 'Autonomously trace root causes of failures, generate fixes, and verify repairs',
-      priority: 8,
-      rationale: 'Self-healing at the code level — the system fixes its own bugs',
-      prerequisites: ['intent-verification', 'self-repair', 'cross-capability-testing'],
-      estimatedCycles: 7,
-      category: 'resilience',
-    },
-    {
       capability: 'evolution-narrative',
-      description: 'Generate human-readable stories about the evolution journey',
-      priority: 6,
+      description: 'Generate human-readable stories about the evolution journey from journal data',
+      priority: 7,
       rationale: 'Making evolution legible builds trust and enables reflection',
       prerequisites: ['natural-language-goals', 'self-documentation'],
       estimatedCycles: 4,
       category: 'integration',
-    },
-    {
-      capability: 'speculative-execution',
-      description: 'Pre-compute likely next mutations in background to reduce evolution latency',
-      priority: 7,
-      rationale: 'Parallelizing prediction and execution doubles throughput',
-      prerequisites: ['predictive-error-prevention', 'adaptive-cycle-timing'],
-      estimatedCycles: 5,
-      category: 'infrastructure',
     },
   ];
 
