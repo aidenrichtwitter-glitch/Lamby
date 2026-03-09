@@ -141,9 +141,15 @@ function ClipboardExtractor({ onApply }: { onApply: (filePath: string, code: str
 
   const readClipboard = useCallback(async () => {
     try {
-      const text = await navigator.clipboard.readText();
-      extractFromText(text);
-    } catch { /* permission denied */ }
+      if (isElectron) {
+        const { clipboard } = (window as any).require('electron');
+        const text = clipboard.readText();
+        if (text) extractFromText(text);
+      } else {
+        const text = await navigator.clipboard.readText();
+        extractFromText(text);
+      }
+    } catch { /* permission denied or module not available */ }
   }, [extractFromText]);
 
   // Auto-read clipboard on mount to catch any existing content
@@ -154,10 +160,10 @@ function ClipboardExtractor({ onApply }: { onApply: (filePath: string, code: str
   // Auto-read clipboard continuously (captures website copy-button writes)
   useEffect(() => {
     const interval = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && document.hasFocus()) {
+      if (isElectron || (document.visibilityState === 'visible' && document.hasFocus())) {
         readClipboard();
       }
-    }, 1200);
+    }, 800);
     return () => window.clearInterval(interval);
   }, [readClipboard]);
 
