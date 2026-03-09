@@ -844,12 +844,12 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
     ].join('\n'),
     metadata: {
       autonomy_score: score,
-      goal_attempted: goalResult,
+      goal_attempted: goalResult as any,
       progress_made: progressMade,
       tasks_completed: deterministicCount,
       total_tasks: totalDecisions,
       duration_ms: Math.round(performance.now() - cycleStart),
-      self_reflection: reflection,
+      self_reflection: reflection as any,
     },
   }]);
 
