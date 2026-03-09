@@ -191,6 +191,8 @@ try { app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required'
 
 // Define the allowed URL patterns for internal handling with secure domain validation
 const allowedUrlPatterns = [
+  // Allow localhost for the React dev server
+  /^https?:\/\/localhost(?::\d+)?(?:\/|$)/,
   // Allow grok.com domain and all its paths (for normal browsing), but not as subdomain
   /^https?:\/\/grok\.com(?:\/|$)/,
   // Allow x.ai domain and all its paths (for normal browsing), but not as subdomain
@@ -320,8 +322,13 @@ function createWindow() {
   // Ensure shortcuts work when focus is on the main window UI
   try { attachShortcutHandlers(mainWindow.webContents); } catch (_) {}
 
-  // Load the index.html file
-  mainWindow.loadFile(path.join(__dirname, '../index.html'));
+  // In dev mode, load the React app from Vite; in production, load the built files
+  const isDev = !app.isPackaged;
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:5000');
+  } else {
+    mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'));
+  }
 
   // Configure spellchecker languages for default session and webview partition
   try {
@@ -584,6 +591,47 @@ function setupIpcHandlers() {
     } catch (error) {
       return { error: error.message };
     }
+  });
+
+  // Open Grok in a new native BrowserWindow (called from React app)
+  ipcMain.handle('open-grok-browser', async () => {
+    const grokWin = new BrowserWindow({
+      width: 1200,
+      height: 800,
+      minWidth: 800,
+      minHeight: 600,
+      title: 'Grok — xAI',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        partition: 'persist:grok',
+        spellcheck: true
+      },
+      icon: path.join(__dirname, 'grok.png')
+    });
+    grokWin.loadURL('https://grok.com');
+    grokWin.setMenuBarVisibility(false);
+    return true;
+  });
+
+  // Open any URL in a new native BrowserWindow (called from React app)
+  ipcMain.handle('open-url-browser', async (_event, url, title) => {
+    if (typeof url !== 'string' || !url.startsWith('http')) return false;
+    const urlWin = new BrowserWindow({
+      width: 1100,
+      height: 750,
+      title: title || url,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        partition: 'persist:grok',
+        spellcheck: true
+      },
+      icon: path.join(__dirname, 'grok.png')
+    });
+    urlWin.loadURL(url);
+    urlWin.setMenuBarVisibility(false);
+    return true;
   });
 
   // Force light/dynamic color scheme for specific webContents id

@@ -57,7 +57,18 @@ supabase/
 - `VITE_SUPABASE_PUBLISHABLE_KEY` — Supabase anon/public key
 - `VITE_SUPABASE_PROJECT_ID` — Supabase project ID
 
+## Desktop App (Electron)
+- **Desktop mode**: `npm run electron:dev` — starts Vite + Electron together
+  - Vite dev server on port 5000, Electron loads it as the main window
+  - GrokBridge opens Grok/ChatGPT/Claude in native Electron BrowserWindow via IPC
+  - IPC handlers: `open-grok-browser`, `open-url-browser` (in electron-browser/src/main.js)
+- **Desktop build**: `npm run electron:build` — builds Vite then packages Electron
+- **Web mode**: Sites open in new browser tabs (fallback when not in Electron)
+- Detection: `typeof window.require === 'function'` → Electron; otherwise web mode
+- The `src-tauri/` directory exists but is NOT the active desktop approach
+
 ## Development
-- Dev server: `npx vite` (port 5000)
+- Dev server: `npx vite` (port 5000) — web-only mode
+- Desktop dev: `npm run electron:dev` — full desktop experience
 - Build: `npm run build`
 - The app connects to an existing hosted Supabase project for its database and edge functions

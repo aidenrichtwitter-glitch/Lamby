@@ -280,16 +280,15 @@ function ClipboardExtractor({ onApply }: { onApply: (filePath: string, code: str
   );
 }
 
-// ─── Grok Desktop Browser (Tauri native webview windows) ─────────────────────
+// ─── Grok Desktop Browser (Electron native windows) ─────────────────────────
 
-const isTauri = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
+const isElectron = typeof window !== 'undefined' && typeof (window as any).require === 'function';
 
-async function tauriInvoke(cmd: string, args?: Record<string, unknown>) {
-  if (!isTauri) return;
+function getIpcRenderer() {
+  if (!isElectron) return null;
   try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    return await invoke(cmd, args);
-  } catch {}
+    return (window as any).require('electron').ipcRenderer;
+  } catch { return null; }
 }
 
 interface GrokDesktopBrowserProps {
@@ -302,33 +301,43 @@ interface GrokDesktopBrowserProps {
 
 function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl, onApply }: GrokDesktopBrowserProps) {
   const [grokOpen, setGrokOpen] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const openGrok = useCallback(async () => {
-    if (isTauri) {
-      await tauriInvoke('open_grok_window');
+    const ipc = getIpcRenderer();
+    if (ipc) {
+      await ipc.invoke('open-grok-browser');
       setGrokOpen(true);
       setBrowserUrl('https://grok.com');
+      setStatusMessage('Grok opened in native browser window');
     } else {
       window.open('https://grok.com', '_blank');
+      setStatusMessage('Opened in new browser tab');
     }
   }, [setBrowserUrl]);
 
   const openSite = useCallback(async (url: string, name: string) => {
-    if (isTauri) {
-      await tauriInvoke('open_url_window', { url, title: name });
+    const ipc = getIpcRenderer();
+    if (ipc) {
+      await ipc.invoke('open-url-browser', url, name);
       setBrowserUrl(url);
+      setStatusMessage(`${name} opened in native browser window`);
     } else {
       window.open(url, '_blank');
+      setStatusMessage(`${name} opened in new tab`);
     }
   }, [setBrowserUrl]);
 
   const openCustomUrl = useCallback(async () => {
     if (!customUrl.trim()) return;
     const url = customUrl.startsWith('http') ? customUrl : `https://${customUrl}`;
-    const title = new URL(url).hostname;
-    if (isTauri) {
-      await tauriInvoke('open_url_window', { url, title });
+    let title: string;
+    try { title = new URL(url).hostname; } catch { title = url; }
+    const ipc = getIpcRenderer();
+    if (ipc) {
+      await ipc.invoke('open-url-browser', url, title);
       setBrowserUrl(url);
+      setStatusMessage(`${title} opened in native browser window`);
     } else {
       window.open(url, '_blank');
     }
@@ -336,7 +345,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
   }, [customUrl, setCustomUrl, setBrowserUrl]);
 
   useEffect(() => {
-    if (isTauri && !grokOpen) {
+    if (isElectron && !grokOpen) {
       openGrok();
     }
   }, []);
@@ -386,11 +395,14 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
             {grokOpen ? `${currentSite?.name || 'Browser'} — Open in native window` : 'Grok Desktop Browser'}
           </h2>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            {isTauri
-              ? 'Sites open in native Tauri webview windows — no iframe restrictions. Use the tabs above to launch AI sites, then copy code responses. The clipboard extractor below will auto-detect code blocks.'
-              : 'Running in web mode. Sites will open in new browser tabs. For the full embedded browser experience, run the desktop app with npm run tauri dev.'
+            {isElectron
+              ? 'Sites open in native Electron browser windows with full authentication support. Click a site above to open it, then copy code from the AI — the clipboard extractor below will auto-detect code blocks.'
+              : 'Running in web mode. Sites open in new browser tabs. For the full native browser experience, run the desktop app with npm run electron:dev.'
             }
           </p>
+          {statusMessage && (
+            <p className="text-[10px] text-primary/70 mt-1">{statusMessage}</p>
+          )}
         </div>
 
         <button
