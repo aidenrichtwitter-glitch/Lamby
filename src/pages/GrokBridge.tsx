@@ -273,11 +273,17 @@ function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: strin
                 placeholder="Paste Grok's full response here..."
                 className="w-full h-24 bg-background/80 border border-border/50 rounded p-2 text-[11px] font-mono text-foreground/80 placeholder:text-muted-foreground/30 resize-y focus:outline-none focus:border-primary/50"
                 onPaste={handlePaste}
-                onChange={(e) => {
-                  const text = e.target.value;
-                  if (text && text.length > 10) extractFromText(text);
-                }}
               />
+              <button
+                data-testid="button-extract-pasted"
+                onClick={() => {
+                  const text = pasteRef.current?.value || '';
+                  if (text.length > 10) extractFromText(text);
+                }}
+                className="mt-2 flex items-center gap-1.5 px-4 py-1.5 rounded bg-primary/20 text-primary hover:bg-primary/30 text-[10px] font-bold transition-colors border border-primary/30"
+              >
+                <Zap className="w-3 h-3" /> Extract Code Blocks
+              </button>
             </div>
           )}
           {blocks.length === 0 && !showPasteBox && (
