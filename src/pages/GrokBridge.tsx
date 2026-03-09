@@ -157,6 +157,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApp
   const [showPasteBox, setShowPasteBox] = useState(false);
   const [clipboardAvailable, setClipboardAvailable] = useState(true);
   const pasteRef = useRef<HTMLTextAreaElement>(null);
+  const extractorContentRef = useRef<HTMLDivElement>(null);
 
   const extractFromText = useCallback((text: string) => {
     if (text === lastClipboard || text.length < 10) return;
@@ -238,7 +239,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApp
           </div>
         )}
         <button
-          onClick={() => { setShowPasteBox(p => !p); setTimeout(() => pasteRef.current?.focus(), 50); }}
+          onClick={() => { setShowPasteBox(p => !p); if (collapsed) setCollapsed(false); setTimeout(() => { pasteRef.current?.focus(); extractorContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100); }}
           data-testid="button-paste-response"
           className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-primary/15 text-primary hover:bg-primary/25 text-[10px] font-medium transition-colors border border-primary/20"
         >
@@ -273,7 +274,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApp
               <X className="w-3 h-3" />
             </button>
           )}
-          <button onClick={() => setCollapsed(c => !c)} className="p-1 text-muted-foreground/50 hover:text-foreground transition-colors">
+          <button onClick={() => { setCollapsed(c => { const next = !c; if (!next) setTimeout(() => extractorContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100); return next; }); }} className="p-1 text-muted-foreground/50 hover:text-foreground transition-colors">
             {collapsed ? <ChevronUp className="w-3 h-3" /> : <ChevronDownIcon className="w-3 h-3" />}
           </button>
         </div>
@@ -281,7 +282,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApp
 
       {/* Extracted blocks + context */}
       {!collapsed && (
-        <div className="p-3 space-y-2">
+        <div ref={extractorContentRef} className="p-3 space-y-2">
           {showPasteBox && (
             <div className="rounded-lg border border-primary/30 bg-card/50 p-3">
               <p className="text-[10px] text-muted-foreground mb-2">Copy Grok's response, then paste it here (Ctrl+V / Cmd+V):</p>
