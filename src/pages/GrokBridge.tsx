@@ -7,17 +7,12 @@ import {
 import { validateChange } from '@/lib/safety-engine';
 import { SELF_SOURCE } from '@/lib/self-source';
 import { SafetyCheck } from '@/lib/self-reference';
+import { parseCodeBlocks, ParsedBlock } from '@/lib/code-parser';
 
 const isElectron = typeof window !== 'undefined' && typeof (window as any).require === 'function';
 
 type Mode = 'api' | 'browser';
 type Msg = { role: 'user' | 'assistant'; content: string };
-
-interface ParsedBlock {
-  filePath: string;
-  code: string;
-  language: string;
-}
 
 interface AppliedChange {
   filePath: string;
@@ -59,18 +54,6 @@ const BROWSER_SITES = [
   { id: 'perplexity', name: 'Perplexity', url: 'https://perplexity.ai', icon: '🔍' },
 ];
 
-function parseCodeBlocks(text: string): ParsedBlock[] {
-  const blocks: ParsedBlock[] = [];
-  const regex = /(?:(?:\/\/|#|<!--)\s*(?:file:\s*)?(\S+\.(?:tsx?|jsx?|css|html|json|md))\s*(?:-->)?\s*\n)?```(\w+)?\n([\s\S]*?)```/g;
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    const filePath = match[1] || '';
-    const language = match[2] || 'typescript';
-    const code = match[3].trim();
-    if (code.length > 0) blocks.push({ filePath, code, language });
-  }
-  return blocks;
-}
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/grok-chat`;
 
