@@ -846,50 +846,55 @@ const Evolution: React.FC = () => {
               {/* Last Autonomy Report */}
               {autonomyReport && (
                 <div className="space-y-2">
-                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                    <Activity className="w-3 h-3" /> Last Cycle
-                  </div>
-                  
-                  {/* Goal attempt highlight */}
-                  {autonomyReport.goalAttempted && (
-                    <div className={`p-2 rounded border ${autonomyReport.goalAttempted.success ? 'bg-primary/5 border-primary/30' : 'bg-destructive/5 border-destructive/30'}`}>
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Target className={`w-3 h-3 ${autonomyReport.goalAttempted.success ? 'text-primary' : 'text-destructive'}`} />
-                        <span className="text-[10px] font-semibold text-foreground/80 truncate">
-                          {autonomyReport.goalAttempted.title}
-                        </span>
-                      </div>
-                      <div className="text-[9px] text-foreground/60 mb-1">
-                        Attempted: {autonomyReport.goalAttempted.stepAttempted}
-                      </div>
-                      <div className={`text-[8px] ${autonomyReport.goalAttempted.success ? 'text-primary/80' : 'text-destructive/80'}`}>
-                        {autonomyReport.goalAttempted.detail}
-                      </div>
+                  <button
+                    onClick={() => setShowAutonomyDetails(true)}
+                    className="w-full text-left hover:bg-muted/30 rounded p-2 transition-colors border border-transparent hover:border-primary/20"
+                  >
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1 mb-2">
+                      <Activity className="w-3 h-3" /> Last Cycle
                     </div>
-                  )}
-
-                  <div className="space-y-1">
-                    {autonomyReport.tasksCompleted.filter(t => t.id !== 'goal-exec').map(task => (
-                      <div
-                        key={task.id}
-                        className={`text-[9px] px-2 py-1.5 rounded border ${
-                          task.success
-                            ? task.usedAI
-                              ? 'bg-accent/5 border-accent/20 text-accent'
-                              : 'bg-primary/5 border-primary/20 text-primary'
-                            : 'bg-destructive/5 border-destructive/20 text-destructive'
-                        }`}
-                      >
-                        <span className="font-bold text-[7px] uppercase">
-                          [{task.usedAI ? 'AI' : '⚙️'}]
-                        </span>{' '}
-                        {task.name}: {task.detail.slice(0, 60)}
+                    
+                    {/* Goal attempt highlight */}
+                    {autonomyReport.goalAttempted && (
+                      <div className={`p-2 rounded border ${autonomyReport.goalAttempted.success ? 'bg-primary/5 border-primary/30' : 'bg-destructive/5 border-destructive/30'}`}>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <Target className={`w-3 h-3 ${autonomyReport.goalAttempted.success ? 'text-primary' : 'text-destructive'}`} />
+                          <span className="text-[10px] font-semibold text-foreground/80 truncate">
+                            {autonomyReport.goalAttempted.title}
+                          </span>
+                        </div>
+                        <div className="text-[9px] text-foreground/60 mb-1">
+                          Attempted: {autonomyReport.goalAttempted.stepAttempted}
+                        </div>
+                        <div className={`text-[8px] ${autonomyReport.goalAttempted.success ? 'text-primary/80' : 'text-destructive/80'}`}>
+                          {autonomyReport.goalAttempted.detail}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                  <div className="text-[8px] text-muted-foreground/50">
-                    Duration: {autonomyReport.duration.toFixed(0)}ms
-                  </div>
+                    )}
+
+                    <div className="space-y-1 mt-2">
+                      {autonomyReport.tasksCompleted.filter(t => t.id !== 'goal-exec').slice(0, 2).map(task => (
+                        <div
+                          key={task.id}
+                          className={`text-[9px] px-2 py-1.5 rounded border ${
+                            task.success
+                              ? task.usedAI
+                                ? 'bg-accent/5 border-accent/20 text-accent'
+                                : 'bg-primary/5 border-primary/20 text-primary'
+                              : 'bg-destructive/5 border-destructive/20 text-destructive'
+                          }`}
+                        >
+                          <span className="font-bold text-[7px] uppercase">
+                            [{task.usedAI ? 'AI' : '⚙️'}]
+                          </span>{' '}
+                          {task.name}: {task.detail.slice(0, 60)}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-[8px] text-primary/60 mt-2 flex items-center gap-1">
+                      Click for full details →
+                    </div>
+                  </button>
                 </div>
               )}
 
