@@ -1013,42 +1013,50 @@ const GrokBridge: React.FC = () => {
   const [lastErrors, setLastErrors] = useState<string>('');
 
   const buildProjectContext = useCallback(async () => {
-    if (!isElectron) return;
     setContextLoading(true);
     try {
-      const { ipcRenderer } = (window as any).require('electron');
-
-      const [filesResult, gitResult] = await Promise.all([
-        ipcRenderer.invoke('list-project-files'),
-        ipcRenderer.invoke('git-log', { count: 5 }),
-      ]);
-
-      const fileTree = filesResult.success ? filesResult.files : [];
-
-      const keyFiles = fileTree.filter((f: string) =>
-        f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
-        f === 'tailwind.config.ts' || f === 'index.html' ||
-        (f.startsWith('src/') && (f.endsWith('.tsx') || f.endsWith('.ts')) && !f.includes('lib/capabilities/'))
-      ).slice(0, 15);
-
-      const contentsResult = await ipcRenderer.invoke('read-files-for-context', {
-        filePaths: keyFiles,
-        maxSizePerFile: 6000,
-      });
-
       let context = `=== PROJECT CONTEXT ===\n`;
-      context += `This is a React + TypeScript + Vite desktop app (Electron) called Guardian AI.\n\n`;
+      context += `This is a React + TypeScript + Vite desktop app (Electron) called Guardian AI ("lambda Recursive").\n\n`;
 
-      context += `=== FILE TREE ===\n`;
-      context += fileTree.slice(0, 80).join('\n') + '\n';
-      if (fileTree.length > 80) context += `... (${fileTree.length} total files)\n`;
+      if (isElectron) {
+        const { ipcRenderer } = (window as any).require('electron');
 
-      if (gitResult.success && gitResult.log) {
-        context += `\n=== RECENT GIT LOG ===\n${gitResult.log}\n`;
-      }
+        const [filesResult, gitResult] = await Promise.all([
+          ipcRenderer.invoke('list-project-files'),
+          ipcRenderer.invoke('git-log', { count: 5 }),
+        ]);
 
-      if (contentsResult.success) {
-        for (const file of contentsResult.files) {
+        const fileTree = filesResult.success ? filesResult.files : [];
+
+        const keyFiles = fileTree.filter((f: string) =>
+          f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
+          f === 'tailwind.config.ts' || f === 'index.html' ||
+          (f.startsWith('src/') && (f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css')) && !f.includes('lib/capabilities/'))
+        ).slice(0, 20);
+
+        const contentsResult = await ipcRenderer.invoke('read-files-for-context', {
+          filePaths: keyFiles,
+          maxSizePerFile: 6000,
+        });
+
+        context += `=== FILE TREE ===\n`;
+        context += fileTree.slice(0, 80).join('\n') + '\n';
+        if (fileTree.length > 80) context += `... (${fileTree.length} total files)\n`;
+
+        if (gitResult.success && gitResult.log) {
+          context += `\n=== RECENT GIT LOG ===\n${gitResult.log}\n`;
+        }
+
+        if (contentsResult.success) {
+          for (const file of contentsResult.files) {
+            context += `\n=== ${file.path} ===\n${file.content}\n`;
+          }
+        }
+      } else {
+        context += `=== FILE TREE ===\n`;
+        context += SELF_SOURCE.map(f => f.path).join('\n') + '\n';
+
+        for (const file of SELF_SOURCE.filter(f => f.content && f.content.length < 8000).slice(0, 15)) {
           context += `\n=== ${file.path} ===\n${file.content}\n`;
         }
       }
@@ -1073,7 +1081,7 @@ const GrokBridge: React.FC = () => {
   }, [lastErrors]);
 
   useEffect(() => {
-    if (mode === 'browser' && isElectron) {
+    if (mode === 'browser') {
       buildProjectContext();
     }
   }, [mode]);
@@ -1330,28 +1338,26 @@ const GrokBridge: React.FC = () => {
           </button>
         </div>
 
-        {isElectron && (
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={copyContextToClipboard}
+            disabled={contextLoading || !projectContext}
+            data-testid="button-copy-context"
+            className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-40"
+          >
+            {contextLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
+            Copy Context
+          </button>
+          {lastErrors && (
             <button
-              onClick={copyContextToClipboard}
-              disabled={contextLoading || !projectContext}
-              data-testid="button-copy-context"
-              className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-40"
+              onClick={() => buildErrorFeedback(lastErrors)}
+              data-testid="button-send-errors-top"
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors border border-destructive/20"
             >
-              {contextLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
-              Copy Context
+              <AlertTriangle className="w-3 h-3" /> Send Errors
             </button>
-            {lastErrors && (
-              <button
-                onClick={() => buildErrorFeedback(lastErrors)}
-                data-testid="button-send-errors-top"
-                className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors border border-destructive/20"
-              >
-                <AlertTriangle className="w-3 h-3" /> Send Errors
-              </button>
-            )}
-          </div>
-        )}
+          )}
+        </div>
 
         {statusMessage && (
           <span className="text-[9px] text-primary/70 ml-2">{statusMessage}</span>

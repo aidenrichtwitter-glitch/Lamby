@@ -84,6 +84,16 @@ supabase/
   - **Auto Restart**: After successful batch apply, waits for Vite HMR (2s). IPC handlers `restart-dev-server` and `run-npm-install` available for full restarts / dependency installs.
   - Batch IPC handlers: `batch-write-files`, `batch-rollback`, `batch-git-commit`, `git-log`, `read-files-for-context`, `restart-dev-server`, `run-npm-install`
 
+## Testing
+- `npm test` — runs all Vitest tests
+- `npm run test:watch` — watch mode
+- Test files:
+  - `src/test/safety-engine.test.ts` — safety engine validation
+  - `src/test/pipeline.test.ts` — code parser unit tests + live Grok API test (creates `src/lib/greeter.ts` function)
+  - `src/test/pipeline-e2e.test.ts` — end-to-end theme change test (sends `index.css` to Grok, asks "green to blue", verifies response)
+  - `src/test/fixtures/` — saved JSON fixtures from live API test runs (for reference/debugging)
+- Shared module: `src/lib/code-parser.ts` — `parseCodeBlocks()` + `ParsedBlock` interface (used by GrokBridge + tests)
+
 ## Development
 - Dev server: `npx vite` (port 5000) — web-only mode
 - Desktop dev: `npm run electron:dev` — full desktop experience
