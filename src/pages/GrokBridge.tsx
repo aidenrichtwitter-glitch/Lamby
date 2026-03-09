@@ -183,29 +183,22 @@ function ClipboardExtractor({ onApply }: { onApply: (filePath: string, code: str
   };
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-20 border-t border-primary/30 bg-background/95 backdrop-blur-sm shadow-2xl">
+    <div className={`absolute bottom-0 left-0 right-0 z-20 border-t bg-background/95 backdrop-blur-sm shadow-2xl transition-colors ${flash ? 'border-primary bg-primary/10' : 'border-primary/30'}`}>
       {/* Toolbar */}
       <div className="px-4 py-2 flex items-center gap-3 border-b border-border/30">
         <div className="flex items-center gap-2">
-          <Zap className="w-3.5 h-3.5 text-primary animate-pulse" />
+          <Zap className={`w-3.5 h-3.5 text-primary ${flash ? 'animate-ping' : 'animate-pulse'}`} />
           <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Code Extractor</span>
         </div>
-        <button
-          onClick={() => setMonitoring(m => !m)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
-            monitoring
-              ? 'bg-primary/20 text-primary border border-primary/40'
-              : 'bg-secondary/50 text-muted-foreground hover:bg-secondary/80'
-          }`}
-        >
-          {monitoring ? <ClipboardCheck className="w-3 h-3" /> : <Clipboard className="w-3 h-3" />}
-          {monitoring ? '● Monitoring clipboard' : 'Monitor clipboard'}
-        </button>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary/10 text-primary text-[9px] border border-primary/20">
+          <ClipboardCheck className="w-3 h-3" />
+          <span>Auto-capture on <kbd className="px-1 py-0.5 rounded bg-primary/20 text-[8px] font-bold">Ctrl+C</kbd></span>
+        </div>
         <button
           onClick={readClipboard}
           className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-secondary/50 hover:bg-secondary/80 text-[10px] text-muted-foreground transition-colors"
         >
-          <Clipboard className="w-3 h-3" /> Paste now
+          <Clipboard className="w-3 h-3" /> Read clipboard
         </button>
         {blocks.length > 0 && (
           <span className="text-[9px] text-primary/70 ml-1">{blocks.length} block{blocks.length > 1 ? 's' : ''} detected</span>
@@ -226,10 +219,9 @@ function ClipboardExtractor({ onApply }: { onApply: (filePath: string, code: str
       {!collapsed && (
         <div className="max-h-72 overflow-auto p-3 space-y-2">
           {blocks.length === 0 && (
-            <div className="text-center py-6 text-[10px] text-muted-foreground/40">
-              {monitoring
-                ? 'Watching clipboard... copy a Grok response with code blocks'
-                : 'Click "Monitor clipboard" or "Paste now" to extract code from Grok'}
+            <div className="text-center py-4 text-[10px] text-muted-foreground/50">
+              <p>Copy Grok's response (<kbd className="px-1 py-0.5 rounded bg-secondary text-[8px]">Ctrl+C</kbd>) — code blocks auto-appear here</p>
+              <p className="mt-1 text-[9px] text-muted-foreground/30">Also triggers when you tab back to this window</p>
             </div>
           )}
           {blocks.map(block => (
