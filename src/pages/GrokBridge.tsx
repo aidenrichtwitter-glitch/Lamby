@@ -391,47 +391,9 @@ const GrokBridge: React.FC = () => {
 
   return (
     <div className="h-full flex bg-background text-foreground font-mono">
-      {/* Sidebar — conversation history */}
-      {showSidebar && (
-        <div className="w-56 border-r border-border/30 bg-card/30 flex flex-col shrink-0">
-          <div className="p-3 border-b border-border/30">
-            <button
-              onClick={newConversation}
-              className="w-full px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 text-[11px] font-medium transition-colors"
-            >
-              + New Chat
-            </button>
-          </div>
-          <div className="flex-1 overflow-auto p-2 space-y-1">
-            {conversations.map(c => (
-              <div
-                key={c.id}
-                className={`group flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-colors text-[10px] ${
-                  c.id === activeConvoId ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-secondary/50'
-                }`}
-                onClick={() => switchConversation(c.id)}
-              >
-                <span className="flex-1 truncate">{c.title}</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-destructive"
-                >
-                  <Trash2 className="w-2.5 h-2.5" />
-                </button>
-              </div>
-            ))}
-            {conversations.length === 0 && (
-              <p className="text-[9px] text-muted-foreground/40 text-center py-4">No conversations yet</p>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Main area: chat + embedded browser */}
-      <div className="flex-1 flex min-w-0">
-        {/* Chat panel */}
-        <div className={`flex flex-col min-w-0 ${showBrowser ? 'w-1/2' : 'flex-1'}`}>
-          {/* Header */}
+      {/* Left panel: chat (with inline conversation list) */}
+      <div className={`flex flex-col min-w-0 ${showBrowser ? 'w-[360px] shrink-0' : 'flex-1'} border-r border-border/30`}>
+        {/* Header */}
           <div className="border-b border-border/50 bg-card/50 backdrop-blur-sm shrink-0">
             <div className="px-4 py-2.5 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
