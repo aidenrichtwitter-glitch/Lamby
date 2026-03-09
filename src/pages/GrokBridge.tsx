@@ -460,6 +460,51 @@ const GrokBridge: React.FC = () => {
   const selectedModel = MODELS.find(m => m.id === model) || MODELS[1];
   const currentSite = BROWSER_SITES.find(s => s.url === browserUrl);
 
+  const outboundPrompts = useMemo(() => {
+    const errors = Array.from(validationResults.values())
+      .flat()
+      .filter(check => check.severity === 'error')
+      .map(check => `- ${check.message}`);
+
+    const recentFiles = appliedChanges.slice(-5).map(change => `- ${change.filePath}`);
+
+    const prompts = [
+      {
+        id: 'errors',
+        label: 'Copy Errors',
+        content: errors.length > 0
+          ? `Fix these build/runtime issues and return patch-ready code blocks with file paths:\n\n${errors.join('\n')}`
+          : `No captured validation errors yet. Ask targeted debugging questions and suggest the fastest next verification step for this app.`,
+      },
+      {
+        id: 'suggestions',
+        label: 'Copy Suggestions Request',
+        content: `Suggest the top 3 highest-impact improvements for this app right now. Prioritize speed, reliability, and clean architecture. Return concise rationale + code patch blocks.`,
+      },
+      {
+        id: 'requests',
+        label: 'Copy Goal Request',
+        content: `Act as my rapid app-building copilot. I need actionable next steps and patch-ready code for current work.${recentFiles.length ? `\n\nRecently changed files:\n${recentFiles.join('\n')}` : ''}`,
+      },
+      {
+        id: 'status',
+        label: 'Copy Current Status',
+        content: `Current bridge status: ${statusMessage || 'No status yet'}\nSite: ${currentSite?.name || browserUrl}\n\nTell me exactly what to do next in Grok and what to paste back.`
+      }
+    ];
+
+    return prompts;
+  }, [validationResults, appliedChanges, statusMessage, currentSite?.name, browserUrl]);
+
+  const copyPromptToClipboard = useCallback(async (label: string, content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setStatusMessage(`✓ Copied: ${label}`);
+    } catch {
+      setStatusMessage('⚠ Clipboard write failed');
+    }
+  }, []);
+
   return (
     <div className="h-full flex flex-col bg-background text-foreground font-mono">
       {/* ── Top bar with mode toggle ── */}
