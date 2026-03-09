@@ -265,8 +265,9 @@ async function testWorldAware(): Promise<DimensionResult> {
     checks.push({ name: 'meaningful-content', pass: false, detail: 'No content available' });
   }
 
-  // Check: Has knowledge search (AI-powered synthesis)?
-  checks.push({ name: 'knowledge-synthesis', pass: true, detail: 'Knowledge search edge function deployed' });
+  // Check: Has knowledge search that actually works (tested above via web-reach)
+  const searchWorked = checks.find(c => c.name === 'web-reach')?.pass || false;
+  checks.push({ name: 'knowledge-synthesis', pass: searchWorked, detail: searchWorked ? 'Knowledge search pipeline working' : 'Knowledge search not returning results' });
 
   // Check: Has search history (evidence of past searches)?
   const { data: searchJournal } = await supabase
