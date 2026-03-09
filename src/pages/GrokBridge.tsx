@@ -557,40 +557,14 @@ const GrokBridge: React.FC = () => {
       {/* ── Mode: Browser Chat ── */}
       {mode === 'browser' && (
         <div className="flex-1 flex flex-col relative min-h-0">
-          {/* Browser toolbar */}
-          <div className="shrink-0 border-b border-border/30 bg-card/40 px-3 py-1.5 flex items-center gap-2">
-            <div className="flex items-center gap-1 flex-1 overflow-x-auto">
-              {BROWSER_SITES.map(site => (
-                <button
-                  key={site.id}
-                  onClick={() => setBrowserUrl(site.url)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] whitespace-nowrap transition-colors ${
-                    browserUrl === site.url
-                      ? 'bg-primary/15 text-primary border border-primary/30'
-                      : 'bg-secondary/30 text-muted-foreground hover:bg-secondary/60 border border-transparent'
-                  }`}
-                >
-                  <span>{site.icon}</span>
-                  <span>{site.name}</span>
-                </button>
-              ))}
+          {/* Active site indicator */}
+          {currentSite && (
+            <div className="shrink-0 border-b border-border/30 bg-card/40 px-4 py-1.5 flex items-center gap-2">
+              <span className="text-sm">{currentSite.icon}</span>
+              <span className="text-[10px] text-muted-foreground">Last opened: <span className="text-foreground/80 font-medium">{currentSite.name}</span></span>
+              <span className="text-[9px] text-muted-foreground/40 ml-2">Copy AI responses → code auto-extracted below</span>
             </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <Globe className="w-3 h-3 text-muted-foreground/50" />
-              <input
-                value={customUrl}
-                onChange={e => setCustomUrl(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && customUrl.trim()) {
-                    setBrowserUrl(customUrl.startsWith('http') ? customUrl : `https://${customUrl}`);
-                    setCustomUrl('');
-                  }
-                }}
-                placeholder="Custom URL..."
-                className="w-36 bg-background border border-border/50 rounded px-2 py-1 text-[10px] text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/30"
-              />
-            </div>
-          </div>
+          )}
 
           {/* Browser panel */}
           <div className="flex-1 relative flex flex-col items-center justify-center gap-6 p-8">
