@@ -108,44 +108,45 @@ export async function batchDeterministicSearch(queries: string[]): Promise<WebSe
 
 async function verifyAllCapabilities(): Promise<AutonomyTask> {
   const start = performance.now();
-  const { data: caps } = await supabase
+  const { data: caps, error: capsError } = await supabase
     .from('capabilities')
     .select('name, source_file, virtual_source, verified');
 
-  if (!caps) return { id: 'verify-all', name: 'Deep verification scan', type: 'verify', success: false, detail: 'No data', duration: performance.now() - start, usedAI: false };
+  if (capsError || !caps) return { id: 'verify-all', name: 'Deep verification scan', type: 'verify', success: false, detail: `DB error: ${capsError?.message || 'no data'}`, duration: performance.now() - start, usedAI: false };
 
   let fixed = 0;
   let ghosts = 0;
   let deepChecks = 0;
+  const updateErrors: string[] = [];
 
   for (const cap of caps) {
     const result = verifyCapability(cap.name, cap.source_file, cap.virtual_source);
     
-    // Runtime test: try to actually import and use the capability
     if (result.status === 'verified' && cap.source_file) {
-      try {
-        // Check if exports are actually callable
-        const exportCheck = result.checks.find(c => c.name === 'has-exports');
-        if (exportCheck?.passed) deepChecks++;
-      } catch {}
+      const exportCheck = result.checks.find(c => c.name === 'has-exports');
+      if (exportCheck?.passed) deepChecks++;
     }
     
     if (result.status === 'verified' && !cap.verified) {
-      await supabase.from('capabilities').update({ verified: true, verified_at: new Date().toISOString(), verification_method: 'autonomy-deep-scan' } as any).eq('name', cap.name);
-      fixed++;
+      const { error } = await supabase.from('capabilities').update({ verified: true, verified_at: new Date().toISOString(), verification_method: 'autonomy-deep-scan' } as any).eq('name', cap.name);
+      if (error) updateErrors.push(`fix ${cap.name}: ${error.message}`);
+      else fixed++;
     } else if (result.status === 'ghost') {
       ghosts++;
-      // Auto-quarantine ghost capabilities
-      await supabase.from('capabilities').update({ verified: false, verification_method: 'ghost-detected' } as any).eq('name', cap.name);
+      const { error } = await supabase.from('capabilities').update({ verified: false, verification_method: 'ghost-detected' } as any).eq('name', cap.name);
+      if (error) updateErrors.push(`quarantine ${cap.name}: ${error.message}`);
     }
   }
 
+  const hasErrors = updateErrors.length > 0;
   return {
     id: 'verify-all',
     name: 'Deep verification scan',
     type: 'verify',
-    success: true,
-    detail: `Verified ${caps.length} caps (${deepChecks} deep-checked). Fixed ${fixed}. Quarantined ${ghosts} ghosts.`,
+    success: !hasErrors,
+    detail: hasErrors
+      ? `Verified ${caps.length} caps but ${updateErrors.length} update(s) failed: ${updateErrors.slice(0, 2).join('; ')}`
+      : `Verified ${caps.length} caps (${deepChecks} deep-checked). Fixed ${fixed}. Quarantined ${ghosts} ghosts.`,
     duration: performance.now() - start,
     usedAI: false,
   };
