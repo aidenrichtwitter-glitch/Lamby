@@ -224,7 +224,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApp
   };
 
   return (
-    <div className={`shrink-0 border-t bg-background/95 backdrop-blur-sm shadow-2xl transition-colors z-20 ${flash ? 'border-primary bg-primary/10' : 'border-primary/30'}`}>
+    <div className={`border-t bg-background/95 backdrop-blur-sm shadow-2xl transition-colors z-20 ${flash ? 'border-primary bg-primary/10' : 'border-primary/30'}`}>
       {/* Toolbar */}
       <div className="px-4 py-2 flex items-center gap-3 border-b border-border/30">
         <div className="flex items-center gap-2">
@@ -607,8 +607,8 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
 
   if (!isElectron) {
     return (
-      <div style={{ flex: '1 1 0%', display: 'flex', flexDirection: 'column', minHeight: 0, overflowY: 'auto' }}>
-        <div className="shrink-0 border-b border-border/30 bg-card/40 px-3 py-2 flex items-center gap-2">
+      <div>
+        <div className="border-b border-border/30 bg-card/40 px-3 py-2 flex items-center gap-2">
           <div className="flex items-center gap-1 flex-1 overflow-x-auto">
             {BROWSER_SITES.map(site => (
               <button
@@ -1566,7 +1566,7 @@ const GrokBridge: React.FC = () => {
   }, []);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="bg-background text-foreground font-mono">
+    <div className="h-full flex flex-col bg-background text-foreground font-mono overflow-y-auto">
       {pendingApply && (
         <ApplyConfirmDialog
           pending={pendingApply}
@@ -1636,7 +1636,7 @@ const GrokBridge: React.FC = () => {
       )}
 
       {/* ── Top bar ── */}
-      <div className="shrink-0 border-b border-border/40 bg-card/60 overflow-x-auto overflow-y-hidden">
+      <div className="border-b border-border/40 bg-card/60">
         <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 shrink-0">
             <Sparkles className="w-3.5 h-3.5 text-[hsl(var(--terminal-amber))]" />
@@ -1755,24 +1755,21 @@ const GrokBridge: React.FC = () => {
 
       {/* ── Mode: Browser Chat (Grok Desktop webview) ── */}
       {mode === 'browser' && (
-        <div style={{ flex: '1 1 0%', display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+        <div>
           {showProjectPanel && (
-            <div className="w-52 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
+            <div className="border-b border-border/30 bg-card/30">
               <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} />
             </div>
           )}
-          <div style={{ flex: '1 1 0%', display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, overflowY: 'auto' }}>
-            <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} />
-          </div>
+          <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} />
         </div>
       )}
 
       {/* ── Mode: API Chat ── */}
       {mode === 'api' && (
-        <div style={{ flex: '1 1 0%', display: 'flex', minHeight: 0, overflow: 'hidden' }}>
-          {/* Project explorer panel */}
+        <div>
           {showProjectPanel && (
-            <div className="w-52 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
+            <div className="border-b border-border/30 bg-card/30">
               <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} />
             </div>
           )}
