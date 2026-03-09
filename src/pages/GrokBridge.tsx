@@ -293,12 +293,18 @@ interface GrokDesktopBrowserProps {
 }
 
 function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl, onApply }: GrokDesktopBrowserProps) {
-  const webviewRef = useRef<HTMLElement | null>(null);
+  const webviewRef = useRef<any>(null);
   const [loading, setLoading] = useState(true);
-  const [webviewReady, setWebviewReady] = useState(false);
+  const initialUrlRef = useRef(browserUrl);
+  const currentUrlRef = useRef(browserUrl);
 
   const navigateTo = useCallback((url: string) => {
     if (isElectron) {
+      const wv = webviewRef.current;
+      if (wv && typeof wv.loadURL === 'function') {
+        wv.loadURL(url);
+      }
+      currentUrlRef.current = url;
       setBrowserUrl(url);
       setLoading(true);
     } else {
@@ -319,23 +325,24 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
     if (!wv) return;
 
     const onLoading = () => setLoading(true);
-    const onLoaded = () => { setLoading(false); setWebviewReady(true); };
+    const onLoaded = () => setLoading(false);
     const onNavigation = (e: any) => {
-      if (e.url) setBrowserUrl(e.url);
+      if (e.url && e.url !== currentUrlRef.current) {
+        currentUrlRef.current = e.url;
+        setBrowserUrl(e.url);
+      }
     };
 
     wv.addEventListener('did-start-loading', onLoading);
     wv.addEventListener('did-stop-loading', onLoaded);
     wv.addEventListener('did-navigate', onNavigation);
-    wv.addEventListener('did-navigate-in-page', onNavigation);
 
     return () => {
       wv.removeEventListener('did-start-loading', onLoading);
       wv.removeEventListener('did-stop-loading', onLoaded);
       wv.removeEventListener('did-navigate', onNavigation);
-      wv.removeEventListener('did-navigate-in-page', onNavigation);
     };
-  }, [setBrowserUrl, webviewReady]);
+  }, [setBrowserUrl]);
 
   const currentSite = BROWSER_SITES.find(s => browserUrl.startsWith(s.url));
 
@@ -409,7 +416,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
         {/* @ts-ignore - webview is an Electron-specific HTML element */}
         <webview
           ref={(el: any) => { webviewRef.current = el; }}
-          src={browserUrl}
+          src={initialUrlRef.current}
           partition="persist:grok"
           data-testid="webview-browser"
           style={{ width: '100%', height: '100%', border: 'none' }}
