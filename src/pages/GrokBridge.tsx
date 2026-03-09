@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Send, Shield, Check, AlertTriangle, Undo2, FileCode, Sparkles, Bot,
   User, Loader2, Code2, Trash2, ChevronDown, Globe, MessageSquare,
