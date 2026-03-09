@@ -738,6 +738,23 @@ function setupIpcHandlers() {
     });
   });
 
+  ipcMain.handle('check-compile-project', async () => {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const projectRoot = getProjectRoot();
+        const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+        execFile(npxCmd, ['tsc', '--noEmit', '--pretty', 'false'], { cwd: projectRoot, timeout: 30000 }, (error, stdout, stderr) => {
+          const output = (stdout || '') + (stderr || '');
+          if (error && output.includes('error TS')) {
+            resolve({ hasErrors: true, errorText: output.slice(0, 4000) });
+          } else {
+            resolve({ hasErrors: false, errorText: '' });
+          }
+        });
+      }, 1500);
+    });
+  });
+
   ipcMain.handle('list-project-files', async () => {
     try {
       const projectRoot = getProjectRoot();
@@ -759,6 +776,173 @@ function setupIpcHandlers() {
     } catch (e) {
       return { success: false, error: e.message, files: [] };
     }
+  });
+
+  // ─── Guardian AI: Git log for context ────────────────────────────────────────
+
+  ipcMain.handle('git-log', async (_event, { count }) => {
+    const projectRoot = getProjectRoot();
+    const n = Math.min(Math.max(count || 5, 1), 20);
+    return new Promise((resolve) => {
+      execFile('git', ['log', `--max-count=${n}`, '--oneline', '--no-decorate'], { cwd: projectRoot, timeout: 5000 }, (err, stdout) => {
+        if (err) resolve({ success: false, error: err.message, log: '' });
+        else resolve({ success: true, log: stdout.trim() });
+      });
+    });
+  });
+
+  // ─── Guardian AI: Batch write multiple files at once ───────────────────────
+
+  ipcMain.handle('batch-write-files', async (_event, { files }) => {
+    const results = [];
+    const backups = [];
+    let allSuccess = true;
+
+    for (const { filePath, content } of files) {
+      const check = isPathSafe(filePath);
+      if (!check.safe) {
+        results.push({ filePath, success: false, error: check.error });
+        allSuccess = false;
+        break;
+      }
+
+      try {
+        let backupPath = '';
+        if (fs.existsSync(check.resolved)) {
+          if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+          const timestamp = Date.now();
+          const safeName = path.basename(filePath).replace(/[^a-zA-Z0-9._-]/g, '_');
+          backupPath = path.join(BACKUP_DIR, `${timestamp}-${safeName}`);
+          fs.copyFileSync(check.resolved, backupPath);
+        }
+        backups.push({ filePath, backupPath, resolved: check.resolved });
+
+        const dir = path.dirname(check.resolved);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(check.resolved, content, 'utf-8');
+        results.push({ filePath, success: true, backupPath });
+      } catch (e) {
+        results.push({ filePath, success: false, error: e.message });
+        allSuccess = false;
+        break;
+      }
+    }
+
+    return { success: allSuccess, results, backupCount: backups.length };
+  });
+
+  // ─── Guardian AI: Batch rollback all files ─────────────────────────────────
+
+  ipcMain.handle('batch-rollback', async (_event, { backups }) => {
+    let restored = 0;
+    for (const { filePath, backupPath } of backups) {
+      try {
+        const check = isPathSafe(filePath);
+        if (!check.safe) continue;
+        if (backupPath && fs.existsSync(backupPath)) {
+          const resolvedBackup = path.resolve(backupPath);
+          const relToBackup = path.relative(BACKUP_DIR, resolvedBackup);
+          if (relToBackup && !relToBackup.startsWith('..') && !path.isAbsolute(relToBackup)) {
+            fs.copyFileSync(backupPath, check.resolved);
+            restored++;
+          }
+        }
+      } catch (_) {}
+    }
+    return { success: true, restored };
+  });
+
+  // ─── Guardian AI: Batch git commit ─────────────────────────────────────────
+
+  ipcMain.handle('batch-git-commit', async (_event, { filePaths, message }) => {
+    const projectRoot = getProjectRoot();
+    const safePaths = filePaths.filter(fp => isPathSafe(fp).safe);
+    if (safePaths.length === 0) return { success: false, error: 'No safe paths to commit' };
+    return new Promise((resolve) => {
+      execFile('git', ['add', '--', ...safePaths], { cwd: projectRoot, timeout: 10000 }, (addErr, _out, addStderr) => {
+        if (addErr) { resolve({ success: false, error: addStderr || addErr.message }); return; }
+        execFile('git', ['commit', '-m', message], { cwd: projectRoot, timeout: 10000 }, (commitErr, commitOut, commitStderr) => {
+          if (commitErr) resolve({ success: false, error: commitStderr || commitErr.message });
+          else resolve({ success: true, output: commitOut });
+        });
+      });
+    });
+  });
+
+  // ─── Guardian AI: Restart dev server ───────────────────────────────────────
+
+  let viteProcess = null;
+
+  ipcMain.handle('restart-dev-server', async () => {
+    const projectRoot = getProjectRoot();
+    try {
+      if (viteProcess) {
+        try { viteProcess.kill('SIGTERM'); } catch (_) {}
+        viteProcess = null;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+      viteProcess = require('child_process').spawn(npxCmd, ['vite', '--host', '0.0.0.0', '--port', '5000'], {
+        cwd: projectRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: false,
+      });
+
+      return new Promise((resolve) => {
+        let output = '';
+        const timeout = setTimeout(() => {
+          resolve({ success: true, output: output || 'Server starting...' });
+        }, 5000);
+
+        viteProcess.stdout.on('data', (data) => {
+          output += data.toString();
+          if (output.includes('ready in') || output.includes('Local:')) {
+            clearTimeout(timeout);
+            resolve({ success: true, output });
+          }
+        });
+        viteProcess.stderr.on('data', (data) => { output += data.toString(); });
+        viteProcess.on('error', (err) => {
+          clearTimeout(timeout);
+          resolve({ success: false, error: err.message });
+        });
+      });
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // ─── Guardian AI: Run npm install ──────────────────────────────────────────
+
+  ipcMain.handle('run-npm-install', async () => {
+    const projectRoot = getProjectRoot();
+    const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    return new Promise((resolve) => {
+      execFile(npmCmd, ['install'], { cwd: projectRoot, timeout: 60000 }, (err, stdout, stderr) => {
+        if (err) resolve({ success: false, error: stderr || err.message });
+        else resolve({ success: true, output: stdout });
+      });
+    });
+  });
+
+  // ─── Guardian AI: Read multiple files for context ──────────────────────────
+
+  ipcMain.handle('read-files-for-context', async (_event, { filePaths, maxSizePerFile }) => {
+    const maxSize = maxSizePerFile || 8000;
+    const results = [];
+    for (const filePath of filePaths) {
+      const check = isPathSafe(filePath);
+      if (!check.safe) continue;
+      try {
+        if (!fs.existsSync(check.resolved)) continue;
+        const stat = fs.statSync(check.resolved);
+        if (stat.size > 500000) continue;
+        let content = fs.readFileSync(check.resolved, 'utf-8');
+        if (content.length > maxSize) content = content.slice(0, maxSize) + '\n... (truncated)';
+        results.push({ path: filePath, content });
+      } catch (_) {}
+    }
+    return { success: true, files: results };
   });
 
   // Open Grok in a new native BrowserWindow (called from React app)

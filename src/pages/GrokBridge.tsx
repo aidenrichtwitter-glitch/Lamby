@@ -144,7 +144,7 @@ function extractContextSections(fullText: string): string[] {
   return sections;
 }
 
-function ClipboardExtractor({ onApply }: { onApply: (filePath: string, code: string) => void }) {
+function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: string, code: string) => void; onApplyAll?: (blocks: { filePath: string; code: string }[]) => void }) {
   const [blocks, setBlocks] = useState<ExtractedBlock[]>([]);
   const [responseContext, setResponseContext] = useState<string>('');
   const [contextSections, setContextSections] = useState<string[]>([]);
@@ -247,6 +247,18 @@ function ClipboardExtractor({ onApply }: { onApply: (filePath: string, code: str
         </button>
         {blocks.length > 0 && (
           <span className="text-[9px] text-primary/70 ml-1">{blocks.length} block{blocks.length > 1 ? 's' : ''} detected</span>
+        )}
+        {isElectron && onApplyAll && blocks.filter(b => b.filePath && !b.applied).length > 1 && (
+          <button
+            onClick={() => {
+              const applyable = blocks.filter(b => b.filePath && !b.applied);
+              onApplyAll(applyable.map(b => ({ filePath: b.filePath, code: b.code })));
+            }}
+            data-testid="button-apply-all"
+            className="flex items-center gap-1 px-3 py-1.5 rounded bg-primary/20 text-primary hover:bg-primary/30 text-[10px] font-bold transition-colors border border-primary/30"
+          >
+            <Zap className="w-3 h-3" /> Apply All ({blocks.filter(b => b.filePath && !b.applied).length})
+          </button>
         )}
         <div className="ml-auto flex items-center gap-2">
           {blocks.length > 0 && (
@@ -497,9 +509,10 @@ interface GrokDesktopBrowserProps {
   customUrl: string;
   setCustomUrl: (url: string) => void;
   onApply: (filePath: string, code: string) => void;
+  onApplyAll?: (blocks: { filePath: string; code: string }[]) => void;
 }
 
-function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl, onApply }: GrokDesktopBrowserProps) {
+function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl, onApply, onApplyAll }: GrokDesktopBrowserProps) {
   const webviewRef = useRef<any>(null);
   const [loading, setLoading] = useState(true);
   const initialUrlRef = useRef(browserUrl);
@@ -580,7 +593,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
             </p>
           </div>
         </div>
-        <ClipboardExtractor onApply={onApply} />
+        <ClipboardExtractor onApply={onApply} onApplyAll={onApplyAll} />
       </div>
     );
   }
@@ -639,7 +652,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
         )}
       </div>
 
-      <ClipboardExtractor onApply={onApply} />
+      <ClipboardExtractor onApply={onApply} onApplyAll={onApplyAll} />
     </div>
   );
 }
@@ -885,6 +898,242 @@ const GrokBridge: React.FC = () => {
     }
   }, []);
 
+  // ─── Batch Apply All ───────────────────────────────────────────────────────
+
+  const [batchStage, setBatchStage] = useState<'idle' | 'writing' | 'checking' | 'committing' | 'restarting' | 'done' | 'error'>('idle');
+  const [batchMessage, setBatchMessage] = useState('');
+  const [batchBackups, setBatchBackups] = useState<{ filePath: string; backupPath: string }[]>([]);
+  const [batchError, setBatchError] = useState('');
+
+  const batchApplyAll = useCallback(async (blocks: { filePath: string; code: string }[]) => {
+    if (!isElectron || blocks.length === 0) return;
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+
+      setBatchStage('writing');
+      setBatchMessage(`Writing ${blocks.length} file${blocks.length > 1 ? 's' : ''}...`);
+      setBatchError('');
+
+      const writeResult = await ipcRenderer.invoke('batch-write-files', {
+        files: blocks.map(b => ({ filePath: b.filePath, content: b.code })),
+      });
+
+      const backups = writeResult.results
+        .filter((r: any) => r.success && r.backupPath)
+        .map((r: any) => ({ filePath: r.filePath, backupPath: r.backupPath }));
+      setBatchBackups(backups);
+
+      if (!writeResult.success) {
+        const failedFile = writeResult.results.find((r: any) => !r.success);
+        if (backups.length > 0) {
+          await ipcRenderer.invoke('batch-rollback', { backups });
+        }
+        setBatchStage('error');
+        setBatchMessage(`Write failed: ${failedFile?.error || 'Unknown error'} (rolled back ${backups.length} files)`);
+        return;
+      }
+
+      setBatchStage('checking');
+      setBatchMessage('Running project-wide compile check...');
+
+      const hasTsFiles = blocks.some(b => /\.(tsx?|jsx?)$/.test(b.filePath));
+      let hasCompileErrors = false;
+      let compileErrorText = '';
+      if (hasTsFiles) {
+        const checkResult = await ipcRenderer.invoke('check-compile-project');
+        if (checkResult.hasErrors) {
+          hasCompileErrors = true;
+          compileErrorText = checkResult.errorText;
+        }
+      }
+
+      if (hasCompileErrors) {
+        setBatchStage('error');
+        setBatchMessage('Compile errors detected — rollback recommended');
+        setBatchError(compileErrorText);
+        return;
+      }
+
+      setBatchStage('committing');
+      setBatchMessage('Committing changes...');
+
+      const fileList = blocks.map(b => b.filePath).join(', ');
+      const commitResult = await ipcRenderer.invoke('batch-git-commit', {
+        filePaths: blocks.map(b => b.filePath),
+        message: `Guardian AI: batch apply ${blocks.length} files (${fileList.slice(0, 100)})`,
+      });
+
+      for (const block of blocks) {
+        const existing = SELF_SOURCE.find(f => f.path === block.filePath);
+        if (existing) { existing.content = block.code; existing.isModified = true; existing.lastModified = Date.now(); }
+      }
+
+      setAppliedChanges(prev => [...prev, ...blocks.map(b => ({
+        filePath: b.filePath,
+        previousContent: '',
+        newContent: b.code,
+        timestamp: Date.now(),
+        backupPath: backups.find((bk: any) => bk.filePath === b.filePath)?.backupPath || '',
+      }))]);
+
+      setBatchStage('restarting');
+      setBatchMessage('Restarting dev server...');
+
+      const hasConfigChanges = blocks.some(b =>
+        b.filePath === 'vite.config.ts' || b.filePath === 'tsconfig.json' ||
+        b.filePath === 'tailwind.config.ts' || b.filePath === 'package.json'
+      );
+
+      if (hasConfigChanges) {
+        try {
+          const restartResult = await ipcRenderer.invoke('restart-dev-server');
+          if (!restartResult.success) {
+            setBatchMessage(`${blocks.length} files applied (restart warning: ${restartResult.error})`);
+          }
+        } catch {
+          // non-fatal
+        }
+      } else {
+        await new Promise(r => setTimeout(r, 2000));
+      }
+
+      await buildProjectContext();
+
+      setBatchStage('done');
+      const gitNote = commitResult.success ? ' + committed' : '';
+      setBatchMessage(`${blocks.length} files applied${gitNote}`);
+
+      setTimeout(() => { setBatchStage('idle'); setBatchMessage(''); }, 4000);
+    } catch (e: any) {
+      setBatchStage('error');
+      setBatchMessage(`Error: ${e.message || 'Unknown'}`);
+    }
+  }, []);
+
+  const batchRollback = useCallback(async () => {
+    if (!isElectron || batchBackups.length === 0) { setBatchStage('idle'); return; }
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+      const result = await ipcRenderer.invoke('batch-rollback', { backups: batchBackups });
+      setStatusMessage(`↩ Rolled back ${result.restored} files`);
+    } catch (e: any) {
+      setStatusMessage(`⚠ Rollback error: ${e.message}`);
+    }
+    setBatchStage('idle');
+    setBatchBackups([]);
+  }, [batchBackups]);
+
+  // ─── Project Context Builder ───────────────────────────────────────────────
+
+  const [projectContext, setProjectContext] = useState<string>('');
+  const [contextLoading, setContextLoading] = useState(false);
+  const [lastErrors, setLastErrors] = useState<string>('');
+
+  const buildProjectContext = useCallback(async () => {
+    if (!isElectron) return;
+    setContextLoading(true);
+    try {
+      const { ipcRenderer } = (window as any).require('electron');
+
+      const [filesResult, gitResult] = await Promise.all([
+        ipcRenderer.invoke('list-project-files'),
+        ipcRenderer.invoke('git-log', { count: 5 }),
+      ]);
+
+      const fileTree = filesResult.success ? filesResult.files : [];
+
+      const keyFiles = fileTree.filter((f: string) =>
+        f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
+        f === 'tailwind.config.ts' || f === 'index.html' ||
+        (f.startsWith('src/') && (f.endsWith('.tsx') || f.endsWith('.ts')) && !f.includes('lib/capabilities/'))
+      ).slice(0, 15);
+
+      const contentsResult = await ipcRenderer.invoke('read-files-for-context', {
+        filePaths: keyFiles,
+        maxSizePerFile: 6000,
+      });
+
+      let context = `=== PROJECT CONTEXT ===\n`;
+      context += `This is a React + TypeScript + Vite desktop app (Electron) called Guardian AI.\n\n`;
+
+      context += `=== FILE TREE ===\n`;
+      context += fileTree.slice(0, 80).join('\n') + '\n';
+      if (fileTree.length > 80) context += `... (${fileTree.length} total files)\n`;
+
+      if (gitResult.success && gitResult.log) {
+        context += `\n=== RECENT GIT LOG ===\n${gitResult.log}\n`;
+      }
+
+      if (contentsResult.success) {
+        for (const file of contentsResult.files) {
+          context += `\n=== ${file.path} ===\n${file.content}\n`;
+        }
+      }
+
+      if (lastErrors) {
+        context += `\n=== CURRENT ERRORS ===\n${lastErrors}\n`;
+      }
+
+      context += `\n=== INSTRUCTIONS ===\n`;
+      context += `When suggesting code changes, use this exact format for each file:\n`;
+      context += `// file: path/to/file.tsx\n`;
+      context += `\`\`\`tsx\n// full file content here\n\`\`\`\n`;
+      context += `Include the complete file content, not partial patches.\n`;
+      context += `The code extractor will automatically detect and apply these blocks.\n`;
+
+      setProjectContext(context);
+      setContextLoading(false);
+    } catch (e: any) {
+      setContextLoading(false);
+      setStatusMessage(`⚠ Context build failed: ${e.message}`);
+    }
+  }, [lastErrors]);
+
+  useEffect(() => {
+    if (mode === 'browser' && isElectron) {
+      buildProjectContext();
+    }
+  }, [mode]);
+
+  const copyContextToClipboard = useCallback(async () => {
+    if (!projectContext) return;
+    try {
+      if (isElectron) {
+        const { clipboard } = (window as any).require('electron');
+        clipboard.writeText(projectContext);
+      } else {
+        await navigator.clipboard.writeText(projectContext);
+      }
+      setStatusMessage('✓ Project context copied to clipboard — paste into Grok');
+    } catch {
+      try {
+        await navigator.clipboard.writeText(projectContext);
+        setStatusMessage('✓ Project context copied');
+      } catch {
+        setStatusMessage('⚠ Clipboard write failed');
+      }
+    }
+  }, [projectContext]);
+
+  const buildErrorFeedback = useCallback(async (errorText: string) => {
+    setLastErrors(errorText);
+    const errorPrompt = `The following errors occurred after applying code changes:\n\n${errorText}\n\n` +
+      `Please fix these errors. Return the corrected files using this format:\n` +
+      `// file: path/to/file.tsx\n\`\`\`tsx\n// corrected content\n\`\`\`\n\n` +
+      (projectContext ? `Current project context:\n${projectContext.slice(0, 3000)}` : '');
+    try {
+      if (isElectron) {
+        const { clipboard } = (window as any).require('electron');
+        clipboard.writeText(errorPrompt);
+      } else {
+        await navigator.clipboard.writeText(errorPrompt);
+      }
+      setStatusMessage('✓ Error feedback copied — paste into Grok for fix');
+    } catch {
+      setStatusMessage('⚠ Could not copy error feedback');
+    }
+  }, [projectContext]);
+
   const renderMessage = (msg: Msg, idx: number) => {
     if (msg.role === 'user') {
       return (
@@ -1014,6 +1263,63 @@ const GrokBridge: React.FC = () => {
           onRollback={rollbackPending}
         />
       )}
+
+      {batchStage !== 'idle' && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" data-testid="dialog-batch-apply">
+          <div className="bg-background border border-border rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              {batchStage === 'done' ? (
+                <Check className="w-6 h-6 text-primary" />
+              ) : batchStage === 'error' ? (
+                <AlertTriangle className="w-6 h-6 text-destructive" />
+              ) : (
+                <Loader2 className="w-6 h-6 text-primary animate-spin" />
+              )}
+              <div>
+                <div className="text-sm font-semibold">
+                  {batchStage === 'writing' && 'Writing Files'}
+                  {batchStage === 'checking' && 'Compile Check'}
+                  {batchStage === 'committing' && 'Git Commit'}
+                  {batchStage === 'restarting' && 'Applying Changes'}
+                  {batchStage === 'done' && 'Complete'}
+                  {batchStage === 'error' && 'Error'}
+                </div>
+                <div className="text-xs text-muted-foreground">{batchMessage}</div>
+              </div>
+            </div>
+
+            {batchStage !== 'idle' && (
+              <div className="w-full bg-secondary/30 rounded-full h-1.5 overflow-hidden">
+                <div className={`h-full rounded-full transition-all duration-500 ${batchStage === 'error' ? 'bg-destructive' : 'bg-primary'}`} style={{
+                  width: batchStage === 'writing' ? '25%' : batchStage === 'checking' ? '50%' : batchStage === 'committing' ? '75%' : batchStage === 'restarting' ? '90%' : '100%',
+                }} />
+              </div>
+            )}
+
+            {batchError && (
+              <pre className="text-[9px] text-destructive/80 bg-destructive/5 rounded p-2 max-h-32 overflow-auto whitespace-pre-wrap">{batchError}</pre>
+            )}
+
+            <div className="flex justify-end gap-2">
+              {batchStage === 'error' && (
+                <>
+                  <button onClick={batchRollback} data-testid="button-batch-rollback" className="px-3 py-1.5 rounded text-xs bg-destructive/20 text-destructive hover:bg-destructive/30 flex items-center gap-1">
+                    <Undo2 className="w-3 h-3" /> Rollback All
+                  </button>
+                  <button onClick={() => buildErrorFeedback(batchError || batchMessage)} data-testid="button-send-errors" className="px-3 py-1.5 rounded text-xs bg-primary/15 text-primary hover:bg-primary/25 flex items-center gap-1">
+                    <Send className="w-3 h-3" /> Send to Grok
+                  </button>
+                  <button onClick={() => { setBatchStage('idle'); setBatchError(''); }} className="px-3 py-1.5 rounded text-xs bg-secondary text-secondary-foreground hover:bg-secondary/80">Dismiss</button>
+                </>
+              )}
+              {batchStage === 'done' && (
+                <button onClick={() => setBatchStage('idle')} className="px-3 py-1.5 rounded text-xs bg-primary/15 text-primary hover:bg-primary/25">Done</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Top bar with mode toggle ── */}
       <div className="shrink-0 border-b border-border/40 bg-card/60 px-4 py-2 flex items-center gap-4">
         <div className="flex items-center gap-1.5">
@@ -1041,7 +1347,29 @@ const GrokBridge: React.FC = () => {
           </button>
         </div>
 
-        {/* Status message */}
+        {isElectron && (
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={copyContextToClipboard}
+              disabled={contextLoading || !projectContext}
+              data-testid="button-copy-context"
+              className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-40"
+            >
+              {contextLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
+              Copy Context
+            </button>
+            {lastErrors && (
+              <button
+                onClick={() => buildErrorFeedback(lastErrors)}
+                data-testid="button-send-errors-top"
+                className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors border border-destructive/20"
+              >
+                <AlertTriangle className="w-3 h-3" /> Send Errors
+              </button>
+            )}
+          </div>
+        )}
+
         {statusMessage && (
           <span className="text-[9px] text-primary/70 ml-2">{statusMessage}</span>
         )}
@@ -1063,7 +1391,7 @@ const GrokBridge: React.FC = () => {
 
       {/* ── Mode: Browser Chat (Grok Desktop webview) ── */}
       {mode === 'browser' && (
-        <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} />
+        <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} />
       )}
 
       {/* ── Mode: API Chat ── */}

@@ -77,6 +77,12 @@ supabase/
   - Backups stored in `.guardian-backup/` (gitignored)
   - IPC handlers: `read-file`, `write-file`, `rollback-file`, `git-commit`, `check-compile`, `list-project-files`
   - Path traversal protection: all paths validated to be inside project root; node_modules/.git/.env blocked
+- **Automated Development Loop** (Electron only — "NEW GEMINI" pattern):
+  - **Auto Context**: On AI Bridge load, auto-builds project context (file tree, key file contents, git log, errors). "Copy Context" button in top bar copies structured context to clipboard for pasting into Grok.
+  - **Batch Apply All**: "Apply All" button in Code Extractor writes all detected code blocks at once → backup all → write all → compile check → git commit. Progress modal shows stage: Writing → Checking → Committing → Done/Error.
+  - **Error Feedback Loop**: If batch apply produces compile errors, the error dialog offers "Send to Grok" (copies error + project context to clipboard) and "Rollback All" (restores all backups). Mirrors the `ping_pong_fix` pattern: apply → error → send errors → fix → apply again.
+  - **Auto Restart**: After successful batch apply, waits for Vite HMR (2s). IPC handlers `restart-dev-server` and `run-npm-install` available for full restarts / dependency installs.
+  - Batch IPC handlers: `batch-write-files`, `batch-rollback`, `batch-git-commit`, `git-log`, `read-files-for-context`, `restart-dev-server`, `run-npm-install`
 
 ## Development
 - Dev server: `npx vite` (port 5000) — web-only mode
