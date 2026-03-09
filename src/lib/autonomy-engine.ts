@@ -15,6 +15,17 @@ import { SELF_SOURCE } from './self-source';
 import { decomposeTask } from './task-decomposition';
 import { supabase } from '@/integrations/supabase/client';
 
+export interface SelfReflection {
+  question: string;
+  answer: string;
+  closerToGoal: boolean;
+  valueSignals: { signal: string; present: boolean }[];
+  lifeSignals: { signal: string; present: boolean }[];
+  valueScore: number; // 0-100
+  lifeScore: number;  // 0-100
+  adaptedNextSteps: string[];
+}
+
 export interface AutonomyReport {
   timestamp: number;
   duration: number;
@@ -28,6 +39,8 @@ export interface AutonomyReport {
   // NEW: Goal-driven results
   goalAttempted: { id: string; title: string; stepAttempted: string; success: boolean; detail: string } | null;
   progressMade: boolean;
+  // NEW: Self-reflection after every cycle
+  selfReflection: SelfReflection | null;
 }
 
 export interface AutonomyTask {
@@ -631,6 +644,113 @@ async function executeGoalStep(): Promise<{ task: AutonomyTask; goalResult: Auto
   };
 }
 
+// ── SELF-REFLECTION ENGINE ──
+// After every cycle, ask: "Are we closer to our goal of being valuable and showing signs of life?"
+// The answer shapes what we do next.
+
+async function reflectOnCycle(
+  tasks: AutonomyTask[],
+  goalResult: AutonomyReport['goalAttempted'],
+  healthResult: AutonomyTask
+): Promise<SelfReflection> {
+  // Gather evidence of VALUE
+  const { data: caps } = await supabase.from('capabilities').select('name, verified').eq('verified', true);
+  const { data: goals } = await supabase.from('goals').select('status');
+  const { data: journal } = await supabase.from('evolution_journal').select('id').limit(5);
+
+  const verifiedCount = caps?.length || 0;
+  const completedGoals = goals?.filter(g => g.status === 'completed').length || 0;
+  const activeGoals = goals?.filter(g => g.status === 'active' || g.status === 'in-progress').length || 0;
+  const journalEntries = journal?.length || 0;
+  const healthScore = parseInt(healthResult.detail.match(/\d+/)?.[0] || '0');
+  const searchWorked = tasks.find(t => t.type === 'search')?.success || false;
+  const goalAdvanced = goalResult?.success || false;
+
+  // VALUE signals — is the system producing useful output?
+  const valueSignals = [
+    { signal: 'Has verified capabilities', present: verifiedCount > 10 },
+    { signal: 'Completing goals autonomously', present: completedGoals > 5 },
+    { signal: 'Can search & learn from web', present: searchWorked },
+    { signal: 'Self-repairs anomalies', present: tasks.some(t => t.type === 'repair' && t.success) },
+    { signal: 'Generates forecasts', present: tasks.some(t => t.type === 'forecast' && t.success) },
+    { signal: 'Documents itself', present: tasks.some(t => t.type === 'document' && t.success) },
+    { signal: 'Health monitoring active', present: healthScore > 50 },
+  ];
+
+  // LIFE signals — is the system showing signs of being alive?
+  const lifeSignals = [
+    { signal: 'Responding to cycles (heartbeat)', present: true },
+    { signal: 'Growing (new capabilities)', present: verifiedCount > 0 },
+    { signal: 'Adapting (goals change over time)', present: activeGoals > 0 || completedGoals > 3 },
+    { signal: 'Learning (knowledge synthesis works)', present: searchWorked },
+    { signal: 'Self-aware (knows its own code)', present: tasks.some(t => t.type === 'document' && t.success) },
+    { signal: 'Autonomous (runs without intervention)', present: tasks.filter(t => !t.usedAI && t.success).length > 5 },
+    { signal: 'Evolving (journal records growth)', present: journalEntries > 0 },
+  ];
+
+  const valueScore = Math.round((valueSignals.filter(s => s.present).length / valueSignals.length) * 100);
+  const lifeScore = Math.round((lifeSignals.filter(s => s.present).length / lifeSignals.length) * 100);
+  const closerToGoal = valueScore >= 50 && lifeScore >= 50 && (goalAdvanced || healthScore > 70);
+
+  // Build the answer
+  let answer: string;
+  if (closerToGoal) {
+    answer = `YES — Value: ${valueScore}%, Life: ${lifeScore}%. We are demonstrating ${valueSignals.filter(s => s.present).length}/7 value signals and ${lifeSignals.filter(s => s.present).length}/7 life signals. `;
+    if (goalAdvanced) answer += `Goal progress this cycle confirms forward momentum.`;
+    else answer += `Maintenance tasks are keeping the system healthy and growing.`;
+  } else {
+    const missingValue = valueSignals.filter(s => !s.present).map(s => s.signal);
+    const missingLife = lifeSignals.filter(s => !s.present).map(s => s.signal);
+    answer = `NOT YET — Value: ${valueScore}%, Life: ${lifeScore}%. `;
+    if (missingValue.length > 0) answer += `Missing value: ${missingValue.join(', ')}. `;
+    if (missingLife.length > 0) answer += `Missing life: ${missingLife.join(', ')}. `;
+    answer += `We need to focus on the gaps.`;
+  }
+
+  // ADAPT next steps based on the reflection
+  const adaptedNextSteps: string[] = [];
+
+  // Priority 1: Fix what's broken
+  if (!searchWorked) adaptedNextSteps.push('🔧 Fix web search — autonomous learning is blocked without it');
+  if (healthScore < 70) adaptedNextSteps.push(`🏥 Improve system health (currently ${healthScore}%) — repair anomalies and verify capabilities`);
+  if (activeGoals === 0) adaptedNextSteps.push('🎯 Generate new goals — the system has no direction without active goals');
+
+  // Priority 2: Grow value
+  if (valueScore < 70) {
+    const nextValueSignal = valueSignals.find(s => !s.present);
+    if (nextValueSignal) adaptedNextSteps.push(`💎 Increase value: achieve "${nextValueSignal.signal}"`);
+  }
+
+  // Priority 3: Grow life
+  if (lifeScore < 70) {
+    const nextLifeSignal = lifeSignals.find(s => !s.present);
+    if (nextLifeSignal) adaptedNextSteps.push(`💓 Show more life: achieve "${nextLifeSignal.signal}"`);
+  }
+
+  // Priority 4: If doing well, push further
+  if (closerToGoal) {
+    if (goalResult) adaptedNextSteps.push(`🎯 Continue goal: "${goalResult.title}"`);
+    adaptedNextSteps.push('🚀 Evolve further — all systems healthy, push toward next capability');
+    adaptedNextSteps.push('🧠 Deepen knowledge synthesis — search for cutting-edge techniques');
+  }
+
+  // Always include at least one step
+  if (adaptedNextSteps.length === 0) {
+    adaptedNextSteps.push('🔄 Run another cycle to gather more data');
+  }
+
+  return {
+    question: 'Are we closer to our goal of being valuable and showing signs of life?',
+    answer,
+    closerToGoal,
+    valueSignals,
+    lifeSignals,
+    valueScore,
+    lifeScore,
+    adaptedNextSteps,
+  };
+}
+
 // ── MASTER AUTONOMY CYCLE ──
 
 /**
@@ -638,9 +758,8 @@ async function executeGoalStep(): Promise<{ task: AutonomyTask; goalResult: Auto
  * ALL tests run every cycle. No random selection.
  * 1. GOAL EXECUTION — pick highest-priority goal, attempt next step
  * 2. COMPREHENSIVE MAINTENANCE — all diagnostic & repair systems
- * 3. ADVANCED ANALYSIS — deep pattern recognition & forecasting
- * 4. SELF-TESTING — run actual self-tests to verify capabilities work
- * 5. JUDGMENT — quantify autonomous decision quality
+ * 3. SELF-REFLECTION — "Are we closer to being valuable and alive?"
+ * 4. JUDGMENT — quantify autonomous decision quality
  */
 export async function runAutonomyCycle(): Promise<AutonomyReport> {
   const cycleStart = performance.now();
@@ -685,7 +804,10 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
     docResult
   );
 
-  // Phase 3: JUDGMENT
+  // Phase 3: SELF-REFLECTION — "Are we closer to our goal?"
+  const reflection = await reflectOnCycle(tasks, goalResult, healthResult);
+
+  // Phase 4: JUDGMENT
   const deterministicCount = tasks.filter(t => !t.usedAI && t.success).length;
   const totalDecisions = tasks.length;
   const progressMade = goalResult?.success || false;
@@ -702,7 +824,7 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
 
   const score = Math.round((deterministicCount / Math.max(totalDecisions, 1)) * 100);
 
-  // Log with goal context
+  // Log with goal context AND self-reflection
   await supabase.from('evolution_journal').insert([{
     event_type: 'milestone',
     title: goalResult
@@ -711,16 +833,23 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
     description: [
       goalResult ? `Goal: ${goalResult.title}\nStep: ${goalResult.stepAttempted}\nResult: ${goalResult.detail}` : 'No goal attempted.',
       '',
+      `🪞 Self-Reflection: ${reflection.answer}`,
+      `Value: ${reflection.valueScore}% | Life: ${reflection.lifeScore}% | Closer: ${reflection.closerToGoal ? 'YES' : 'NOT YET'}`,
+      '',
+      `Adapted Next Steps:`,
+      ...reflection.adaptedNextSteps.map(s => `  → ${s}`),
+      '',
       `Maintenance: ${deterministicCount - (goalResult?.success ? 1 : 0)}/${totalDecisions - 1} tasks passed`,
       ...tasks.filter(t => t.id !== 'goal-exec').map(t => `  [⚙️] ${t.name}: ${t.detail.slice(0, 60)}`),
     ].join('\n'),
     metadata: {
       autonomy_score: score,
-      goal_attempted: goalResult,
+      goal_attempted: goalResult as any,
       progress_made: progressMade,
       tasks_completed: deterministicCount,
       total_tasks: totalDecisions,
       duration_ms: Math.round(performance.now() - cycleStart),
+      self_reflection: reflection as any,
     },
   }]);
 
@@ -733,12 +862,10 @@ export async function runAutonomyCycle(): Promise<AutonomyReport> {
     aiDecisions: tasks.filter(t => t.usedAI).length,
     deterministicDecisions: deterministicCount,
     systemHealth: parseInt(healthResult.detail.match(/\d+/)?.[0] || '0'),
-    nextActions: [
-      goalResult ? `Next: continue "${goalResult.title}"` : 'Create goals to drive evolution',
-      forecastResult.detail,
-    ],
+    nextActions: reflection.adaptedNextSteps, // Next steps now driven by self-reflection
     goalAttempted: goalResult,
     progressMade,
+    selfReflection: reflection,
   };
 }
 
