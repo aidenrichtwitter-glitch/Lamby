@@ -137,6 +137,9 @@ function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: strin
   const [lastClipboard, setLastClipboard] = useState('');
   const [collapsed, setCollapsed] = useState(false);
   const [flash, setFlash] = useState(false);
+  const [showPasteBox, setShowPasteBox] = useState(false);
+  const [clipboardAvailable, setClipboardAvailable] = useState(true);
+  const pasteRef = useRef<HTMLTextAreaElement>(null);
 
   const extractFromText = useCallback((text: string) => {
     if (text === lastClipboard || text.length < 10) return;
@@ -152,6 +155,7 @@ function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: strin
     setResponseContext(text);
     setContextSections(extractContextSections(text));
     setCollapsed(false);
+    setShowPasteBox(false);
     setFlash(true);
     setTimeout(() => setFlash(false), 400);
   }, [lastClipboard]);
@@ -166,38 +170,27 @@ function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: strin
         const text = await navigator.clipboard.readText();
         extractFromText(text);
       }
-    } catch { /* permission denied or module not available */ }
+    } catch {
+      setClipboardAvailable(false);
+    }
   }, [extractFromText]);
 
-  // Auto-read clipboard on mount to catch any existing content
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const text = e.clipboardData.getData('text');
+    if (text && text.length > 10) {
+      extractFromText(text);
+    }
+  }, [extractFromText]);
+
   useEffect(() => {
     readClipboard();
   }, []);
 
-  // Auto-read clipboard continuously (captures website copy-button writes)
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      if (isElectron || (document.visibilityState === 'visible' && document.hasFocus())) {
-        readClipboard();
-      }
-    }, 800);
-    return () => window.clearInterval(interval);
-  }, [readClipboard]);
-
-  // Re-check clipboard when user returns to this tab/window
-  useEffect(() => {
-    const handleFocus = () => readClipboard();
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') readClipboard();
-    };
-
-    window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
+    if (isElectron) {
+      const interval = window.setInterval(() => readClipboard(), 800);
+      return () => window.clearInterval(interval);
+    }
   }, [readClipboard]);
 
   const validate = (block: ExtractedBlock) => {
@@ -220,16 +213,27 @@ function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: strin
           <Zap className={`w-3.5 h-3.5 text-primary ${flash ? 'animate-ping' : 'animate-pulse'}`} />
           <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Code Extractor</span>
         </div>
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary/10 text-primary text-[9px] border border-primary/20">
-          <ClipboardCheck className="w-3 h-3" />
-          <span>Auto-detects Grok copy-button responses</span>
-        </div>
+        {isElectron && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary/10 text-primary text-[9px] border border-primary/20">
+            <ClipboardCheck className="w-3 h-3" />
+            <span>Auto-detects Grok copy-button responses</span>
+          </div>
+        )}
         <button
-          onClick={readClipboard}
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-secondary/50 hover:bg-secondary/80 text-[10px] text-muted-foreground transition-colors"
+          onClick={() => { setShowPasteBox(p => !p); setTimeout(() => pasteRef.current?.focus(), 50); }}
+          data-testid="button-paste-response"
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-primary/15 text-primary hover:bg-primary/25 text-[10px] font-medium transition-colors border border-primary/20"
         >
-          <Clipboard className="w-3 h-3" /> Read clipboard
+          <Clipboard className="w-3 h-3" /> {showPasteBox ? 'Hide Paste Box' : 'Paste Response'}
         </button>
+        {clipboardAvailable && (
+          <button
+            onClick={readClipboard}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-secondary/50 hover:bg-secondary/80 text-[10px] text-muted-foreground transition-colors"
+          >
+            <ClipboardCheck className="w-3 h-3" /> Read clipboard
+          </button>
+        )}
         {blocks.length > 0 && (
           <span className="text-[9px] text-primary/70 ml-1">{blocks.length} block{blocks.length > 1 ? 's' : ''} detected</span>
         )}
@@ -260,10 +264,26 @@ function ClipboardExtractor({ onApply, onApplyAll }: { onApply: (filePath: strin
       {/* Extracted blocks + context */}
       {!collapsed && (
         <div className="max-h-96 overflow-auto p-3 space-y-2">
-          {blocks.length === 0 && (
+          {showPasteBox && (
+            <div className="rounded-lg border border-primary/30 bg-card/50 p-3">
+              <p className="text-[10px] text-muted-foreground mb-2">Copy Grok's response, then paste it here (Ctrl+V / Cmd+V):</p>
+              <textarea
+                ref={pasteRef}
+                data-testid="textarea-paste-response"
+                placeholder="Paste Grok's full response here..."
+                className="w-full h-24 bg-background/80 border border-border/50 rounded p-2 text-[11px] font-mono text-foreground/80 placeholder:text-muted-foreground/30 resize-y focus:outline-none focus:border-primary/50"
+                onPaste={handlePaste}
+                onChange={(e) => {
+                  const text = e.target.value;
+                  if (text && text.length > 10) extractFromText(text);
+                }}
+              />
+            </div>
+          )}
+          {blocks.length === 0 && !showPasteBox && (
             <div className="text-center py-4 text-[10px] text-muted-foreground/50">
-              <p>Click copy in Grok — full response + code blocks auto-appear here</p>
-              <p className="mt-1 text-[9px] text-muted-foreground/30">Auto-check runs while this tab is active</p>
+              <p>Click <strong>"Paste Response"</strong> above, then paste Grok's reply (Ctrl+V)</p>
+              <p className="mt-1 text-[9px] text-muted-foreground/30">{isElectron ? 'Auto-detect also runs in Electron mode' : 'Or use "Read clipboard" if your browser allows it'}</p>
             </div>
           )}
 
