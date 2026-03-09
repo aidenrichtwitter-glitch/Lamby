@@ -237,33 +237,21 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
     setDepsError(null);
     setDepsInstalled(false);
     try {
-      if (isElectron) {
-        const { ipcRenderer } = (window as any).require('electron');
-        const result = await ipcRenderer.invoke('install-project-deps', {
-          projectName: activeProject,
+      const res = await fetch('/api/projects/install-deps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: activeProject,
           dependencies: detectedDeps.dependencies,
           devDependencies: detectedDeps.devDependencies,
-        });
-        if (result && !result.success) {
-          throw new Error(result.errors?.join('; ') || result.error || 'Install failed');
-        }
-      } else {
-        const res = await fetch('/api/projects/install-deps', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: activeProject,
-            dependencies: detectedDeps.dependencies,
-            devDependencies: detectedDeps.devDependencies,
-          }),
-        });
-        const data = await res.json().catch(() => ({} as any));
-        if (!res.ok) {
-          throw new Error(data.error || `Install failed (${res.status})`);
-        }
-        if (data.success === false) {
-          throw new Error(data.errors?.join('; ') || 'Some packages failed to install');
-        }
+        }),
+      });
+      const data = await res.json().catch(() => ({} as any));
+      if (!res.ok) {
+        throw new Error(data.error || `Install failed (${res.status})`);
+      }
+      if (data.success === false) {
+        throw new Error(data.errors?.join('; ') || 'Some packages failed to install');
       }
       setDepsInstalled(true);
       setTimeout(() => setDepsInstalled(false), 5000);
@@ -1212,32 +1200,19 @@ const GrokBridge: React.FC = () => {
           setBatchMessage(`Installing dependencies for ${activeProject}...`);
           let depsFailed = false;
           try {
-            if (isElectron) {
-              const { ipcRenderer } = (window as any).require('electron');
-              const result = await ipcRenderer.invoke('install-project-deps', {
-                projectName: activeProject,
+            const res = await fetch('/api/projects/install-deps', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                name: activeProject,
                 dependencies: detectedDeps.dependencies,
                 devDependencies: detectedDeps.devDependencies,
-              });
-              if (result && !result.success) {
-                depsFailed = true;
-                setStatusMessage(`Dep install errors: ${result.errors?.join('; ') || 'unknown'}`);
-              }
-            } else {
-              const res = await fetch('/api/projects/install-deps', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  name: activeProject,
-                  dependencies: detectedDeps.dependencies,
-                  devDependencies: detectedDeps.devDependencies,
-                }),
-              });
-              const data = await res.json().catch(() => ({} as any));
-              if (!res.ok || data.success === false) {
-                depsFailed = true;
-                setStatusMessage(`Dep install errors: ${data.errors?.join('; ') || data.error || 'unknown'}`);
-              }
+              }),
+            });
+            const data = await res.json().catch(() => ({} as any));
+            if (!res.ok || data.success === false) {
+              depsFailed = true;
+              setStatusMessage(`Dep install errors: ${data.errors?.join('; ') || data.error || 'unknown'}`);
             }
             if (!depsFailed) {
               setStatusMessage(`Installed: ${[...detectedDeps.dependencies, ...detectedDeps.devDependencies].join(', ')}`);

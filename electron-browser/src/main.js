@@ -934,9 +934,7 @@ function setupIpcHandlers() {
     const resolvedDir = path.resolve(projectDir);
     const projectsRoot = path.resolve(path.join(projectRoot, 'projects'));
     if (!resolvedDir.startsWith(projectsRoot)) return { success: false, error: 'Invalid project path' };
-    if (!fs.existsSync(projectDir)) {
-      fs.mkdirSync(projectDir, { recursive: true });
-    }
+    if (!fs.existsSync(projectDir)) return { success: false, error: 'Project not found' };
 
     const pkgJsonPath = path.join(projectDir, 'package.json');
     if (!fs.existsSync(pkgJsonPath)) {
