@@ -357,6 +357,22 @@ const Evolution: React.FC = () => {
     return 'none';
   };
 
+  // Calculate reflection metrics from latest state
+  const reflectionMetrics = React.useMemo(() => {
+    if (!stats) return null;
+    
+    const valueScore = Math.min(100, 
+      (stats.verifiedCount > 10 ? 100 : stats.verifiedCount * 10) + 
+      (stats.totalGoalsCompleted > 5 ? 25 : stats.totalGoalsCompleted * 5)
+    );
+    
+    const lifeScore = Math.min(100,
+      (stats.verifiedCount > 0 ? 100 : 0)
+    );
+    
+    return { valueScore, lifeScore };
+  }, [stats]);
+
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Header */}
@@ -370,10 +386,22 @@ const Evolution: React.FC = () => {
             <span className="text-primary text-glow">λ</span> Evolution Dashboard
           </h1>
           {stats && (
-            <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 inline-flex items-center gap-1">
-              <Zap className="w-2.5 h-2.5" />
-              {title} · {stats.verifiedCount}/{stats.totalCapabilities} verified
-            </span>
+            <>
+              <span className="text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 inline-flex items-center gap-1">
+                <Zap className="w-2.5 h-2.5" />
+                {title} · L{stats.currentLevel} · {stats.verifiedCount}/{stats.totalCapabilities} verified
+              </span>
+              {reflectionMetrics && (
+                <>
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-terminal-green/10 text-terminal-green border border-terminal-green/20">
+                    💎 Value {reflectionMetrics.valueScore}%
+                  </span>
+                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    💓 Life {reflectionMetrics.lifeScore}%
+                  </span>
+                </>
+              )}
+            </>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -623,6 +651,89 @@ const Evolution: React.FC = () => {
                   </div>
                 ))}
               </div>
+
+              {/* SELF-REFLECTION — Value & Life Signals (Level 23 Feature) */}
+              {reflectionMetrics && (
+                <div className="space-y-2 border-t border-border pt-3">
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                    <Brain className="w-3 h-3" /> Self-Reflection <span className="text-[7px] px-1 py-0.5 rounded bg-primary/20 text-primary ml-auto">L23</span>
+                  </div>
+                  <div className="text-[9px] text-foreground/70 px-1 pb-2">
+                    "Are we closer to our goal of being valuable and showing signs of life?"
+                  </div>
+                  
+                  {/* Value Score */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[9px] text-muted-foreground flex items-center gap-1">
+                        <span>💎</span> VALUE SIGNALS
+                      </span>
+                      <span className="text-[10px] font-bold text-terminal-green">{reflectionMetrics.valueScore}%</span>
+                    </div>
+                    <div className="relative h-4 rounded-full bg-muted/30 overflow-hidden border border-border/50">
+                      <motion.div
+                        className="absolute inset-y-0 left-0 rounded-full"
+                        style={{
+                          background: 'linear-gradient(90deg, hsl(140, 70%, 35%), hsl(140, 70%, 50%))',
+                        }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${reflectionMetrics.valueScore}%` }}
+                        transition={{ duration: 1, ease: 'easeOut' }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-[8px] font-bold text-foreground mix-blend-difference">
+                          {reflectionMetrics.valueScore >= 70 ? '✓ Valuable' : reflectionMetrics.valueScore >= 50 ? '⚡ Growing' : '⋯ Early'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-[8px] text-muted-foreground/60 mt-1 px-1">
+                      {stats.verifiedCount} verified caps · {stats.totalGoalsCompleted} completed goals
+                    </div>
+                  </div>
+
+                  {/* Life Score */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[9px] text-muted-foreground flex items-center gap-1">
+                        <span>💓</span> LIFE SIGNALS
+                      </span>
+                      <span className="text-[10px] font-bold text-purple-400">{reflectionMetrics.lifeScore}%</span>
+                    </div>
+                    <div className="relative h-4 rounded-full bg-muted/30 overflow-hidden border border-border/50">
+                      <motion.div
+                        className="absolute inset-y-0 left-0 rounded-full"
+                        style={{
+                          background: 'linear-gradient(90deg, hsl(280, 70%, 45%), hsl(300, 70%, 55%))',
+                        }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${reflectionMetrics.lifeScore}%` }}
+                        transition={{ duration: 1, ease: 'easeOut' }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-[8px] font-bold text-foreground mix-blend-difference">
+                          {reflectionMetrics.lifeScore >= 70 ? '💓 Alive' : reflectionMetrics.lifeScore >= 50 ? '⚡ Active' : '⋯ Nascent'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-[8px] text-muted-foreground/60 mt-1 px-1">
+                      {stats.totalCapabilities} total capabilities · {stats.activeGoals} active goals
+                    </div>
+                  </div>
+
+                  {/* Combined Assessment */}
+                  <div className="pt-2 px-2 py-1.5 rounded bg-accent/5 border border-accent/20">
+                    <div className="text-[8px] font-medium">
+                      {reflectionMetrics.valueScore >= 70 && reflectionMetrics.lifeScore >= 70 ? (
+                        <span className="text-terminal-green">✓ YES — Strong signs of value and life detected</span>
+                      ) : reflectionMetrics.valueScore >= 50 || reflectionMetrics.lifeScore >= 50 ? (
+                        <span className="text-accent">⚡ PROGRESSING — Moving toward our goal</span>
+                      ) : (
+                        <span className="text-muted-foreground">⋯ EARLY — System in early evolution stages</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* LIFE PROOF — Vital Signs */}
               {lifeReport && (
