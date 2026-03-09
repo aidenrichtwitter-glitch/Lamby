@@ -281,7 +281,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured }: { onApp
 
       {/* Extracted blocks + context */}
       {!collapsed && (
-        <div className="max-h-60 overflow-auto p-3 space-y-2">
+        <div className="p-3 space-y-2">
           {showPasteBox && (
             <div className="rounded-lg border border-primary/30 bg-card/50 p-3">
               <p className="text-[10px] text-muted-foreground mb-2">Copy Grok's response, then paste it here (Ctrl+V / Cmd+V):</p>
@@ -607,7 +607,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
 
   if (!isElectron) {
     return (
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-0">
         <div className="shrink-0 border-b border-border/30 bg-card/40 px-3 py-2 flex items-center gap-2">
           <div className="flex items-center gap-1 flex-1 overflow-x-auto">
             {BROWSER_SITES.map(site => (
@@ -623,13 +623,15 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
             ))}
           </div>
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center gap-6 p-8 min-h-0">
-          <div className="text-center space-y-3 max-w-lg">
-            <Globe className="w-10 h-10 text-primary/60 mx-auto" />
-            <h2 className="text-base font-bold text-foreground" data-testid="text-browser-status">Web Mode</h2>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Running in web mode. Sites open in new browser tabs. For the full embedded browser experience, run the desktop app with <code className="text-primary/80">npm run electron:dev</code>
-            </p>
+        <div className="flex-1 overflow-auto p-8">
+          <div className="flex flex-col items-center justify-center gap-6 min-h-full">
+            <div className="text-center space-y-3 max-w-lg">
+              <Globe className="w-10 h-10 text-primary/60 mx-auto" />
+              <h2 className="text-base font-bold text-foreground" data-testid="text-browser-status">Web Mode</h2>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Running in web mode. Sites open in new browser tabs. For the full embedded browser experience, run the desktop app with <code className="text-primary/80">npm run electron:dev</code>
+              </p>
+            </div>
           </div>
         </div>
         <ClipboardExtractor onApply={onApply} onApplyAll={onApplyAll} onResponseCaptured={onResponseCaptured} />
@@ -638,7 +640,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+    <div className="flex-1 flex flex-col min-h-0">
       <div className="shrink-0 border-b border-border/30 bg-card/40 px-3 py-2 flex items-center gap-2">
         <div className="flex items-center gap-1 flex-1 overflow-x-auto">
           {BROWSER_SITES.map(site => (
@@ -671,7 +673,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
         </div>
       </div>
 
-      <div className="flex-1 relative min-h-0">
+      <div className="flex-1 relative min-h-0 overflow-hidden">
         {/* @ts-ignore - webview is an Electron-specific HTML element */}
         <webview
           ref={(el: any) => { webviewRef.current = el; }}
@@ -1564,7 +1566,7 @@ const GrokBridge: React.FC = () => {
   }, []);
 
   return (
-    <div className="h-full flex flex-col bg-background text-foreground font-mono">
+    <div className="flex flex-col bg-background text-foreground font-mono">
       {pendingApply && (
         <ApplyConfirmDialog
           pending={pendingApply}
@@ -1633,141 +1635,133 @@ const GrokBridge: React.FC = () => {
         </div>
       )}
 
-      {/* ── Top bar with mode toggle ── */}
-      <div className="shrink-0 border-b border-border/40 bg-card/60 px-4 py-2 flex items-center gap-4">
-        <div className="flex items-center gap-1.5">
-          <Sparkles className="w-4 h-4 text-[hsl(var(--terminal-amber))]" />
-          <span className="text-xs font-bold text-foreground">AI Bridge</span>
-        </div>
+      {/* ── Top bar ── */}
+      <div className="shrink-0 border-b border-border/40 bg-card/60 overflow-x-auto overflow-y-hidden">
+        <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Sparkles className="w-3.5 h-3.5 text-[hsl(var(--terminal-amber))]" />
+            <span className="text-[11px] font-bold text-foreground">AI Bridge</span>
+          </div>
 
-        {/* Project indicator */}
-        <button
-          data-testid="button-toggle-project-panel"
-          onClick={() => setShowProjectPanel(p => !p)}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] transition-colors border ${
-            activeProject
-              ? 'bg-[hsl(150_60%_40%/0.15)] text-[hsl(150_60%_55%)] border-[hsl(150_60%_40%/0.3)]'
-              : 'bg-secondary/30 text-muted-foreground border-border/30 hover:bg-secondary/50'
-          }`}
-        >
-          <FolderOpen className="w-3 h-3" />
-          {activeProject || 'Main App'}
-          {showProjectPanel ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-        </button>
+          <button
+            data-testid="button-toggle-project-panel"
+            onClick={() => setShowProjectPanel(p => !p)}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors border shrink-0 ${
+              activeProject
+                ? 'bg-[hsl(150_60%_40%/0.15)] text-[hsl(150_60%_55%)] border-[hsl(150_60%_40%/0.3)]'
+                : 'bg-secondary/30 text-muted-foreground border-border/30 hover:bg-secondary/50'
+            }`}
+          >
+            <FolderOpen className="w-3 h-3" />
+            {activeProject || 'Main App'}
+            {showProjectPanel ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+          </button>
 
-        {activeProject && (
-          <div className="flex items-center gap-1">
+          {activeProject && (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                data-testid="button-start-preview"
+                onClick={startPreview}
+                disabled={previewLoading}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-[hsl(150_60%_40%/0.15)] text-[hsl(150_60%_55%)] hover:bg-[hsl(150_60%_40%/0.25)] transition-colors border border-[hsl(150_60%_40%/0.3)] disabled:opacity-40"
+              >
+                {previewLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                Preview
+              </button>
+              {previewPort && (
+                <>
+                  <a href={`http://localhost:${previewPort}`} target="_blank" rel="noopener noreferrer" data-testid="link-preview" className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20">
+                    <ExternalLink className="w-3 h-3" /> :{previewPort}
+                  </a>
+                  <button data-testid="button-stop-preview" onClick={stopPreview} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors border border-destructive/20">
+                    <X className="w-3 h-3" /> Stop
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-0.5 bg-secondary/40 rounded-md p-0.5 shrink-0">
             <button
-              data-testid="button-start-preview"
-              onClick={startPreview}
-              disabled={previewLoading}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[9px] bg-[hsl(150_60%_40%/0.15)] text-[hsl(150_60%_55%)] hover:bg-[hsl(150_60%_40%/0.25)] transition-colors border border-[hsl(150_60%_40%/0.3)] disabled:opacity-40"
+              onClick={() => setMode('browser')}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                mode === 'browser' ? 'bg-primary/20 text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
             >
-              {previewLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-              Preview
+              <Globe className="w-3 h-3" /> Browser
             </button>
-            {previewPort && (
-              <>
-                <a
-                  href={`http://localhost:${previewPort}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="link-preview"
-                  className="flex items-center gap-1 px-2 py-1 rounded text-[9px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
-                >
-                  <ExternalLink className="w-3 h-3" /> :{previewPort}
-                </a>
-                <button
-                  data-testid="button-stop-preview"
-                  onClick={stopPreview}
-                  className="flex items-center gap-1 px-2 py-1 rounded text-[9px] bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors border border-destructive/20"
-                >
-                  <X className="w-3 h-3" /> Stop
-                </button>
-              </>
+            <button
+              onClick={() => setMode('api')}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                mode === 'api' ? 'bg-primary/20 text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <MessageSquare className="w-3 h-3" /> API
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              onClick={copyContextToClipboard}
+              disabled={contextLoading || !projectContext}
+              data-testid="button-copy-context"
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-40"
+            >
+              {contextLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
+              Context
+            </button>
+            <button
+              onClick={copyEvolutionContext}
+              disabled={evolutionLoading}
+              data-testid="button-evolution-context"
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] bg-[hsl(280_80%_55%/0.15)] text-[hsl(280_80%_65%)] hover:bg-[hsl(280_80%_55%/0.25)] transition-colors border border-[hsl(280_80%_55%/0.3)] disabled:opacity-40"
+            >
+              {evolutionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Dna className="w-3 h-3" />}
+              Evolve
+              {currentPlan && <span className="ml-0.5 w-1.5 h-1.5 rounded-full bg-[hsl(280_80%_55%)] animate-pulse" />}
+            </button>
+            {lastErrors && (
+              <button
+                onClick={() => buildErrorFeedback(lastErrors)}
+                data-testid="button-send-errors-top"
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors border border-destructive/20"
+              >
+                <AlertTriangle className="w-3 h-3" /> Errors
+              </button>
             )}
           </div>
-        )}
 
-        {/* Mode toggle */}
-        <div className="flex items-center gap-0.5 bg-secondary/40 rounded-lg p-0.5">
-          <button
-            onClick={() => setMode('browser')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
-              mode === 'browser' ? 'bg-primary/20 text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <Globe className="w-3 h-3" /> Browser Chat
-          </button>
-          <button
-            onClick={() => setMode('api')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
-              mode === 'api' ? 'bg-primary/20 text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            <MessageSquare className="w-3 h-3" /> API Chat
-          </button>
-        </div>
+          {statusMessage && (
+            <span className="text-[9px] text-primary/70 truncate max-w-[200px]" title={statusMessage}>{statusMessage}</span>
+          )}
 
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={copyContextToClipboard}
-            disabled={contextLoading || !projectContext}
-            data-testid="button-copy-context"
-            className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-40"
-          >
-            {contextLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
-            Copy Context
-          </button>
-          <button
-            onClick={copyEvolutionContext}
-            disabled={evolutionLoading}
-            data-testid="button-evolution-context"
-            className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] bg-[hsl(280_80%_55%/0.15)] text-[hsl(280_80%_65%)] hover:bg-[hsl(280_80%_55%/0.25)] transition-colors border border-[hsl(280_80%_55%/0.3)] disabled:opacity-40"
-          >
-            {evolutionLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Dna className="w-3 h-3" />}
-            Evolution Context
-            {currentPlan && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-[hsl(280_80%_55%)] animate-pulse" />}
-          </button>
-          {lastErrors && (
-            <button
-              onClick={() => buildErrorFeedback(lastErrors)}
-              data-testid="button-send-errors-top"
-              className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors border border-destructive/20"
-            >
-              <AlertTriangle className="w-3 h-3" /> Send Errors
-            </button>
+          {appliedChanges.length > 0 && (
+            <div className="ml-auto flex items-center gap-1 overflow-x-auto shrink-0">
+              <span className="text-[8px] uppercase tracking-widest text-muted-foreground/40 shrink-0">Applied:</span>
+              {appliedChanges.slice(-3).map((change, i) => (
+                <button key={i} onClick={() => rollback(change)} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary hover:bg-destructive/10 hover:text-destructive text-[9px] transition-colors shrink-0 group">
+                  <FileCode className="w-2.5 h-2.5" />
+                  {change.filePath.split('/').pop()}
+                  <Undo2 className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              ))}
+              {appliedChanges.length > 3 && (
+                <span className="text-[8px] text-muted-foreground/40">+{appliedChanges.length - 3}</span>
+              )}
+            </div>
           )}
         </div>
-
-        {statusMessage && (
-          <span className="text-[9px] text-primary/70 ml-2">{statusMessage}</span>
-        )}
-
-        {/* Applied changes */}
-        {appliedChanges.length > 0 && (
-          <div className="ml-auto flex items-center gap-1.5 overflow-x-auto">
-            <span className="text-[8px] uppercase tracking-widest text-muted-foreground/40 shrink-0">Applied:</span>
-            {appliedChanges.map((change, i) => (
-              <button key={i} onClick={() => rollback(change)} className="flex items-center gap-1 px-2 py-0.5 rounded bg-primary/10 text-primary hover:bg-destructive/10 hover:text-destructive text-[9px] transition-colors shrink-0 group">
-                <FileCode className="w-2.5 h-2.5" />
-                {change.filePath.split('/').pop()}
-                <Undo2 className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* ── Mode: Browser Chat (Grok Desktop webview) ── */}
       {mode === 'browser' && (
         <div className="flex-1 flex min-h-0">
           {showProjectPanel && (
-            <div className="w-56 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
+            <div className="w-52 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
               <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} />
             </div>
           )}
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 flex flex-col min-w-0 min-h-0">
             <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} />
           </div>
         </div>
@@ -1778,7 +1772,7 @@ const GrokBridge: React.FC = () => {
         <div className="flex-1 flex min-h-0">
           {/* Project explorer panel */}
           {showProjectPanel && (
-            <div className="w-56 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
+            <div className="w-52 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
               <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} />
             </div>
           )}
