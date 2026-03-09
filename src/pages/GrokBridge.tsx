@@ -151,7 +151,7 @@ const GrokBridge: React.FC = () => {
   const [appliedChanges, setAppliedChanges] = useState<AppliedChange[]>([]);
   const [validationResults, setValidationResults] = useState<Map<string, SafetyCheck[]>>(new Map());
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [showSidebar, setShowSidebar] = useState(true);
+  const [showBrowser, setShowBrowser] = useState(true);
   const [browserUrl, setBrowserUrl] = useState('https://grok.com');
   const [showBrowser, setShowBrowser] = useState(true);
   const [customUrl, setCustomUrl] = useState('');
