@@ -333,8 +333,8 @@ async function persistTestReport(report: SelfTestReport): Promise<void> {
   } catch (err) {
     console.error('[self-test-runner] Failed to persist test report:', err);
   }
+}
 
-/**
  * Get the total number of registered self-tests
  */
 export function getTestCount(): number {
