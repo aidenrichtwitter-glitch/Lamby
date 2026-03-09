@@ -151,25 +151,30 @@ function ClipboardExtractor({ onApply }: { onApply: (filePath: string, code: str
     readClipboard();
   }, []);
 
-  // Listen for Ctrl+C / Cmd+C — instant clipboard read after copy
+  // Auto-read clipboard continuously (captures website copy-button writes)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-        // Small delay to let clipboard update
-        setTimeout(readClipboard, 100);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && document.hasFocus()) {
+        readClipboard();
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    }, 1200);
+    return () => window.clearInterval(interval);
   }, [readClipboard]);
 
-  // Also listen for clipboard changes via focus events (when user switches back to app)
+  // Re-check clipboard when user returns to this tab/window
   useEffect(() => {
-    const handleFocus = () => {
-      readClipboard();
+    const handleFocus = () => readClipboard();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') readClipboard();
     };
+
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [readClipboard]);
 
   const validate = (block: ExtractedBlock) => {
