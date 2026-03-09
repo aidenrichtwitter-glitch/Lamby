@@ -1,9 +1,10 @@
-import React, { useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, ClipboardPaste, Shield, Check, AlertTriangle, Undo2, FileCode, ExternalLink, Sparkles, Copy } from 'lucide-react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Send, Shield, Check, AlertTriangle, Undo2, FileCode, Sparkles, Bot, User, Loader2, Code2 } from 'lucide-react';
 import { validateChange } from '@/lib/safety-engine';
 import { SELF_SOURCE } from '@/lib/self-source';
 import { SafetyCheck } from '@/lib/self-reference';
+
+type Msg = { role: 'user' | 'assistant'; content: string };
 
 interface ParsedBlock {
   filePath: string;
@@ -20,324 +21,347 @@ interface AppliedChange {
 
 function parseCodeBlocks(text: string): ParsedBlock[] {
   const blocks: ParsedBlock[] = [];
-  // Match ```lang\n...``` with optional file path in comments or preceding line
   const regex = /(?:(?:\/\/|#|<!--)\s*(?:file:\s*)?(\S+\.(?:tsx?|jsx?|css|html|json|md))\s*(?:-->)?\s*\n)?```(\w+)?\n([\s\S]*?)```/g;
   let match;
   while ((match = regex.exec(text)) !== null) {
     const filePath = match[1] || '';
     const language = match[2] || 'typescript';
     const code = match[3].trim();
-    if (code.length > 0) {
-      blocks.push({ filePath, code, language });
-    }
+    if (code.length > 0) blocks.push({ filePath, code, language });
   }
-
-  // If no fenced blocks found, try to detect raw code
-  if (blocks.length === 0 && text.trim().length > 20) {
-    const trimmed = text.trim();
-    const looksLikeCode = /^(import |export |const |function |class |interface |type |<|\/\/)/.test(trimmed);
-    if (looksLikeCode) {
-      blocks.push({ filePath: '', code: trimmed, language: 'typescript' });
-    }
-  }
-
   return blocks;
 }
 
-const GrokBridge: React.FC = () => {
-  const [pastedText, setPastedText] = useState('');
-  const [parsedBlocks, setParsedBlocks] = useState<ParsedBlock[]>([]);
-  const [validationResults, setValidationResults] = useState<Map<number, SafetyCheck[]>>(new Map());
-  const [appliedChanges, setAppliedChanges] = useState<AppliedChange[]>([]);
-  const [selectedTargets, setSelectedTargets] = useState<Map<number, string>>(new Map());
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/grok-chat`;
 
-  const handlePaste = useCallback((text: string) => {
-    setPastedText(text);
-    const blocks = parseCodeBlocks(text);
-    setParsedBlocks(blocks);
-    setValidationResults(new Map());
-    setStatusMessage(blocks.length > 0 ? `Found ${blocks.length} code block(s)` : 'No code blocks detected — paste AI output with fenced code blocks');
-
-    // Auto-set targets from parsed file paths
-    const targets = new Map<number, string>();
-    blocks.forEach((b, i) => {
-      if (b.filePath) targets.set(i, b.filePath);
+async function streamGrok({
+  messages,
+  onDelta,
+  onDone,
+  onError,
+}: {
+  messages: Msg[];
+  onDelta: (text: string) => void;
+  onDone: () => void;
+  onError: (err: string) => void;
+}) {
+  try {
+    const resp = await fetch(CHAT_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({ messages }),
     });
-    setSelectedTargets(targets);
-  }, []);
 
-  const runValidation = useCallback((index: number) => {
-    const block = parsedBlocks[index];
-    const target = selectedTargets.get(index) || 'unknown.ts';
-    const checks = validateChange(block.code, target);
-    setValidationResults(prev => new Map(prev).set(index, checks));
-  }, [parsedBlocks, selectedTargets]);
-
-  const applyBlock = useCallback((index: number) => {
-    const block = parsedBlocks[index];
-    const targetPath = selectedTargets.get(index);
-    if (!targetPath) {
-      setStatusMessage('⚠ Select a target file before applying');
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      onError(data.error || `Error ${resp.status}`);
       return;
     }
 
-    const existing = SELF_SOURCE.find(f => f.path === targetPath);
+    if (!resp.body) { onError('No response body'); return; }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+
+      let idx: number;
+      while ((idx = buf.indexOf('\n')) !== -1) {
+        let line = buf.slice(0, idx);
+        buf = buf.slice(idx + 1);
+        if (line.endsWith('\r')) line = line.slice(0, -1);
+        if (!line.startsWith('data: ')) continue;
+        const json = line.slice(6).trim();
+        if (json === '[DONE]') { onDone(); return; }
+        try {
+          const parsed = JSON.parse(json);
+          const content = parsed.choices?.[0]?.delta?.content;
+          if (content) onDelta(content);
+        } catch { /* partial json, wait for more */ }
+      }
+    }
+    onDone();
+  } catch (e) {
+    onError(e instanceof Error ? e.message : 'Stream failed');
+  }
+}
+
+const GrokBridge: React.FC = () => {
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [appliedChanges, setAppliedChanges] = useState<AppliedChange[]>([]);
+  const [validationResults, setValidationResults] = useState<Map<string, SafetyCheck[]>>(new Map());
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const virtualFiles = SELF_SOURCE.map(f => f.path).sort();
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const sendMessage = useCallback(async () => {
+    const text = input.trim();
+    if (!text || isLoading) return;
+
+    const userMsg: Msg = { role: 'user', content: text };
+    setInput('');
+    setMessages(prev => [...prev, userMsg]);
+    setIsLoading(true);
+
+    let assistantSoFar = '';
+    const allMessages = [...messages, userMsg];
+
+    await streamGrok({
+      messages: allMessages,
+      onDelta: (chunk) => {
+        assistantSoFar += chunk;
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last?.role === 'assistant') {
+            return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantSoFar } : m);
+          }
+          return [...prev, { role: 'assistant', content: assistantSoFar }];
+        });
+      },
+      onDone: () => setIsLoading(false),
+      onError: (err) => {
+        setIsLoading(false);
+        setStatusMessage(`⚠ ${err}`);
+      },
+    });
+  }, [input, isLoading, messages]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const runValidation = useCallback((blockKey: string, code: string, filePath: string) => {
+    const checks = validateChange(code, filePath || 'unknown.ts');
+    setValidationResults(prev => new Map(prev).set(blockKey, checks));
+  }, []);
+
+  const applyBlock = useCallback((code: string, filePath: string) => {
+    if (!filePath) {
+      setStatusMessage('⚠ No file path detected for this block');
+      return;
+    }
+    const existing = SELF_SOURCE.find(f => f.path === filePath);
     const previousContent = existing?.content || '';
 
-    // Apply to virtual file system
     if (existing) {
-      existing.content = block.code;
+      existing.content = code;
       existing.isModified = true;
       existing.lastModified = Date.now();
     } else {
-      const name = targetPath.split('/').pop() || targetPath;
+      const name = filePath.split('/').pop() || filePath;
       const ext = name.split('.').pop() || 'ts';
-      const langMap: Record<string, string> = { ts: 'typescript', tsx: 'typescriptreact', js: 'javascript', jsx: 'javascriptreact', css: 'css', json: 'json', md: 'markdown' };
-      SELF_SOURCE.push({
-        name,
-        path: targetPath,
-        content: block.code,
-        language: langMap[ext] || 'plaintext',
-        isModified: true,
-        lastModified: Date.now(),
-      });
+      const langMap: Record<string, string> = { ts: 'typescript', tsx: 'typescriptreact', js: 'javascript', css: 'css', json: 'json' };
+      SELF_SOURCE.push({ name, path: filePath, content: code, language: langMap[ext] || 'plaintext', isModified: true, lastModified: Date.now() });
     }
 
-    setAppliedChanges(prev => [...prev, { filePath: targetPath, previousContent, newContent: block.code, timestamp: Date.now() }]);
-    setStatusMessage(`✓ Applied to ${targetPath}`);
-  }, [parsedBlocks, selectedTargets]);
+    setAppliedChanges(prev => [...prev, { filePath, previousContent, newContent: code, timestamp: Date.now() }]);
+    setStatusMessage(`✓ Applied to ${filePath}`);
+  }, []);
 
   const rollback = useCallback((change: AppliedChange) => {
     const file = SELF_SOURCE.find(f => f.path === change.filePath);
-    if (file) {
-      file.content = change.previousContent;
-      file.isModified = true;
-      file.lastModified = Date.now();
-    }
+    if (file) { file.content = change.previousContent; file.isModified = true; file.lastModified = Date.now(); }
     setAppliedChanges(prev => prev.filter(c => c !== change));
     setStatusMessage(`↩ Rolled back ${change.filePath}`);
   }, []);
 
-  const virtualFiles = SELF_SOURCE.map(f => f.path).sort();
+  const renderMessage = (msg: Msg, idx: number) => {
+    if (msg.role === 'user') {
+      return (
+        <div key={idx} className="flex gap-3 justify-end">
+          <div className="bg-primary/10 border border-primary/20 rounded-lg px-4 py-3 max-w-[80%]">
+            <p className="text-xs text-foreground whitespace-pre-wrap">{msg.content}</p>
+          </div>
+          <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
+            <User className="w-3.5 h-3.5 text-primary" />
+          </div>
+        </div>
+      );
+    }
 
-  const contextPrompt = `I'm working on a self-recursive IDE called λ Recursive. Here are the virtual files:\n${virtualFiles.slice(0, 30).join('\n')}\n\nPlease provide code changes as fenced code blocks with file paths like:\n// file: src/lib/example.ts\n\`\`\`typescript\n// code here\n\`\`\``;
+    const blocks = parseCodeBlocks(msg.content);
+    const textParts = msg.content.split(/```[\s\S]*?```/);
+
+    return (
+      <div key={idx} className="flex gap-3">
+        <div className="w-7 h-7 rounded-full bg-accent/30 flex items-center justify-center shrink-0 mt-1">
+          <Bot className="w-3.5 h-3.5 text-accent-foreground" />
+        </div>
+        <div className="flex-1 min-w-0 space-y-3 max-w-[85%]">
+          {textParts.map((text, ti) => (
+            <React.Fragment key={ti}>
+              {text.trim() && (
+                <p className="text-xs text-foreground/80 whitespace-pre-wrap leading-relaxed">{text.trim()}</p>
+              )}
+              {blocks[ti] && (() => {
+                const block = blocks[ti];
+                const blockKey = `${idx}-${ti}`;
+                const checks = validationResults.get(blockKey);
+                const isApplied = appliedChanges.some(c => c.newContent === block.code && c.filePath === block.filePath);
+
+                return (
+                  <div className="bg-card border border-border/50 rounded-lg overflow-hidden">
+                    <div className="px-3 py-1.5 border-b border-border/30 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Code2 className="w-3 h-3 text-muted-foreground shrink-0" />
+                        <span className="text-[10px] text-muted-foreground truncate">
+                          {block.filePath || block.language}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => runValidation(blockKey, block.code, block.filePath)}
+                          className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground hover:bg-secondary/80 text-[9px] transition-colors"
+                        >
+                          <Shield className="w-2.5 h-2.5" /> Check
+                        </button>
+                        {block.filePath && (
+                          <button
+                            onClick={() => applyBlock(block.code, block.filePath)}
+                            disabled={isApplied}
+                            className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 text-[9px] transition-colors disabled:opacity-30"
+                          >
+                            <Check className="w-2.5 h-2.5" /> {isApplied ? 'Applied' : 'Apply'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <pre className="p-3 text-[10px] text-foreground/70 max-h-48 overflow-auto whitespace-pre-wrap leading-relaxed font-mono">
+                      {block.code}
+                    </pre>
+                    {checks && (
+                      <div className="px-3 py-1.5 border-t border-border/30 space-y-0.5">
+                        {checks.map((check, j) => (
+                          <div key={j} className="flex items-center gap-1.5 text-[9px]">
+                            {check.severity === 'error' ? (
+                              <AlertTriangle className="w-2.5 h-2.5 text-destructive shrink-0" />
+                            ) : check.severity === 'warning' ? (
+                              <AlertTriangle className="w-2.5 h-2.5 text-[hsl(var(--terminal-amber))] shrink-0" />
+                            ) : (
+                              <Check className="w-2.5 h-2.5 text-primary shrink-0" />
+                            )}
+                            <span className={
+                              check.severity === 'error' ? 'text-destructive' :
+                              check.severity === 'warning' ? 'text-[hsl(var(--terminal-amber))]' : 'text-primary/70'
+                            }>{check.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-mono">
+    <div className="h-full flex flex-col bg-background text-foreground font-mono">
       {/* Header */}
-      <div className="border-b border-border/50 bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="text-muted-foreground hover:text-foreground transition-colors">
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-[hsl(var(--terminal-amber))]" />
-              <h1 className="text-lg font-bold font-display text-foreground">AI Bridge</h1>
-            </div>
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground/50 border border-border/50 px-2 py-0.5 rounded">paste → validate → apply</span>
+      <div className="border-b border-border/50 bg-card/50 backdrop-blur-sm shrink-0">
+        <div className="px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-5 h-5 text-[hsl(var(--terminal-amber))]" />
+            <h1 className="text-sm font-bold text-foreground">Grok Bridge</h1>
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground/50 border border-border/50 px-1.5 py-0.5 rounded">
+              native xAI chat
+            </span>
           </div>
-          <a
-            href="https://grok.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors text-xs"
-          >
-            <ExternalLink className="w-3 h-3" />
-            Open Grok
-          </a>
+          {statusMessage && (
+            <span className="text-[10px] text-[hsl(var(--terminal-amber))] animate-fade-in">{statusMessage}</span>
+          )}
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-        {/* Instructions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-card border border-border/50 rounded-lg p-4 space-y-2">
-            <div className="flex items-center gap-2 text-[hsl(var(--terminal-amber))]">
-              <span className="text-lg font-bold">1</span>
-              <ExternalLink className="w-4 h-4" />
+      {/* Chat messages */}
+      <div className="flex-1 overflow-auto p-6 space-y-4">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-4 opacity-50">
+            <Bot className="w-10 h-10 text-muted-foreground" />
+            <div>
+              <p className="text-sm text-muted-foreground">Chat with Grok directly</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1">
+                Ask for code changes — code blocks with file paths can be validated and applied instantly
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">Open Grok (or any AI) in a new tab. Copy the context prompt below to give it info about your codebase.</p>
           </div>
-          <div className="bg-card border border-border/50 rounded-lg p-4 space-y-2">
-            <div className="flex items-center gap-2 text-[hsl(var(--terminal-cyan))]">
-              <span className="text-lg font-bold">2</span>
-              <ClipboardPaste className="w-4 h-4" />
+        )}
+        {messages.map((msg, i) => renderMessage(msg, i))}
+        {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
+          <div className="flex gap-3">
+            <div className="w-7 h-7 rounded-full bg-accent/30 flex items-center justify-center shrink-0">
+              <Loader2 className="w-3.5 h-3.5 text-accent-foreground animate-spin" />
             </div>
-            <p className="text-xs text-muted-foreground">Ask it to generate code changes. Copy the response and paste it here — code blocks are auto-detected.</p>
+            <div className="text-xs text-muted-foreground">Thinking...</div>
           </div>
-          <div className="bg-card border border-border/50 rounded-lg p-4 space-y-2">
-            <div className="flex items-center gap-2 text-primary">
-              <span className="text-lg font-bold">3</span>
-              <Shield className="w-4 h-4" />
-            </div>
-            <p className="text-xs text-muted-foreground">Validate each block with the safety engine, pick a target file, and apply. Rollback anytime.</p>
-          </div>
-        </div>
+        )}
+        <div ref={chatEndRef} />
+      </div>
 
-        {/* Context prompt copier */}
-        <div className="bg-card border border-border/50 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground/50">Context prompt — copy this to Grok</span>
+      {/* Applied changes bar */}
+      {appliedChanges.length > 0 && (
+        <div className="border-t border-border/30 bg-card/30 px-6 py-2 flex items-center gap-3 overflow-x-auto shrink-0">
+          <span className="text-[9px] uppercase tracking-widest text-muted-foreground/40 shrink-0">Applied:</span>
+          {appliedChanges.map((change, i) => (
             <button
-              onClick={() => { navigator.clipboard.writeText(contextPrompt); setStatusMessage('Copied context prompt!'); }}
-              className="flex items-center gap-1 px-2 py-1 rounded bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors text-[10px]"
+              key={i}
+              onClick={() => rollback(change)}
+              className="flex items-center gap-1 px-2 py-1 rounded bg-primary/10 text-primary hover:bg-destructive/10 hover:text-destructive text-[9px] transition-colors shrink-0 group"
             >
-              <Copy className="w-3 h-3" /> Copy
+              <FileCode className="w-2.5 h-2.5" />
+              {change.filePath.split('/').pop()}
+              <Undo2 className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
             </button>
-          </div>
-          <pre className="text-[10px] text-muted-foreground/60 max-h-24 overflow-auto whitespace-pre-wrap">{contextPrompt}</pre>
+          ))}
         </div>
+      )}
 
-        {/* Paste area */}
-        <div className="bg-card border border-border/50 rounded-lg overflow-hidden">
-          <div className="px-4 py-2 border-b border-border/30 flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-widest text-muted-foreground/50">Paste AI response</span>
-            {statusMessage && (
-              <span className="text-[11px] text-[hsl(var(--terminal-amber))] animate-fade-in">{statusMessage}</span>
-            )}
-          </div>
+      {/* Input */}
+      <div className="border-t border-border/50 bg-card/50 p-4 shrink-0">
+        <div className="flex gap-3 items-end max-w-4xl mx-auto">
           <textarea
-            value={pastedText}
-            onChange={e => handlePaste(e.target.value)}
-            onPaste={e => { e.preventDefault(); handlePaste(e.clipboardData.getData('text')); }}
-            placeholder="Paste the AI's response here... Code blocks (```...```) will be auto-detected."
-            className="w-full h-40 bg-background/50 text-xs text-foreground/80 p-4 resize-y focus:outline-none placeholder:text-muted-foreground/25 font-mono"
+            ref={inputRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask Grok to modify code..."
+            rows={1}
+            className="flex-1 bg-background border border-border/50 rounded-lg px-4 py-3 text-xs text-foreground resize-none focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/30 font-mono min-h-[44px] max-h-32"
+            style={{ height: 'auto', overflow: 'hidden' }}
+            onInput={e => {
+              const t = e.currentTarget;
+              t.style.height = 'auto';
+              t.style.height = Math.min(t.scrollHeight, 128) + 'px';
+            }}
           />
-        </div>
-
-        {/* Parsed blocks */}
-        {parsedBlocks.length > 0 && (
-          <div className="space-y-4">
-            <h2 className="text-xs uppercase tracking-widest text-muted-foreground/50 flex items-center gap-2">
-              <FileCode className="w-3.5 h-3.5" />
-              Detected Code Blocks ({parsedBlocks.length})
-            </h2>
-
-            {parsedBlocks.map((block, i) => {
-              const checks = validationResults.get(i);
-              const hasErrors = checks?.some(c => c.severity === 'error');
-              const allPassed = checks && !hasErrors;
-              const isApplied = appliedChanges.some(c => c.newContent === block.code);
-
-              return (
-                <div key={i} className="bg-card border border-border/50 rounded-lg overflow-hidden">
-                  {/* Block header */}
-                  <div className="px-4 py-2 border-b border-border/30 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <span className="text-[10px] font-bold text-[hsl(var(--terminal-amber))]">#{i + 1}</span>
-                      <span className="text-[10px] text-muted-foreground/50">{block.language}</span>
-                      <select
-                        value={selectedTargets.get(i) || ''}
-                        onChange={e => setSelectedTargets(prev => new Map(prev).set(i, e.target.value))}
-                        className="bg-secondary text-secondary-foreground text-[10px] px-2 py-1 rounded border border-border/50 flex-1 max-w-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
-                      >
-                        <option value="">Select target file...</option>
-                        <option value="__new__">+ New file...</option>
-                        {virtualFiles.map(f => (
-                          <option key={f} value={f}>{f}</option>
-                        ))}
-                      </select>
-                      {selectedTargets.get(i) === '__new__' && (
-                        <input
-                          placeholder="src/lib/new-file.ts"
-                          onChange={e => setSelectedTargets(prev => new Map(prev).set(i, e.target.value))}
-                          className="bg-background text-xs text-foreground px-2 py-1 rounded border border-border/50 w-48 focus:outline-none focus:ring-1 focus:ring-primary/50"
-                        />
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => runValidation(i)}
-                        className="flex items-center gap-1 px-2 py-1 rounded bg-[hsl(var(--terminal-cyan))]/10 text-[hsl(var(--terminal-cyan))] hover:bg-[hsl(var(--terminal-cyan))]/20 text-[10px] transition-colors"
-                      >
-                        <Shield className="w-3 h-3" /> Validate
-                      </button>
-                      <button
-                        onClick={() => applyBlock(i)}
-                        disabled={!selectedTargets.get(i) || selectedTargets.get(i) === '__new__' || isApplied}
-                        className="flex items-center gap-1 px-2 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 text-[10px] transition-colors disabled:opacity-30"
-                      >
-                        <Check className="w-3 h-3" /> {isApplied ? 'Applied' : 'Apply'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Code preview */}
-                  <pre className="p-4 text-[11px] text-foreground/70 max-h-60 overflow-auto whitespace-pre-wrap leading-relaxed">
-                    {block.code}
-                  </pre>
-
-                  {/* Validation results */}
-                  {checks && (
-                    <div className="px-4 py-2 border-t border-border/30 space-y-1">
-                      {checks.map((check, j) => (
-                        <div key={j} className="flex items-center gap-2 text-[10px]">
-                          {check.severity === 'error' ? (
-                            <AlertTriangle className="w-3 h-3 text-destructive shrink-0" />
-                          ) : check.severity === 'warning' ? (
-                            <AlertTriangle className="w-3 h-3 text-[hsl(var(--terminal-amber))] shrink-0" />
-                          ) : (
-                            <Check className="w-3 h-3 text-primary shrink-0" />
-                          )}
-                          <span className={
-                            check.severity === 'error' ? 'text-destructive' :
-                            check.severity === 'warning' ? 'text-[hsl(var(--terminal-amber))]' :
-                            'text-primary/70'
-                          }>{check.message}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Applied changes / rollback */}
-        {appliedChanges.length > 0 && (
-          <div className="space-y-3">
-            <h2 className="text-xs uppercase tracking-widest text-muted-foreground/50 flex items-center gap-2">
-              <Check className="w-3.5 h-3.5 text-primary" />
-              Applied Changes ({appliedChanges.length})
-            </h2>
-            {appliedChanges.map((change, i) => (
-              <div key={i} className="bg-card border border-primary/20 rounded-lg px-4 py-3 flex items-center justify-between">
-                <div className="text-xs">
-                  <span className="text-primary font-medium">{change.filePath}</span>
-                  <span className="text-muted-foreground/50 ml-2">
-                    {new Date(change.timestamp).toLocaleTimeString()}
-                  </span>
-                </div>
-                <button
-                  onClick={() => rollback(change)}
-                  className="flex items-center gap-1 px-2 py-1 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 text-[10px] transition-colors"
-                >
-                  <Undo2 className="w-3 h-3" /> Rollback
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Benefits footer */}
-        <div className="border-t border-border/30 pt-6 pb-12">
-          <h3 className="text-[10px] uppercase tracking-widest text-muted-foreground/40 mb-4">Why use AI Bridge?</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: 'Zero API cost', desc: 'Use free web AI tiers' },
-              { label: 'Any AI works', desc: 'Grok, ChatGPT, Claude, Gemini' },
-              { label: 'Safety validated', desc: 'Every change is checked' },
-              { label: 'Instant rollback', desc: 'Undo any applied change' },
-            ].map((b, i) => (
-              <div key={i} className="bg-card/50 border border-border/30 rounded-lg p-3">
-                <p className="text-[11px] font-medium text-foreground/80">{b.label}</p>
-                <p className="text-[9px] text-muted-foreground/50 mt-0.5">{b.desc}</p>
-              </div>
-            ))}
-          </div>
+          <button
+            onClick={sendMessage}
+            disabled={!input.trim() || isLoading}
+            className="px-4 py-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-30 shrink-0"
+          >
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </button>
         </div>
       </div>
     </div>
