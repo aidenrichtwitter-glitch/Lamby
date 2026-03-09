@@ -445,8 +445,14 @@ function ApplyConfirmDialog({
         )}
 
         <div className="flex-1 overflow-auto px-4 py-2 min-h-0">
-          <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">
-            {pending.exists ? 'Changes' : 'New File Content'} ({pending.newContent.split('\n').length} lines)
+          <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-2">
+            <span>{pending.exists ? 'Changes' : 'New File Content'}</span>
+            {pending.exists && (
+              <span className="font-normal text-muted-foreground/60">
+                {pending.oldContent.split('\n').length} lines → {pending.newContent.split('\n').length} lines
+              </span>
+            )}
+            {!pending.exists && <span className="font-normal text-muted-foreground/60">{pending.newContent.split('\n').length} lines</span>}
           </div>
           <div className="rounded border border-border/50 bg-card/30 overflow-auto max-h-64">
             <pre className="text-[9px] font-mono leading-relaxed p-2">
@@ -768,11 +774,12 @@ const GrokBridge: React.FC = () => {
         const { ipcRenderer } = (window as any).require('electron');
         const readResult = await ipcRenderer.invoke('read-file', { filePath });
         if (!readResult.success) { setStatusMessage(`⚠ ${readResult.error}`); return; }
-        const safetyChecks = validateChange(code, filePath);
+        const oldContent = readResult.content || '';
+        const safetyChecks = validateChange(code, filePath, oldContent);
         setPendingApply({
           filePath,
           newContent: code,
-          oldContent: readResult.content || '',
+          oldContent,
           exists: readResult.exists ?? false,
           safetyChecks,
         });
@@ -795,11 +802,12 @@ const GrokBridge: React.FC = () => {
           setStatusMessage(`⚠ Could not read ${filePath}: ${readData.error || 'unknown error'}`);
           return;
         }
-        const safetyChecks = validateChange(code, filePath);
+        const oldContent = readData.content || '';
+        const safetyChecks = validateChange(code, filePath, oldContent);
         setPendingApply({
           filePath,
           newContent: code,
-          oldContent: readData.content || '',
+          oldContent,
           exists: readData.exists ?? false,
           safetyChecks,
         });

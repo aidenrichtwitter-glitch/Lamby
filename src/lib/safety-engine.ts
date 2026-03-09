@@ -7,19 +7,17 @@ import { SafetyCheck } from './self-reference';
 let idCounter = 0;
 const nextId = () => `check-${++idCounter}`;
 
-export function validateChange(newContent: string, filePath: string): SafetyCheck[] {
+export function validateChange(newContent: string, filePath: string, oldContent?: string): SafetyCheck[] {
   const checks: SafetyCheck[] = [];
 
-  // 1. Basic syntax validation - only catch truly broken code
   checks.push(...checkBalancedBrackets(newContent, filePath));
-  
-  // 2. Circular import detection - prevent infinite loops only
   checks.push(...checkImports(newContent, filePath));
-  
-  // 3. Only block truly catastrophic patterns
   checks.push(...checkCatastrophicPatterns(newContent, filePath));
 
-  // If no issues found, add a pass
+  if (oldContent !== undefined && oldContent.length > 0) {
+    checks.push(...checkSizeReduction(newContent, oldContent, filePath));
+  }
+
   if (checks.length === 0) {
     checks.push({
       id: nextId(),
@@ -27,6 +25,33 @@ export function validateChange(newContent: string, filePath: string): SafetyChec
       severity: 'info',
       message: 'All safety checks passed — build freely',
       file: filePath,
+    });
+  }
+
+  return checks;
+}
+
+function checkSizeReduction(newContent: string, oldContent: string, file: string): SafetyCheck[] {
+  const checks: SafetyCheck[] = [];
+  const oldLines = oldContent.split('\n').length;
+  const newLines = newContent.split('\n').length;
+  const ratio = newLines / oldLines;
+
+  if (oldLines > 20 && ratio < 0.3) {
+    checks.push({
+      id: nextId(),
+      type: 'runtime',
+      severity: 'error',
+      message: `This looks like a snippet, not a full file replacement. The existing file has ${oldLines} lines but the new content only has ${newLines} lines (${Math.round(ratio * 100)}%). This will delete most of the file. Ask Grok to return the COMPLETE file instead.`,
+      file,
+    });
+  } else if (oldLines > 20 && ratio < 0.6) {
+    checks.push({
+      id: nextId(),
+      type: 'runtime',
+      severity: 'warning',
+      message: `New content is significantly smaller: ${oldLines} → ${newLines} lines (${Math.round(ratio * 100)}%). Make sure Grok returned the complete file, not just a snippet.`,
+      file,
     });
   }
 
