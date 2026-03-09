@@ -11,6 +11,7 @@ import { StormLightning, emitStormProcess } from '@/components/TerminalStorm';
 import { runAutonomyCycle, getCumulativeAutonomy, recordAutonomyCycle, deterministicSearch, type AutonomyReport } from '@/lib/autonomy-engine';
 import { runLifeProof, getHeartbeatCount, type LifeProofReport } from '@/lib/life-proof';
 import { runMaturityTest, type MaturityReport } from '@/lib/maturity-test';
+import { predictNextEvolutions } from '@/lib/evolution-forecasting';
 
 interface CapabilityNode {
   name: string;
