@@ -984,6 +984,43 @@ const Index = () => {
           </button>
         ))}
 
+        {/* ═══ PAUSE / PLAY — prominent control ═══ */}
+        <button
+          onClick={handleToggleRunning}
+          className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${
+            recursionState.isRunning
+              ? 'bg-destructive/20 text-destructive hover:bg-destructive/30 animate-pulse'
+              : 'bg-primary/20 text-primary hover:bg-primary/30'
+          }`}
+          title={recursionState.isRunning ? 'PAUSE (stop Ollama)' : 'RESUME autonomy'}
+        >
+          {recursionState.isRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+        </button>
+
+        {/* Ollama guard status */}
+        {apiConfig.provider === 'ollama' && (
+          <button
+            onClick={() => {
+              const newConfig = { ...guardConfig, enabled: !guardConfig.enabled };
+              setGuardConfig(newConfig);
+              saveGuardConfig(newConfig);
+              toast({
+                title: newConfig.enabled ? '🛡️ Guard ON' : '⚠️ Guard OFF',
+                description: newConfig.enabled ? 'Ollama safety guardrails active' : 'Ollama can modify any file — be careful!',
+                variant: newConfig.enabled ? 'default' : 'destructive',
+              });
+            }}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all ${
+              guardConfig.enabled
+                ? 'text-primary bg-primary/10 hover:bg-primary/20'
+                : 'text-destructive bg-destructive/10 hover:bg-destructive/20'
+            }`}
+            title={guardConfig.enabled ? 'Guard: ON (click to disable)' : 'Guard: OFF (click to enable)'}
+          >
+            <ShieldAlert className="w-4 h-4" />
+          </button>
+        )}
+
         <div className="flex-1" />
 
         {/* Evolution Cycle link */}
