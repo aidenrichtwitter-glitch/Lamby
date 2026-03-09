@@ -170,9 +170,13 @@ async function testConversational(): Promise<DimensionResult> {
   const hasDepth = depth >= 10;
   checks.push({ name: 'conversation-depth', pass: hasDepth, detail: `${depth} messages (need 10+)` });
 
-  // Check: AI chat edge function exists (knowledge-search)
-  const hasAIChat = true; // We know the knowledge-search function exists
-  checks.push({ name: 'ai-backend', pass: hasAIChat, detail: 'Knowledge search function deployed' });
+  // Check: AI chat edge function is callable
+  try {
+    const { error } = await supabase.functions.invoke('knowledge-search', { body: { query: 'test', history: [] } });
+    checks.push({ name: 'ai-backend', pass: !error, detail: error ? `Edge function error: ${error.message}` : 'Knowledge search function responding' });
+  } catch (err) {
+    checks.push({ name: 'ai-backend', pass: false, detail: `Edge function unreachable: ${err instanceof Error ? err.message : 'unknown'}` });
+  }
 
   const passed = checks.filter(c => c.pass).length;
   const score = Math.round((passed / checks.length) * 100);
