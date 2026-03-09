@@ -15,6 +15,17 @@ import { SELF_SOURCE } from './self-source';
 import { decomposeTask } from './task-decomposition';
 import { supabase } from '@/integrations/supabase/client';
 
+export interface SelfReflection {
+  question: string;
+  answer: string;
+  closerToGoal: boolean;
+  valueSignals: { signal: string; present: boolean }[];
+  lifeSignals: { signal: string; present: boolean }[];
+  valueScore: number; // 0-100
+  lifeScore: number;  // 0-100
+  adaptedNextSteps: string[];
+}
+
 export interface AutonomyReport {
   timestamp: number;
   duration: number;
@@ -28,6 +39,8 @@ export interface AutonomyReport {
   // NEW: Goal-driven results
   goalAttempted: { id: string; title: string; stepAttempted: string; success: boolean; detail: string } | null;
   progressMade: boolean;
+  // NEW: Self-reflection after every cycle
+  selfReflection: SelfReflection | null;
 }
 
 export interface AutonomyTask {
