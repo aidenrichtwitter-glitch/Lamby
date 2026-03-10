@@ -963,41 +963,27 @@ function setupIpcHandlers() {
 
     const isWin = process.platform === 'win32';
     let actualCmd = trimmed === 'npm install' ? 'npm install --legacy-peer-deps' : trimmed;
+
     if (isWin) {
-      if (/^rm\s+(-rf?)\s+/i.test(actualCmd)) {
-        const targets = actualCmd.replace(/^rm\s+(-rf?\s+)?/i, '').trim().split(/\s+/);
-        const delCmds = targets.map(t => {
-          const winPath = t.replace(/\//g, '\\');
-          return `(if exist "${winPath}" rmdir /s /q "${winPath}") & (if exist "${winPath}" del /f /q "${winPath}")`;
-        });
-        actualCmd = delCmds.join(' & ');
-      } else if (/^rm\s/i.test(actualCmd)) {
-        const target = actualCmd.replace(/^rm\s+/i, '').trim().replace(/\//g, '\\');
-        actualCmd = `del /f /q "${target}"`;
-      } else if (/^mkdir\s+(-p\s+)?/i.test(actualCmd)) {
-        const dir = actualCmd.replace(/^mkdir\s+(-p\s+)?/i, '').trim().replace(/\//g, '\\');
-        actualCmd = `if not exist "${dir}" mkdir "${dir}"`;
-      } else if (/^mv\s/i.test(actualCmd)) {
-        const args = actualCmd.replace(/^mv\s+/i, '').trim();
-        actualCmd = `move /y ${args.replace(/\//g, '\\')}`;
-      } else if (/^cp\s/i.test(actualCmd)) {
-        const args = actualCmd.replace(/^cp\s+(-r\s+)?/i, '').trim();
-        const isRecursive = /^cp\s+-r/i.test(actualCmd);
-        actualCmd = isRecursive ? `xcopy /e /i /y ${args.replace(/\//g, '\\')}` : `copy /y ${args.replace(/\//g, '\\')}`;
-      } else if (/^touch\s/i.test(actualCmd)) {
-        const file = actualCmd.replace(/^touch\s+/i, '').trim().replace(/\//g, '\\');
-        actualCmd = `type nul > "${file}"`;
-      } else if (/^cat\s/i.test(actualCmd)) {
-        const file = actualCmd.replace(/^cat\s+/i, '').trim().replace(/\//g, '\\');
-        actualCmd = `type "${file}"`;
-      } else if (/^ls(\s|$)/i.test(actualCmd)) {
-        actualCmd = actualCmd.replace(/^ls/i, 'dir').replace(/\//g, '\\');
-      } else if (/^chmod\s/i.test(actualCmd) || /^chown\s/i.test(actualCmd) || /^ln\s/i.test(actualCmd)) {
-        actualCmd = `echo Skipped (not supported on Windows): ${trimmed.slice(0, 60)}`;
+      const UNIX_CMDS = /^(?:rm|mkdir|mv|cp|touch|cat|ls|ln|chmod|chown|head|tail|grep|find|wc|sort|uniq|diff|sed|awk|xargs|which|whoami|env|printenv|curl|wget)\b/i;
+      if (UNIX_CMDS.test(actualCmd)) {
+        let psCmd = actualCmd;
+        if (/^rm\s+(-rf?\s+)?/i.test(psCmd)) {
+          const targets = psCmd.replace(/^rm\s+(-rf?\s+)?/i, '').trim().split(/\s+/);
+          psCmd = targets.map(t => `Remove-Item -Path '${t}' -Recurse -Force -ErrorAction SilentlyContinue`).join('; ');
+        } else if (/^mkdir\s+(-p\s+)?/i.test(psCmd)) {
+          const dir = psCmd.replace(/^mkdir\s+(-p\s+)?/i, '').trim();
+          psCmd = `New-Item -ItemType Directory -Force -Path '${dir}'`;
+        } else if (/^touch\s/i.test(psCmd)) {
+          const file = psCmd.replace(/^touch\s+/i, '').trim();
+          psCmd = `New-Item -ItemType File -Force -Path '${file}'`;
+        }
+        actualCmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCmd.replace(/"/g, '\\"')}"`;
       } else if (/^corepack\s/i.test(actualCmd)) {
         actualCmd = `npx ${actualCmd}`;
       }
     }
+
     return new Promise((resolve) => {
       exec(actualCmd, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
         if (err) {
