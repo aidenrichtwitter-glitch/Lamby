@@ -112,7 +112,7 @@ supabase/
   - **OpenSSL legacy provider**: Auto-added for webpack/webpack-dev-server/vue-cli-service/react-scripts projects to fix `ERR_OSSL_EVP_UNSUPPORTED` with older webpack versions.
   - **CHOKIDAR_USEPOLLING**: Enabled for all preview spawns to prevent ENOSPC file watcher exhaustion in large monorepos.
   - **Node 20 iterator compatibility**: Auto-patches `vue-router` (and other libs) that use Node 22+ iterator helpers (`.values().filter()`) by wrapping in `Array.from()`. Runs on preview startup when Node < 22.
-  - **Windows terminal fix**: All `spawn`/`exec`/`execFile` calls use `windowsHide: true` to prevent visible cmd.exe windows. Preview spawns use `detached: false` on Windows (only `detached: true` on Unix for process group management). Process kill uses `taskkill /T /F` on Windows instead of `process.kill(-pid)`. Port cleanup uses `netstat -ano | findstr` on Windows instead of `/proc/net/tcp`.
+  - **Windows desktop parity**: Every single `spawn`/`exec`/`execFile`/`execSync` call in both `vite.config.ts` and `electron-browser/src/main.js` uses `windowsHide: true` to prevent visible cmd.exe windows. Preview spawns use `detached: false` on Windows (only `detached: true` on Unix for process group management). Process kill uses `taskkill /T /F` on Windows instead of `process.kill(-pid)`. Port cleanup uses `netstat -ano | findstr` on Windows instead of `/proc/net/tcp`. GitHub import tar extraction uses forward-slash paths on Windows.
   - **Process group kill**: Preview processes spawn with `detached: true`; stop/restart use `process.kill(-pid, SIGKILL)` for full process tree cleanup. Stale port detection uses `/proc/net/tcp` inode matching (since lsof/fuser/ss are unavailable).
   - Preview restart waits for port to be free (up to 3s) before spawning new server, preventing port conflicts.
   - Refresh button in toolbar and preview panel header force-reloads the iframe. Auto-refresh after applying code (500ms for normal files, 2.5s for config changes).
@@ -130,6 +130,7 @@ supabase/
   - Install uses `--ignore-scripts` for security on untrusted repos; 180s timeout with npm fallback; post-install `rebuild` step compiles native modules (e.g., better-sqlite3)
   - Vite server watch config excludes `projects/` and `.local/` to prevent ENOSPC file watcher exhaustion from pnpm stores
   - Grok is the single decision-maker for repo selection — Ollama never suggests repos
+  - **Context button framework filter**: Both the context prompt (empty project instructions) and the first-message enrichment constrain Grok to only suggest repos using proven frameworks: React+Vite, Vue+Vite, SvelteKit, Next.js, Nuxt, Webpack, Rspack, static HTML/CSS/JS. Explicitly excludes Solid/SolidStart (Node 22 required), Deno, Bun-only, mobile-only (React Native/Flutter), and backend-only repos.
 - **Empty project creation**: New projects start with only a `package.json` (name, version, description, framework metadata). No scaffold files — the idea is Grok suggests a repo to clone or generates the initial files
 
 ## Preview Log Capture & Auto-Error Feedback

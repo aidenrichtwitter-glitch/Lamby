@@ -311,9 +311,9 @@ function projectManagementPlugin(): Plugin {
             try {
               if (process.platform === "win32") {
                 try {
-                  const out = execSync(`netstat -ano | findstr :${port}`, { stdio: "pipe", encoding: "utf-8" });
+                  const out = execSync(`netstat -ano | findstr :${port}`, { stdio: "pipe", encoding: "utf-8", windowsHide: true });
                   const pids = new Set(out.split("\n").map((l: string) => l.trim().split(/\s+/).pop()).filter((p: any) => p && /^\d+$/.test(p) && p !== "0"));
-                  for (const pid of pids) { console.log(`[Preview] Killing PID ${pid} on port ${port}`); try { execSync(`taskkill /pid ${pid} /T /F`, { stdio: "pipe" }); } catch {} }
+                  for (const pid of pids) { console.log(`[Preview] Killing PID ${pid} on port ${port}`); try { execSync(`taskkill /pid ${pid} /T /F`, { stdio: "pipe", windowsHide: true }); } catch {} }
                 } catch {}
               } else {
                 const netTcp = fs.readFileSync("/proc/net/tcp", "utf-8") + fs.readFileSync("/proc/net/tcp6", "utf-8");
@@ -370,14 +370,14 @@ function projectManagementPlugin(): Plugin {
                 : pm === "yarn" ? "npx yarn install --ignore-engines"
                 : "npx bun install";
               console.log(`[Preview] Installing deps for ${name} with: ${installCmd}`);
-              execSync(installCmd, { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true });
+              execSync(installCmd, { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true, windowsHide: true });
               console.log(`[Preview] Deps installed for ${name}`);
             } catch (installErr: any) {
               console.error(`[Preview] Install failed for ${name}:`, installErr.message?.slice(0, 300));
               try {
                 const { execSync } = await import("child_process");
                 console.log(`[Preview] Retrying with npm for ${name}`);
-                execSync("npm install --legacy-peer-deps", { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true });
+                execSync("npm install --legacy-peer-deps", { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true, windowsHide: true });
               } catch (retryErr: any) {
                 console.error(`[Preview] Retry also failed for ${name}:`, retryErr.message?.slice(0, 300));
               }
@@ -482,7 +482,7 @@ function projectManagementPlugin(): Plugin {
               console.log(`[Preview] Pre-building pnpm monorepo packages with: pnpm run ${buildKey}`);
               try {
                 const { execSync: execSyncBuild } = await import("child_process");
-                execSyncBuild(`pnpm run ${buildKey}`, { cwd: projectDir, stdio: "pipe", timeout: 90000 });
+                execSyncBuild(`pnpm run ${buildKey}`, { cwd: projectDir, stdio: "pipe", timeout: 90000, windowsHide: true });
                 console.log(`[Preview] Monorepo packages built successfully`);
               } catch (e: any) {
                 console.log(`[Preview] Monorepo package build warning: ${e.message?.slice(0, 200)}`);
@@ -767,7 +767,7 @@ function projectManagementPlugin(): Plugin {
           try {
             if (process.platform === "win32") {
               const { execSync } = await import("child_process");
-              try { execSync(`taskkill /pid ${entry.process.pid} /T /F`, { stdio: "pipe" }); } catch {}
+              try { execSync(`taskkill /pid ${entry.process.pid} /T /F`, { stdio: "pipe", windowsHide: true }); } catch {}
             } else {
               try { process.kill(-entry.process.pid, "SIGKILL"); } catch { try { entry.process.kill("SIGKILL"); } catch {} }
             }
@@ -961,13 +961,13 @@ function projectManagementPlugin(): Plugin {
           const runInstall = (pkgs: string[], isDev: boolean): Promise<void> => new Promise((resolve) => {
             const cmd = buildInstallCmd(pkgs, isDev);
             console.log(`[Deps] Running: ${cmd} in ${name}`);
-            execAsync(cmd, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024 }, (err, _stdout, stderr) => {
+            execAsync(cmd, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024, windowsHide: true }, (err, _stdout, stderr) => {
               if (err) {
                 console.error(`[Deps] Failed: ${cmd}`, stderr?.slice(0, 300) || err.message?.slice(0, 300));
                 if (pm !== "npm") {
                   const npmFallback = `npm install --legacy-peer-deps${isDev ? " --save-dev" : ""} ${pkgs.join(" ")}`;
                   console.log(`[Deps] Retrying with npm: ${npmFallback}`);
-                  execAsync(npmFallback, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024 }, (err2) => {
+                  execAsync(npmFallback, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024, windowsHide: true }, (err2) => {
                     if (err2) errors.push(`Failed: Command failed: ${cmd}`);
                     resolve();
                   });
@@ -1046,7 +1046,7 @@ function projectManagementPlugin(): Plugin {
                 if (winAlt) {
                   const altCmd = winAlt[1];
                   await new Promise<void>((resolve) => {
-                    execAsync(altCmd, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024 }, (err, stdout, stderr) => {
+                    execAsync(altCmd, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
                       res.setHeader("Content-Type", "application/json");
                       if (err) {
                         res.end(JSON.stringify({ success: false, error: `${err.message?.slice(0, 400)} (ran: ${altCmd})`, output: (stdout || "").slice(0, 4000), stderr: (stderr || "").slice(0, 2000) }));
@@ -1067,7 +1067,7 @@ function projectManagementPlugin(): Plugin {
                   const psCmd = `irm ${ps1Url} | iex`;
                   const encodedCmd = Buffer.from(psCmd, "utf16le").toString("base64");
                   await new Promise<void>((resolve) => {
-                    execAsync(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedCmd}`, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024 }, (err, stdout, stderr) => {
+                    execAsync(`powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedCmd}`, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
                       res.setHeader("Content-Type", "application/json");
                       if (err) {
                         res.end(JSON.stringify({ success: false, error: err.message?.slice(0, 500), output: (stdout || "").slice(0, 4000), stderr: (stderr || "").slice(0, 2000) }));
@@ -1087,7 +1087,7 @@ function projectManagementPlugin(): Plugin {
               const tmpScript = path.join(os.tmpdir(), `install-${Date.now()}.sh`);
               fs.writeFileSync(tmpScript, script, { mode: 0o755 });
               await new Promise<void>((resolve) => {
-                execAsync(`bash "${tmpScript}"`, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024, env: { ...process.env, BUN_INSTALL: projectDir, CARGO_HOME: projectDir, RUSTUP_HOME: projectDir } }, (err, stdout, stderr) => {
+                execAsync(`bash "${tmpScript}"`, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024, windowsHide: true, env: { ...process.env, BUN_INSTALL: projectDir, CARGO_HOME: projectDir, RUSTUP_HOME: projectDir } }, (err, stdout, stderr) => {
                   try { fs.unlinkSync(tmpScript); } catch {}
                   res.setHeader("Content-Type", "application/json");
                   if (err) {
@@ -1198,7 +1198,7 @@ function projectManagementPlugin(): Plugin {
           }
 
           await new Promise<void>((resolve) => {
-            execAsync(actualCmd, { cwd: projectDir, timeout: 60000, shell: true, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+            execAsync(actualCmd, { cwd: projectDir, timeout: 60000, shell: true, maxBuffer: 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
               res.setHeader("Content-Type", "application/json");
               if (err) {
                 res.end(JSON.stringify({ success: false, error: err.message?.slice(0, 500), output: (stdout || "").slice(0, 4000), stderr: (stderr || "").slice(0, 2000) }));
@@ -1283,7 +1283,7 @@ function projectManagementPlugin(): Plugin {
 
             let alreadyInstalled = false;
             try {
-              execSync(mapping.check, { timeout: 10000, stdio: "pipe", shell: true });
+              execSync(mapping.check, { timeout: 10000, stdio: "pipe", shell: true, windowsHide: true });
               alreadyInstalled = true;
             } catch {}
 
@@ -1299,7 +1299,7 @@ function projectManagementPlugin(): Plugin {
             }
 
             try {
-              execSync(installCmd, { timeout: 120000, stdio: "pipe", shell: true });
+              execSync(installCmd, { timeout: 120000, stdio: "pipe", shell: true, windowsHide: true });
               results.push({ program: prog, label: mapping.label, alreadyInstalled: false, installed: true, command: installCmd });
             } catch (err: any) {
               results.push({ program: prog, label: mapping.label, alreadyInstalled: false, installed: false, error: err.message?.slice(0, 200), command: installCmd });
@@ -1386,7 +1386,11 @@ function projectManagementPlugin(): Plugin {
 
           fs.mkdirSync(projectDir, { recursive: true });
           try {
-            execSync(`tar xzf "${tarPath}" --strip-components=1 -C "${projectDir}"`, { timeout: 60000, stdio: "pipe" });
+            if (process.platform === "win32") {
+              execSync(`tar xzf "${tarPath.replace(/\\/g, '/')}" --strip-components=1 -C "${projectDir.replace(/\\/g, '/')}"`, { timeout: 60000, stdio: "pipe", windowsHide: true });
+            } else {
+              execSync(`tar xzf "${tarPath}" --strip-components=1 -C "${projectDir}"`, { timeout: 60000, stdio: "pipe", windowsHide: true });
+            }
           } catch (tarErr: any) {
             try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch {}
             throw new Error(`Failed to extract tarball: ${tarErr.message?.slice(0, 200)}`);
@@ -1471,12 +1475,12 @@ function projectManagementPlugin(): Plugin {
 
             console.log(`[Import] Installing deps for ${projectName} with: ${installCmd} (pm: ${detectedPM}, monorepo: ${isMonorepo})`);
             try {
-              execSync(installCmd, { cwd: projectDir, timeout: 180000, stdio: "pipe", shell: true });
+              execSync(installCmd, { cwd: projectDir, timeout: 180000, stdio: "pipe", shell: true, windowsHide: true });
               npmInstalled = true;
               console.log(`[Import] Deps installed for ${projectName}`);
               try {
                 const rebuildCmd = detectedPM === "pnpm" ? "npx pnpm rebuild" : detectedPM === "yarn" ? "npx yarn rebuild" : "npm rebuild";
-                execSync(rebuildCmd, { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true });
+                execSync(rebuildCmd, { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true, windowsHide: true });
                 console.log(`[Import] Native modules rebuilt for ${projectName}`);
               } catch (rebuildErr: any) {
                 console.log(`[Import] Rebuild skipped/failed for ${projectName} (non-critical)`);
@@ -1487,11 +1491,11 @@ function projectManagementPlugin(): Plugin {
               if (detectedPM !== "npm") {
                 try {
                   console.log(`[Import] Retrying with npm for ${projectName}`);
-                  execSync("npm install --legacy-peer-deps --ignore-scripts", { cwd: projectDir, timeout: 180000, stdio: "pipe", shell: true });
+                  execSync("npm install --legacy-peer-deps --ignore-scripts", { cwd: projectDir, timeout: 180000, stdio: "pipe", shell: true, windowsHide: true });
                   npmInstalled = true;
                   installError = "";
                   console.log(`[Import] Deps installed for ${projectName} (npm fallback)`);
-                  try { execSync("npm rebuild", { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true }); console.log(`[Import] Native modules rebuilt for ${projectName} (npm fallback)`); } catch { console.log(`[Import] Rebuild skipped for ${projectName} (npm fallback, non-critical)`); }
+                  try { execSync("npm rebuild", { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true, windowsHide: true }); console.log(`[Import] Native modules rebuilt for ${projectName} (npm fallback)`); } catch { console.log(`[Import] Rebuild skipped for ${projectName} (npm fallback, non-critical)`); }
                 } catch (retryErr: any) {
                   installError = retryErr.stderr?.toString().slice(-300) || retryErr.message?.slice(0, 300) || "Retry failed";
                 }
@@ -1589,7 +1593,7 @@ function projectManagementPlugin(): Plugin {
           if (entry) {
             const pid = entry.process.pid;
             if (process.platform === "win32") {
-              try { const { execSync } = await import("child_process"); execSync(`taskkill /pid ${pid} /T /F`, { stdio: "pipe" }); } catch {}
+              try { const { execSync } = await import("child_process"); execSync(`taskkill /pid ${pid} /T /F`, { stdio: "pipe", windowsHide: true }); } catch {}
             } else {
               try { process.kill(-pid, 9); } catch {}
             }
@@ -1600,9 +1604,9 @@ function projectManagementPlugin(): Plugin {
                 if (process.platform === "win32") {
                   try {
                     const { execSync } = await import("child_process");
-                    const out = execSync(`netstat -ano | findstr :${port}`, { stdio: "pipe", encoding: "utf-8" });
+                    const out = execSync(`netstat -ano | findstr :${port}`, { stdio: "pipe", encoding: "utf-8", windowsHide: true });
                     const pids = new Set(out.split("\n").map((l: string) => l.trim().split(/\s+/).pop()).filter((p: any) => p && /^\d+$/.test(p)));
-                    for (const p of pids) { try { execSync(`taskkill /pid ${p} /T /F`, { stdio: "pipe" }); } catch {} }
+                    for (const p of pids) { try { execSync(`taskkill /pid ${p} /T /F`, { stdio: "pipe", windowsHide: true }); } catch {} }
                   } catch {}
                   return;
                 }

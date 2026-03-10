@@ -1689,7 +1689,7 @@ const GrokBridge: React.FC = () => {
       if (matches.length > 0) {
         enrichedText = text + '\n\n' + formatKnowledgeForGrokPrompt(matches);
       } else if (!activeProject) {
-        enrichedText = text + '\n\n=== REPO SELECTION ===\nFor this new project, prioritize: 1) A popular public GitHub repo (React/TS/Vite/Tailwind, high stars, MIT license) as a starting point — provide the full URL. 2) Start fresh only if no existing repo fits.\n=== END REPO SELECTION ===';
+        enrichedText = text + '\n\n=== REPO SELECTION ===\nFor this new project, suggest ONE public GitHub repo as a starting point — provide the full URL.\nOnly suggest repos using proven frameworks: React+Vite, Vue+Vite, SvelteKit, Next.js, Nuxt, Webpack, Rspack, or static HTML/CSS/JS.\nDo NOT suggest: Solid/SolidStart, Deno, Bun-only, mobile-only (React Native/Flutter), or backend-only repos.\nPrefer: TypeScript, Tailwind CSS, high stars, MIT license. Start fresh only if no repo fits.\n=== END REPO SELECTION ===';
       }
     }
 
@@ -2551,13 +2551,25 @@ const GrokBridge: React.FC = () => {
         instructions += `Do NOT generate code files directly. Instead:\n\n`;
         instructions += `REPO SELECTION — PICK EXACTLY ONE:\n`;
         instructions += `Choose the SINGLE BEST public GitHub repo to clone as a starting point. Do NOT list multiple options.\n`;
-        instructions += `Requirements: React/TS/Vite/Tailwind preferred, high stars, MIT/Apache license.\n`;
+        instructions += `CRITICAL — Only choose repos using these PROVEN frameworks (auto-preview guaranteed):\n`;
+        instructions += `  - React + Vite (preferred)\n`;
+        instructions += `  - Vue 3 + Vite\n`;
+        instructions += `  - SvelteKit / Svelte + Vite\n`;
+        instructions += `  - Next.js (React)\n`;
+        instructions += `  - Nuxt (Vue)\n`;
+        instructions += `  - Vanilla JS/TS + Vite\n`;
+        instructions += `  - Webpack (including vue-cli-service, react-scripts/CRA)\n`;
+        instructions += `  - Rspack\n`;
+        instructions += `  - Three.js + Webpack or Vite\n`;
+        instructions += `  - Static HTML/CSS/JS\n`;
+        instructions += `DO NOT suggest repos using: Solid/SolidStart (needs Node 22), Deno, Bun-only, mobile-only (React Native/Flutter), Go/Rust/Python backends, or library packages without dev servers.\n`;
+        instructions += `Prefer: TypeScript, Tailwind CSS, high stars, MIT/Apache license.\n`;
         instructions += `Format your answer as: "Clone this repo: https://github.com/owner/repo" followed by a brief explanation of why it fits.\n`;
         instructions += `The app will automatically detect the GitHub URL and offer a one-click clone button.\n\n`;
         instructions += `FALLBACK ORDER:\n`;
-        instructions += `1) Public GitHub repo (preferred)\n`;
+        instructions += `1) Public GitHub repo using a proven framework above (preferred)\n`;
         instructions += `2) Proven build from community knowledge base (if listed above)\n`;
-        instructions += `3) LAST RESORT: Only if absolutely nothing fits, describe what to build from scratch\n\n`;
+        instructions += `3) LAST RESORT: Only if absolutely nothing fits, describe what to build from scratch using React + Vite + TypeScript\n\n`;
       } else {
         instructions += `Think step-by-step: understand the request → check the current files provided in context → plan minimal changes → output code.\n\n`;
       }

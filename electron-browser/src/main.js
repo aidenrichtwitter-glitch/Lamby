@@ -251,7 +251,7 @@ function checkWmctrlAvailability() {
   }
 
   // Check if wmctrl is available (install with: sudo dnf install wmctrl on Rocky Linux)
-  exec('which wmctrl', (error) => {
+  exec('which wmctrl', { windowsHide: true }, (error) => {
     wmctrlAvailable = !error;
     if (wmctrlAvailable) {
       console.log('Grok Desktop: wmctrl available for AOT fallback');
@@ -288,7 +288,7 @@ function toggleAlwaysOnTopLinux(mainWindow) {
       `wmctrl -r "${windowTitle}" -b toggle,above`  // Toggle always-on-top
     ];
 
-    exec(commands.join(' && '), (error) => {
+    exec(commands.join(' && '), { windowsHide: true }, (error) => {
       if (error) {
         console.warn('Grok Desktop: wmctrl AOT toggle failed:', error.message);
         resolve(false);
