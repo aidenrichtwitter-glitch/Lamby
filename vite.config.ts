@@ -462,7 +462,18 @@ function projectManagementPlugin(): Plugin {
             portEnv.PORT = String(port);
             portEnv.HOST = "0.0.0.0";
             portEnv.SKIP_PREFLIGHT_CHECK = "true";
+            portEnv.PUBLIC_URL = "";
             portEnv.NODE_OPTIONS = (portEnv.NODE_OPTIONS || "") + " --openssl-legacy-provider";
+            try {
+              const pkgPath = path.join(projectDir, "package.json");
+              const pkgRaw = fs.readFileSync(pkgPath, "utf-8");
+              const pkgObj = JSON.parse(pkgRaw);
+              if (pkgObj.homepage) {
+                delete pkgObj.homepage;
+                fs.writeFileSync(pkgPath, JSON.stringify(pkgObj, null, 2));
+                console.log(`[Preview] Removed homepage from ${name}/package.json for correct dev serving`);
+              }
+            } catch {}
           }
 
           const isNextDev = devCmd.args.includes("next");
@@ -1298,7 +1309,7 @@ function projectManagementPlugin(): Plugin {
         await proxyToPreview(req, res, port, targetPath);
       });
 
-      const PREVIEW_ASSET_PREFIXES = ["/_next/", "/__nextjs", "/favicon.ico", "/opengraph-image", "/apple-touch-icon", "/manifest.json", "/sw.js", "/workbox-"];
+      const PREVIEW_ASSET_PREFIXES = ["/_next/", "/__nextjs", "/favicon.ico", "/opengraph-image", "/apple-touch-icon", "/manifest.json", "/sw.js", "/workbox-", "/static/", "/sockjs-node/"];
       server.middlewares.use(async (req, res, next) => {
         if (!activePreviewPort || !req.url) { next(); return; }
         const shouldProxy = PREVIEW_ASSET_PREFIXES.some(p => req.url!.startsWith(p));
