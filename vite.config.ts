@@ -479,7 +479,11 @@ function projectManagementPlugin(): Plugin {
           if (!fs.existsSync(projectDir)) { res.statusCode = 404; res.end(JSON.stringify({ error: "Project not found" })); return; }
 
           const pkgJsonPath = path.join(projectDir, "package.json");
-          if (!fs.existsSync(pkgJsonPath)) {
+          let pkgJsonValid = false;
+          if (fs.existsSync(pkgJsonPath)) {
+            try { JSON.parse(fs.readFileSync(pkgJsonPath, "utf-8")); pkgJsonValid = true; } catch {}
+          }
+          if (!pkgJsonValid) {
             fs.writeFileSync(pkgJsonPath, JSON.stringify({ name, version: "0.0.1", private: true }, null, 2));
           }
 

@@ -1075,7 +1075,11 @@ function setupIpcHandlers() {
     if (!fs.existsSync(projectDir)) return { success: false, error: 'Project not found' };
 
     const pkgJsonPath = path.join(projectDir, 'package.json');
-    if (!fs.existsSync(pkgJsonPath)) {
+    let pkgJsonValid = false;
+    if (fs.existsSync(pkgJsonPath)) {
+      try { JSON.parse(fs.readFileSync(pkgJsonPath, 'utf-8')); pkgJsonValid = true; } catch {}
+    }
+    if (!pkgJsonValid) {
       fs.writeFileSync(pkgJsonPath, JSON.stringify({ name: projectName, version: '0.0.1', private: true }, null, 2));
     }
 
