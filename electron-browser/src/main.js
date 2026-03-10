@@ -345,13 +345,13 @@ function createWindow() {
       }
     }
 
-    const grokSession = session.fromPartition('persist:grok');
-    if (grokSession) {
-      if (typeof grokSession.setSpellCheckerEnabled === 'function') {
-        grokSession.setSpellCheckerEnabled(true);
+    const browserSession = session.fromPartition('persist:browser');
+    if (browserSession) {
+      if (typeof browserSession.setSpellCheckerEnabled === 'function') {
+        browserSession.setSpellCheckerEnabled(true);
       }
-      if (typeof grokSession.setSpellCheckerLanguages === 'function') {
-        grokSession.setSpellCheckerLanguages(languages);
+      if (typeof browserSession.setSpellCheckerLanguages === 'function') {
+        browserSession.setSpellCheckerLanguages(languages);
       }
     }
   } catch (_) {}
@@ -1064,7 +1064,7 @@ function setupIpcHandlers() {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        partition: 'persist:grok',
+        partition: 'persist:browser',
         spellcheck: true
       },
       icon: path.join(__dirname, 'grok.png')
@@ -1084,7 +1084,7 @@ function setupIpcHandlers() {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        partition: 'persist:grok',
+        partition: 'persist:browser',
         spellcheck: true
       },
       icon: path.join(__dirname, 'grok.png')
@@ -1212,7 +1212,7 @@ function setupContextMenus() {
   });
 }
 
-// Allow all media-related permissions for all domains (both default and persist:grok sessions)
+// Allow all media-related permissions for all domains (both default and persist:browser sessions)
 function setupPermissions() {
   const enableForSession = (targetSession) => {
     if (!targetSession) return;
@@ -1241,7 +1241,7 @@ function setupPermissions() {
   };
 
   try { enableForSession(session.defaultSession); } catch (_) {}
-  try { enableForSession(session.fromPartition('persist:grok')); } catch (_) {}
+  try { enableForSession(session.fromPartition('persist:browser')); } catch (_) {}
 
   // Ensure any future sessions/webviews also have audio unmuted
   try {

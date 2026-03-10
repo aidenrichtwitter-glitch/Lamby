@@ -905,7 +905,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
         <webview
           ref={(el: any) => { webviewRef.current = el; }}
           src={initialUrlRef.current}
-          partition="persist:grok"
+          partition="persist:browser"
           data-testid="webview-browser"
           style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }}
           allowpopups="true"
