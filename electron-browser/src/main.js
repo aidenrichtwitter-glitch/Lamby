@@ -944,6 +944,37 @@ function setupIpcHandlers() {
     ];
     const trimmed = command.trim().replace(/\s+#\s+.*$/, '').trim();
     if (/[\r\n\x00]/.test(trimmed)) return { success: false, error: 'Control characters not allowed in commands' };
+
+    if (/^curl-install:https?:\/\//i.test(trimmed)) {
+      const scriptUrl = trimmed.replace(/^curl-install:/i, '');
+      try {
+        const projectRoot = getProjectRoot();
+        const projectDir = path.join(projectRoot, 'projects', projectName);
+        if (!fs.existsSync(projectDir)) return { success: false, error: 'Project not found' };
+        const resp = await fetch(scriptUrl);
+        if (!resp.ok) return { success: false, error: `Failed to download script: ${resp.status} ${resp.statusText}` };
+        const script = await resp.text();
+        const tmpScript = path.join(os.tmpdir(), `install-${Date.now()}.sh`);
+        fs.writeFileSync(tmpScript, script, { mode: 0o755 });
+        const isWin = process.platform === 'win32';
+        const shellCmd = isWin
+          ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpScript}"`
+          : `bash "${tmpScript}"`;
+        return new Promise((resolve) => {
+          exec(shellCmd, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024, env: { ...process.env, BUN_INSTALL: projectDir, CARGO_HOME: projectDir, RUSTUP_HOME: projectDir } }, (err, stdout, stderr) => {
+            try { fs.unlinkSync(tmpScript); } catch {}
+            if (err) {
+              resolve({ success: false, error: err.message?.slice(0, 500), output: (stdout || '').slice(0, 4000), stderr: (stderr || '').slice(0, 2000) });
+            } else {
+              resolve({ success: true, output: (stdout || '').slice(0, 4000) });
+            }
+          });
+        });
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    }
+
     const devServerRe = /^(?:npm\s+(?:run\s+)?(?:dev|start)|yarn\s+(?:dev|start)|pnpm\s+(?:dev|start)|bun\s+(?:dev|start)|npx\s+vite(?:\s|$))/i;
     if (devServerRe.test(trimmed)) return { success: false, error: 'Dev server commands should use the Preview button instead' };
     const isAllowed = allowedPrefixes.some(p => trimmed.startsWith(p)) || trimmed === 'npm install' || trimmed === 'corepack enable';

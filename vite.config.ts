@@ -548,6 +548,43 @@ function projectManagementPlugin(): Plugin {
           ];
           const trimmed = command.trim().replace(/\s+#\s+.*$/, '').trim();
           if (/[\r\n\x00]/.test(trimmed)) { res.statusCode = 403; res.end(JSON.stringify({ error: "Control characters not allowed in commands" })); return; }
+
+          if (/^curl-install:https?:\/\//i.test(trimmed)) {
+            const scriptUrl = trimmed.replace(/^curl-install:/i, "");
+            try {
+              const fs = await import("fs");
+              const projectDir = check.resolved;
+              if (!fs.existsSync(projectDir)) { res.statusCode = 404; res.end(JSON.stringify({ success: false, error: "Project not found" })); return; }
+              const resp = await fetch(scriptUrl);
+              if (!resp.ok) { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ success: false, error: `Failed to download script: ${resp.status} ${resp.statusText}` })); return; }
+              const script = await resp.text();
+              const os = await import("os");
+              const tmpScript = path.join(os.tmpdir(), `install-${Date.now()}.sh`);
+              fs.writeFileSync(tmpScript, script, { mode: 0o755 });
+              const { exec: execAsync } = await import("child_process");
+              const isWin = os.platform() === "win32";
+              const shellCmd = isWin
+                ? `powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpScript}"`
+                : `bash "${tmpScript}"`;
+              await new Promise<void>((resolve) => {
+                execAsync(shellCmd, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 2 * 1024 * 1024, env: { ...process.env, BUN_INSTALL: projectDir, CARGO_HOME: projectDir, RUSTUP_HOME: projectDir } }, (err, stdout, stderr) => {
+                  try { fs.unlinkSync(tmpScript); } catch {}
+                  res.setHeader("Content-Type", "application/json");
+                  if (err) {
+                    res.end(JSON.stringify({ success: false, error: err.message?.slice(0, 500), output: (stdout || "").slice(0, 4000), stderr: (stderr || "").slice(0, 2000) }));
+                  } else {
+                    res.end(JSON.stringify({ success: true, output: (stdout || "").slice(0, 4000) }));
+                  }
+                  resolve();
+                });
+              });
+            } catch (err: any) {
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+            return;
+          }
+
           const devServerRe = /^(?:npm\s+(?:run\s+)?(?:dev|start)|yarn\s+(?:dev|start)|pnpm\s+(?:dev|start)|bun\s+(?:dev|start)|npx\s+vite(?:\s|$))/i;
           if (devServerRe.test(trimmed)) { res.statusCode = 400; res.end(JSON.stringify({ error: "Dev server commands should use the Preview button instead" })); return; }
           const isAllowed = allowedPrefixes.some(p => trimmed.startsWith(p)) || trimmed === "npm install" || trimmed === "corepack enable";

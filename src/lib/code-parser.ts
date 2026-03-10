@@ -262,8 +262,8 @@ export function parseActionItems(text: string): ActionItem[] {
         } else if (/^(?:npm|yarn|pnpm|bun)\s+(?:run|test|build|why)\b/i.test(trimmed)) {
           addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed }, lineOffset);
         } else if (/^(?:curl|wget)\s+.*\|\s*(?:bash|sh|zsh)\s*$/i.test(trimmed)) {
-          const url = trimmed.match(/https?:\/\/[^\s|]+/)?.[0] || trimmed;
-          addItem({ type: 'info', description: `Install script (open in browser): ${url}` }, lineOffset);
+          const url = trimmed.match(/https?:\/\/[^\s|]+/)?.[0] || '';
+          if (url) addItem({ type: 'command', description: `Install script: ${url}`, command: `curl-install:${url}` }, lineOffset);
         } else if (/^npx\s+/i.test(trimmed)) {
           addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed }, lineOffset);
         } else if (/^mkdir\s/i.test(trimmed)) {
@@ -320,8 +320,8 @@ export function parseActionItems(text: string): ActionItem[] {
       if (SHELL_CMD_RE.test(cmd)) {
         if (DEV_CMD.test(cmd)) continue;
         if (/^(?:curl|wget)\s+.*\|\s*(?:bash|sh|zsh)/i.test(cmd)) {
-          const url = cmd.match(/https?:\/\/[^\s|]+/)?.[0] || cmd;
-          addItem({ type: 'info', description: `Install script (open in browser): ${url}` }, lineStart);
+          const url = cmd.match(/https?:\/\/[^\s|]+/)?.[0] || '';
+          if (url) addItem({ type: 'command', description: `Install script: ${url}`, command: `curl-install:${url}` }, lineStart);
           continue;
         }
         if (/^(?:npm|yarn|pnpm|bun)\s+(?:install|i|add)\s+[^-]/i.test(cmd) && !/(?:-g|--global)/.test(cmd)) continue;
