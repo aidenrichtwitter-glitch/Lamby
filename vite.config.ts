@@ -552,6 +552,20 @@ function projectManagementPlugin(): Plugin {
             }
           }
 
+          let hasTsconfigPaths = false;
+          for (const tscfg of ["tsconfig.json", "tsconfig.app.json"]) {
+            const tscfgPath = path.join(projectDir, tscfg);
+            if (fs.existsSync(tscfgPath)) {
+              try {
+                const raw = fs.readFileSync(tscfgPath, "utf-8").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/,\s*([\]}])/g, "$1");
+                const parsed = JSON.parse(raw);
+                const co = parsed.compilerOptions || {};
+                if (co.baseUrl || co.paths) hasTsconfigPaths = true;
+              } catch {}
+              break;
+            }
+          }
+
           for (const cfgName of ["vite.config.ts", "vite.config.js", "vite.config.mjs"]) {
             const viteConfigPath = path.join(projectDir, cfgName);
             if (fs.existsSync(viteConfigPath)) {
@@ -570,6 +584,32 @@ function projectManagementPlugin(): Plugin {
                 content = content.replace(/\s*base:\s*["']\/(__preview|__dev)[^"']*["'],?\n?/g, "\n");
                 console.log(`[Preview] Removed stale base path from ${name}/${cfgName}`);
               }
+
+              if (hasTsconfigPaths && !content.includes("tsconfigPaths") && !content.includes("tsconfig-paths")) {
+                const tspPkgInstalled = fs.existsSync(path.join(projectDir, "node_modules", "vite-tsconfig-paths"));
+                if (!tspPkgInstalled) {
+                  try {
+                    let installCmd = "npm install --legacy-peer-deps --save-dev vite-tsconfig-paths";
+                    if (fs.existsSync(path.join(projectDir, "pnpm-lock.yaml"))) installCmd = "npx pnpm add -D vite-tsconfig-paths";
+                    else if (fs.existsSync(path.join(projectDir, "yarn.lock"))) installCmd = "yarn add -D vite-tsconfig-paths";
+                    else if (fs.existsSync(path.join(projectDir, "bun.lockb")) || fs.existsSync(path.join(projectDir, "bun.lock"))) installCmd = "bun add -D vite-tsconfig-paths";
+                    execSync(installCmd, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true });
+                    console.log(`[Preview] Installed vite-tsconfig-paths for ${name}`);
+                  } catch (installErr: any) {
+                    console.log(`[Preview] Could not install vite-tsconfig-paths for ${name}: ${installErr.message?.slice(0, 100)}`);
+                  }
+                }
+                if (fs.existsSync(path.join(projectDir, "node_modules", "vite-tsconfig-paths"))) {
+                  const importLine = `import tsconfigPaths from 'vite-tsconfig-paths'\n`;
+                  const pluginsMatch = content.match(/plugins\s*:\s*\[/);
+                  if (pluginsMatch) {
+                    content = importLine + content;
+                    content = content.replace(/plugins\s*:\s*\[/, `plugins: [tsconfigPaths(), `);
+                    console.log(`[Preview] Added tsconfigPaths plugin to ${name}/${cfgName}`);
+                  }
+                }
+              }
+
               if (content !== viteConfigContent) {
                 fs.writeFileSync(viteConfigPath, content, "utf-8");
               }
