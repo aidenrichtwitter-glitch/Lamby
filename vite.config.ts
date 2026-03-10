@@ -584,6 +584,46 @@ function projectManagementPlugin(): Plugin {
             }
           }
 
+          const nodeVer = parseInt(process.versions.node.split(".")[0], 10);
+          if (nodeVer < 22) {
+            const iterMethods = "filter|map|find|some|every|reduce|forEach|flatMap|toSorted";
+            const iterRe = new RegExp(`(\\b[a-zA-Z_$][a-zA-Z0-9_$]*)\\.(values|keys|entries)\\(\\)\\.(${iterMethods})\\(`, "g");
+            const patchIteratorHelpers = (dir: string) => {
+              try {
+                const files = fs.readdirSync(dir);
+                for (const f of files) {
+                  if (!f.endsWith(".js") && !f.endsWith(".mjs") && !f.endsWith(".cjs")) continue;
+                  const fp = path.join(dir, f);
+                  try {
+                    const src = fs.readFileSync(fp, "utf-8");
+                    if (iterRe.test(src)) {
+                      iterRe.lastIndex = 0;
+                      const patched = src.replace(iterRe, (_match: string, varName: string, iterMethod: string, arrayMethod: string) => {
+                        return `Array.from(${varName}.${iterMethod}()).${arrayMethod}(`;
+                      });
+                      if (patched !== src) {
+                        fs.writeFileSync(fp, patched, "utf-8");
+                        console.log(`[Preview] Patched Node 22+ iterator helpers in ${name}/${path.relative(projectDir, fp)}`);
+                      }
+                    }
+                  } catch {}
+                }
+              } catch {}
+            };
+            const vrDist = path.join(projectDir, "node_modules", "vue-router", "dist");
+            if (fs.existsSync(vrDist)) patchIteratorHelpers(vrDist);
+            const pnpmVR = path.join(projectDir, "node_modules", ".pnpm");
+            if (fs.existsSync(pnpmVR)) {
+              try {
+                const pnpmDirs = fs.readdirSync(pnpmVR).filter((d: string) => d.startsWith("vue-router@"));
+                for (const d of pnpmDirs) {
+                  const dist = path.join(pnpmVR, d, "node_modules", "vue-router", "dist");
+                  if (fs.existsSync(dist)) patchIteratorHelpers(dist);
+                }
+              } catch {}
+            }
+          }
+
           const portEnv: Record<string, string> = {
             ...process.env as Record<string, string>,
             BROWSER: "none",
