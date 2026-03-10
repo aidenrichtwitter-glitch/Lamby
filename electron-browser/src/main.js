@@ -932,12 +932,26 @@ function setupIpcHandlers() {
     if (!command || typeof command !== 'string') {
       return { success: false, error: 'No command specified' };
     }
-    const allowedPrefixes = ['npm install', 'npm run', 'npm update', 'npm ci', 'npx ', 'yarn ', 'pnpm ', 'node ', 'tsc', 'mkdir ', 'cp ', 'mv '];
-    const trimmed = command.trim();
-    const isAllowed = allowedPrefixes.some(p => trimmed.startsWith(p)) || trimmed === 'npm install';
+    const allowedPrefixes = [
+      'npm ', 'npx ', 'yarn ', 'pnpm ', 'bun ',
+      'node ', 'deno ', 'tsc', 'tsx ',
+      'corepack ', 'nvm ', 'fnm ',
+      'mkdir ', 'cp ', 'mv ', 'rm ', 'touch ', 'cat ', 'ls ', 'pwd',
+      'chmod ', 'chown ', 'ln ',
+      'git ', 'curl ', 'wget ',
+      'python', 'pip', 'cargo ', 'go ', 'rustc', 'gcc', 'g++', 'make',
+      'docker ', 'docker-compose ',
+    ];
+    const trimmed = command.trim().replace(/\s+#\s+.*$/, '').trim();
+    const devServerRe = /^(?:npm\s+(?:run\s+)?(?:dev|start)|yarn\s+(?:dev|start)|pnpm\s+(?:dev|start)|bun\s+(?:dev|start)|npx\s+vite(?:\s|$))/i;
+    if (devServerRe.test(trimmed)) return { success: false, error: 'Dev server commands should use the Preview button instead' };
+    const isAllowed = allowedPrefixes.some(p => trimmed.startsWith(p)) || trimmed === 'npm install' || trimmed === 'corepack enable';
     if (!isAllowed) return { success: false, error: `Command not allowed: ${trimmed.slice(0, 50)}` };
-    if (/[;&|`$(){}]/.test(trimmed) && !trimmed.includes('--legacy-peer-deps')) {
+    if (/[;&|`$(){}]/.test(trimmed)) {
       return { success: false, error: 'Shell metacharacters not allowed' };
+    }
+    if (/\.\.[\/\\]/.test(trimmed)) {
+      return { success: false, error: 'Path traversal not allowed' };
     }
 
     const projectRoot = getProjectRoot();

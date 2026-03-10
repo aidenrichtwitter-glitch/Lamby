@@ -532,14 +532,26 @@ function projectManagementPlugin(): Plugin {
           const check = validateProjectPath(name || "");
           if (!check.valid) { res.statusCode = 403; res.end(JSON.stringify({ success: false, error: check.error })); return; }
 
-          const allowedPrefixes = ["npm install", "npm run", "npm update", "npm ci", "npx ", "yarn ", "pnpm ", "node ", "tsc", "mkdir ", "cp ", "mv "];
-          const trimmed = command.trim();
-          const devServerRe = /^(?:npm\s+(?:run\s+)?(?:dev|start)|yarn\s+(?:dev|start)|pnpm\s+(?:dev|start)|npx\s+vite(?:\s|$))/i;
+          const allowedPrefixes = [
+            "npm ", "npx ", "yarn ", "pnpm ", "bun ",
+            "node ", "deno ", "tsc", "tsx ",
+            "corepack ", "nvm ", "fnm ",
+            "mkdir ", "cp ", "mv ", "rm ", "touch ", "cat ", "ls ", "pwd",
+            "chmod ", "chown ", "ln ",
+            "git ", "curl ", "wget ",
+            "python", "pip", "cargo ", "go ", "rustc", "gcc", "g++", "make",
+            "docker ", "docker-compose ",
+          ];
+          const trimmed = command.trim().replace(/\s+#\s+.*$/, '').trim();
+          const devServerRe = /^(?:npm\s+(?:run\s+)?(?:dev|start)|yarn\s+(?:dev|start)|pnpm\s+(?:dev|start)|bun\s+(?:dev|start)|npx\s+vite(?:\s|$))/i;
           if (devServerRe.test(trimmed)) { res.statusCode = 400; res.end(JSON.stringify({ error: "Dev server commands should use the Preview button instead" })); return; }
-          const isAllowed = allowedPrefixes.some(p => trimmed.startsWith(p)) || trimmed === "npm install";
+          const isAllowed = allowedPrefixes.some(p => trimmed.startsWith(p)) || trimmed === "npm install" || trimmed === "corepack enable";
           if (!isAllowed) { res.statusCode = 403; res.end(JSON.stringify({ error: `Command not allowed: ${trimmed.slice(0, 50)}` })); return; }
-          if (/[;&|`$(){}]/.test(trimmed) && !trimmed.includes("--legacy-peer-deps")) {
+          if (/[;&|`$(){}]/.test(trimmed)) {
             res.statusCode = 403; res.end(JSON.stringify({ error: "Shell metacharacters not allowed" })); return;
+          }
+          if (/\.\.[\/\\]/.test(trimmed)) {
+            res.statusCode = 403; res.end(JSON.stringify({ error: "Path traversal not allowed" })); return;
           }
 
           const fs = await import("fs");

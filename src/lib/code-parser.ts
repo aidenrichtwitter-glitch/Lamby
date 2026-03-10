@@ -248,8 +248,9 @@ export function parseActionItems(text: string): ActionItem[] {
     const cmdBlock = sm[1];
     let lineOffset = sm.index + sm[0].indexOf(sm[1]);
     for (const line of cmdBlock.split('\n')) {
-      const trimmed = line.replace(/^\$\s*/, '').trim();
-      if (trimmed && !trimmed.startsWith('#')) {
+      const rawTrimmed = line.replace(/^\$\s*/, '').trim();
+      if (rawTrimmed && !rawTrimmed.startsWith('#')) {
+        const trimmed = rawTrimmed.replace(/\s+#\s+.*$/, '').trim();
         const DEV_SERVER_RE = /^(?:npm\s+(?:run\s+)?(?:dev|start)|yarn\s+(?:dev|start)|pnpm\s+(?:dev|start)|bun\s+(?:dev|start)|npx\s+vite(?:\s|$))/i;
         if (/^(?:npm|yarn|pnpm|bun)\s+(?:install|i|add)\s+[^-]/i.test(trimmed) && !/\s-g\b/.test(trimmed) && !/\s--global\b/.test(trimmed)) {
         } else if (DEV_SERVER_RE.test(trimmed)) {
