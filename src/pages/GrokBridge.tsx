@@ -493,19 +493,12 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
                                   setRunningCommands(prev => new Set(prev).add(i));
                                   setCommandResults(prev => { const m = new Map(prev); m.delete(i); return m; });
                                   try {
-                                    const isElectron = typeof (window as any).require === 'function';
-                                    let result: any;
-                                    if (isElectron) {
-                                      const { ipcRenderer } = (window as any).require('electron');
-                                      result = await ipcRenderer.invoke('run-project-command', { projectName: activeProject, command: item.command });
-                                    } else {
-                                      const res = await fetch('/api/projects/run-command', {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ name: activeProject, command: item.command }),
-                                      });
-                                      result = await res.json();
-                                    }
+                                    const res = await fetch('/api/projects/run-command', {
+                                      method: 'POST',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ name: activeProject, command: item.command }),
+                                    });
+                                    const result = await res.json();
                                     setCommandResults(prev => new Map(prev).set(i, result));
                                   } catch (err: any) {
                                     setCommandResults(prev => new Map(prev).set(i, { success: false, error: err.message }));

@@ -538,9 +538,7 @@ function projectManagementPlugin(): Plugin {
 
           const fs = await import("fs");
           const projectDir = check.resolved;
-          if (!fs.existsSync(projectDir)) {
-            fs.mkdirSync(projectDir, { recursive: true });
-          }
+          if (!fs.existsSync(projectDir)) { res.statusCode = 404; res.end(JSON.stringify({ success: false, error: `Project directory not found: ${projectDir}` })); return; }
 
           const { execSync } = await import("child_process");
           const actualCmd = trimmed === "npm install" ? "npm install --legacy-peer-deps" : trimmed;
