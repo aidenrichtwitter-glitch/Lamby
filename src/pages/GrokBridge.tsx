@@ -36,6 +36,7 @@ import {
   cleanedResponseToBlocks,
   suggestQuickActions,
   clearAvailabilityCache,
+  toasterReadyTest,
   type OllamaToasterConfig,
   type ToasterAnalysis,
   type ToasterAvailability,
@@ -1046,6 +1047,7 @@ const GrokBridge: React.FC = () => {
   const [toasterConfig, setToasterConfig] = useState<OllamaToasterConfig>(() => loadToasterConfig());
   const [lastToasterAnalysis, setLastToasterAnalysis] = useState<ToasterAnalysis | null>(null);
   const [toasterLoading, setToasterLoading] = useState(false);
+  const [toasterReadyMsg, setToasterReadyMsg] = useState<string | null>(null);
   const [previewLogs, setPreviewLogs] = useState<LogEntry[]>([]);
   const [githubImportProgress, setGithubImportProgress] = useState<GitHubImportProgress | null>(null);
   const [detectedRepoUrl, setDetectedRepoUrl] = useState<string | null>(null);
@@ -1268,7 +1270,15 @@ const GrokBridge: React.FC = () => {
   }, [addPreviewLog]);
 
   useEffect(() => {
-    checkToasterAvailability(toasterConfig).then(setToasterAvailability);
+    checkToasterAvailability(toasterConfig).then(result => {
+      setToasterAvailability(result);
+      if (result.available) {
+        toasterReadyTest(toasterConfig).then(msg => {
+          setToasterReadyMsg(msg || 'Toaster is ready!');
+          setTimeout(() => setToasterReadyMsg(null), 6000);
+        }).catch(() => {});
+      }
+    });
   }, [toasterConfig]);
 
   useEffect(() => {
@@ -1277,10 +1287,15 @@ const GrokBridge: React.FC = () => {
       const result = await checkToasterAvailability(toasterConfig);
       setToasterAvailability(prev => {
         if (prev && prev.available !== result.available) {
-          setStatusMessage(result.available
-            ? `Toaster reconnected — ${result.models.slice(0, 2).join(', ')}`
-            : `Toaster disconnected${result.error ? ': ' + result.error : ''}`
-          );
+          if (result.available) {
+            setStatusMessage(`Toaster reconnected — ${result.models.slice(0, 2).join(', ')}`);
+            toasterReadyTest(toasterConfig).then(msg => {
+              setToasterReadyMsg(msg || 'Toaster is ready!');
+              setTimeout(() => setToasterReadyMsg(null), 6000);
+            }).catch(() => {});
+          } else {
+            setStatusMessage(`Toaster disconnected${result.error ? ': ' + result.error : ''}`);
+          }
         }
         return result;
       });
@@ -2367,12 +2382,15 @@ const GrokBridge: React.FC = () => {
       if (isEmptyProject) {
         instructions += `This is a BRAND NEW empty project. There are no source files yet.\n`;
         instructions += `Do NOT generate code files directly. Instead:\n\n`;
-        instructions += `REPO SELECTION PRIORITY:\n`;
-        instructions += `1) FIRST: Suggest a popular public GitHub repo as a starting point (React/TS/Vite/Tailwind preferred, high stars, MIT/Apache license). Provide the full clone URL so the user can import it.\n`;
-        instructions += `2) SECOND: Consider any proven builds from the community knowledge base if listed above.\n`;
-        instructions += `3) LAST RESORT: Only if nothing fits, describe what files/structure to create and let the user confirm before generating code.\n`;
-        instructions += `Always prefer leveraging existing open-source work over starting from scratch.\n`;
-        instructions += `The user will clone/import the repo through Guardian AI's GitHub import feature.\n\n`;
+        instructions += `REPO SELECTION — PICK EXACTLY ONE:\n`;
+        instructions += `Choose the SINGLE BEST public GitHub repo to clone as a starting point. Do NOT list multiple options.\n`;
+        instructions += `Requirements: React/TS/Vite/Tailwind preferred, high stars, MIT/Apache license.\n`;
+        instructions += `Format your answer as: "Clone this repo: https://github.com/owner/repo" followed by a brief explanation of why it fits.\n`;
+        instructions += `The app will automatically detect the GitHub URL and offer a one-click clone button.\n\n`;
+        instructions += `FALLBACK ORDER:\n`;
+        instructions += `1) Public GitHub repo (preferred)\n`;
+        instructions += `2) Proven build from community knowledge base (if listed above)\n`;
+        instructions += `3) LAST RESORT: Only if absolutely nothing fits, describe what to build from scratch\n\n`;
       } else {
         instructions += `Think step-by-step: understand the request → check the current files provided in context → plan minimal changes → output code.\n\n`;
       }
@@ -3136,37 +3154,49 @@ const GrokBridge: React.FC = () => {
           </div>
 
           {toasterAvailability !== null && (
-            <button
-              onClick={async () => {
-                clearAvailabilityCache();
-                const result = await checkToasterAvailability(toasterConfig);
-                setToasterAvailability(result);
-                if (result.available) {
-                  setStatusMessage(`Toaster connected — ${result.models.length} model${result.models.length !== 1 ? 's' : ''}: ${result.models.slice(0, 3).join(', ')}${result.version ? ` (v${result.version})` : ''}`);
-                } else {
-                  setStatusMessage(`Toaster: ${result.error || 'Connection failed'}`);
+            <div className="relative shrink-0">
+              <button
+                onClick={async () => {
+                  clearAvailabilityCache();
+                  const result = await checkToasterAvailability(toasterConfig);
+                  setToasterAvailability(result);
+                  if (result.available) {
+                    setStatusMessage(`Toaster connected — ${result.models.length} model${result.models.length !== 1 ? 's' : ''}: ${result.models.slice(0, 3).join(', ')}${result.version ? ` (v${result.version})` : ''}`);
+                    toasterReadyTest(toasterConfig).then(msg => {
+                      setToasterReadyMsg(msg || 'Toaster is ready!');
+                      setTimeout(() => setToasterReadyMsg(null), 6000);
+                    }).catch(() => {});
+                  } else {
+                    setStatusMessage(`Toaster: ${result.error || 'Connection failed'}`);
+                  }
+                }}
+                className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border cursor-pointer transition-colors ${
+                  toasterAvailability.available
+                    ? 'bg-[hsl(150_60%_40%/0.1)] text-[hsl(150_60%_55%)] border-[hsl(150_60%_40%/0.2)] hover:bg-[hsl(150_60%_40%/0.2)]'
+                    : 'bg-secondary/20 text-muted-foreground/50 border-border/20 hover:bg-secondary/40 hover:text-muted-foreground'
+                }`}
+                data-testid="button-ollama-toaster"
+                title={toasterAvailability.available
+                  ? `Connected — ${toasterAvailability.models.slice(0, 3).join(', ')}${toasterAvailability.version ? ` (v${toasterAvailability.version})` : ''}\nClick to test connection`
+                  : `${toasterAvailability.error || 'Not connected'}\nClick to test connection`
                 }
-              }}
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border shrink-0 cursor-pointer transition-colors ${
-                toasterAvailability.available
-                  ? 'bg-[hsl(150_60%_40%/0.1)] text-[hsl(150_60%_55%)] border-[hsl(150_60%_40%/0.2)] hover:bg-[hsl(150_60%_40%/0.2)]'
-                  : 'bg-secondary/20 text-muted-foreground/50 border-border/20 hover:bg-secondary/40 hover:text-muted-foreground'
-              }`}
-              data-testid="button-ollama-toaster"
-              title={toasterAvailability.available
-                ? `Connected — ${toasterAvailability.models.slice(0, 3).join(', ')}${toasterAvailability.version ? ` (v${toasterAvailability.version})` : ''}\nClick to test connection`
-                : `${toasterAvailability.error || 'Not connected'}\nClick to test connection`
-              }
-            >
-              <Bot className="w-3 h-3" />
-              {toasterLoading ? (
-                <><Loader2 className="w-2.5 h-2.5 animate-spin" /> Analyzing...</>
-              ) : toasterAvailability.available ? (
-                <span>Toaster</span>
-              ) : (
-                <span>Toaster off</span>
+              >
+                <Bot className="w-3 h-3" />
+                {toasterLoading ? (
+                  <><Loader2 className="w-2.5 h-2.5 animate-spin" /> Analyzing...</>
+                ) : toasterAvailability.available ? (
+                  <span>Toaster</span>
+                ) : (
+                  <span>Toaster off</span>
+                )}
+              </button>
+              {toasterReadyMsg && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-lg bg-[hsl(150_60%_20%)] text-[hsl(150_60%_80%)] text-[10px] font-medium border border-[hsl(150_60%_40%/0.4)] shadow-lg whitespace-nowrap animate-in fade-in slide-in-from-bottom-2 z-50" data-testid="bubble-toaster-ready">
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-[hsl(150_60%_20%)]" />
+                  {toasterReadyMsg}
+                </div>
               )}
-            </button>
+            </div>
           )}
 
           <button
