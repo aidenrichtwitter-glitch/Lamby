@@ -1,0 +1,160 @@
+The current boilerplate shows the "Start building for free" placeholder because we haven't replaced the main content yet. The link (`vscode://`) is likely causing PowerShell to open — it's an invalid/incomplete protocol in your environment (probably meant for VS Code deep linking, but Guardian AI intercepts it oddly).
+
+To turn this into a real **music production starter app** right away, we'll:
+
+- Install **Tone.js** (the de-facto Web Audio library for synths, sequencers, samplers, etc.)
+- Replace `src/components/App.tsx` with a minimal interactive music interface: play button + simple synth trigger + basic sequencer grid preview
+- Clean up unused boilerplate parts
+- Keep your existing structure (components, utils, Tailwind)
+
+This gives you an **actual sounding music app** on load — no more placeholder text.
+
+=== DEPENDENCIES ===
+tone
+=== END_DEPENDENCIES ===
+
+// file: src/components/App.tsx
+```tsx
+import { useState, useEffect } from 'react'
+import * as Tone from 'tone'
+import { classNames } from 'utils'
+
+function App() {
+  const [isStarted, setIsStarted] = useState(false)
+  const [synth, setSynth] = useState<Tone.Synth | null>(null)
+
+  // Initialize audio context & synth on user gesture (browser policy)
+  const startAudio = async () => {
+    if (!isStarted) {
+      await Tone.start()
+      setIsStarted(true)
+
+      const newSynth = new Tone.Synth({
+        oscillator: { type: 'sawtooth' },
+        envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 0.4 }
+      }).toDestination()
+
+      setSynth(newSynth)
+    }
+  }
+
+  // Simple note trigger
+  const playNote = (note: string) => {
+    if (synth) {
+      synth.triggerAttackRelease(note, '8n')
+    }
+  }
+
+  // Basic 8-step sequencer example (C major scale)
+  const notes = ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5']
+  const [sequence, setSequence] = useState<boolean[]>(Array(8).fill(false))
+
+  useEffect(() => {
+    if (!isStarted || !synth) return
+
+    const loop = new Tone.Loop((time) => {
+      sequence.forEach((active, index) => {
+        if (active) {
+          synth.triggerAttackRelease(notes[index], '8n', time + index * 0.25)
+        }
+      })
+    }, '2n').start(0)
+
+    return () => {
+      loop.dispose()
+    }
+  }, [isStarted, synth, sequence])
+
+  const toggleStep = (index: number) => {
+    const newSeq = [...sequence]
+    newSeq[index] = !newSeq[index]
+    setSequence(newSeq)
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-indigo-950 to-black text-white flex flex-col items-center justify-center p-6">
+      <h1 className="text-5xl md:text-7xl font-bold mb-6 tracking-tight text-indigo-300">
+        λ Recursive
+      </h1>
+
+      <p className="text-xl md:text-2xl mb-10 text-gray-300 max-w-xl text-center">
+        Self-recursive music production IDE — start with audio, build toward code-modifying synths
+      </p>
+
+      {!isStarted ? (
+        <button
+          onClick={startAudio}
+          className="px-10 py-5 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-2xl font-bold shadow-xl transition transform hover:scale-105 active:scale-95"
+        >
+          Start Audio & Play
+        </button>
+      ) : (
+        <div className="w-full max-w-4xl space-y-12">
+          {/* Quick play buttons */}
+          <div className="flex flex-wrap justify-center gap-4">
+            {['C4', 'D4', 'E4', 'G4', 'A4'].map(note => (
+              <button
+                key={note}
+                onClick={() => playNote(note)}
+                className="px-8 py-4 bg-purple-700 hover:bg-purple-600 rounded-lg text-xl font-semibold transition"
+              >
+                {note}
+              </button>
+            ))}
+          </div>
+
+          {/* Basic sequencer grid */}
+          <div className="bg-gray-800/50 p-6 rounded-xl border border-indigo-500/30">
+            <h2 className="text-2xl font-semibold mb-4 text-center">8-Step Sequencer (C major)</h2>
+            <div className="grid grid-cols-8 gap-3">
+              {sequence.map((active, i) => (
+                <button
+                  key={i}
+                  onClick={() => toggleStep(i)}
+                  className={classNames(
+                    'aspect-square rounded-lg text-lg font-bold transition-all',
+                    active
+                      ? 'bg-indigo-600 shadow-lg shadow-indigo-500/50 scale-105'
+                      : 'bg-gray-700 hover:bg-gray-600'
+                  )}
+                >
+                  {i + 1}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <p className="text-center text-gray-400 text-sm">
+            Click steps to add notes • Synth plays on loop when active
+          </p>
+        </div>
+      )}
+
+      <footer className="mt-16 text-gray-500 text-sm">
+        Guardian AI • Rochester, MN • 2026
+      </footer>
+    </div>
+  )
+}
+
+export default App
+```
+
+### What this does:
+- **Audio starts only after user click** (required by browsers)
+- Simple **Tone.Synth** for sawtooth leads
+- Play individual notes instantly
+- 8-step sequencer in C major — toggle steps to build a pattern (loops automatically)
+- Dark, modern Tailwind UI — ready to expand (add more rows, BPM control, waveforms, etc.)
+
+Save → hot-reload should show the new interface. Click "Start Audio & Play" → grant audio permission → interact.
+
+Next priorities (tell me which one):
+- Add BPM / transport controls (start/stop loop)
+- Multi-track / drum kit (use Tone.Sampler with free samples)
+- Keyboard input for playing notes
+- Waveform visualizer (with AnalyserNode or wavesurfer)
+- Resizable panels / code editor pane for recursion
+- More synth types (FM, AM, MembraneSynth for drums)
+
+Paste any errors if they appear, or say what to build next! 🎹

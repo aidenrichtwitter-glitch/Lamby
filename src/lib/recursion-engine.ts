@@ -422,14 +422,22 @@ export async function requestAIImprovement(
     }
     
     if (config.provider === 'ollama') {
-      const res = await fetch(`${config.baseUrl}/api/generate`, {
+      const res = await fetch(`${config.baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: config.model, prompt, stream: false, format: 'json' }),
+        body: JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: 'system', content: 'You are a code analysis assistant. Output ONLY valid JSON, no extra text.' },
+            { role: 'user', content: prompt },
+          ],
+          stream: false,
+          format: 'json',
+        }),
       });
       if (!res.ok) return { result: null, error: { type: 'network', message: `Ollama ${res.status}` } };
       const data = await res.json();
-      const parsed = JSON.parse(data.response);
+      const parsed = JSON.parse(data.message?.content || '{}');
       if (parsed.content && parsed.description) {
         return { result: { content: parsed.content, description: `[AI] ${parsed.description}`, capability: parsed.capability || 'ai-improvement', builtOn: parsed.builtOn || [] } };
       }

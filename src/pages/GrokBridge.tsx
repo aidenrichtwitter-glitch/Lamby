@@ -180,7 +180,7 @@ function extractContextSections(fullText: string): string[] {
   return sections;
 }
 
-function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport }: { onApply: (filePath: string, code: string) => void; onApplyAll?: (blocks: { filePath: string; code: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void }) {
+function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport, toasterConfig, toasterAvailable }: { onApply: (filePath: string, code: string) => void; onApplyAll?: (blocks: { filePath: string; code: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void; toasterConfig?: OllamaToasterConfig; toasterAvailable?: boolean }) {
   const [blocks, setBlocks] = useState<ExtractedBlock[]>([]);
   const [detectedDeps, setDetectedDeps] = useState<{ dependencies: string[]; devDependencies: string[] }>({ dependencies: [], devDependencies: [] });
   const [depsInstalling, setDepsInstalling] = useState(false);
@@ -200,6 +200,8 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
   const [showPasteBox, setShowPasteBox] = useState(false);
   const [clipboardAvailable, setClipboardAvailable] = useState(true);
   const [ollamaCleaned, setOllamaCleaned] = useState(false);
+  const [ollamaProcessing, setOllamaProcessing] = useState(false);
+  const [ollamaError, setOllamaError] = useState<string | null>(null);
   const [detectedGithubUrls, setDetectedGithubUrls] = useState<{ owner: string; repo: string; fullUrl: string }[]>([]);
   const pasteRef = useRef<HTMLTextAreaElement>(null);
   const extractorContentRef = useRef<HTMLDivElement>(null);
@@ -234,18 +236,30 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
     const regexParsed = parseCodeBlocks(text);
     applyParsedBlocks(text, regexParsed, false);
 
-    cleanGrokResponse(text).then(cleaned => {
-      if (cleaned && cleaned.files.length > 0) {
-        const ollamaBlocks = cleanedResponseToBlocks(cleaned);
-        if (ollamaBlocks.length > 0) {
-          const hasMorePaths = ollamaBlocks.filter(b => b.filePath).length >= regexParsed.filter(b => b.filePath).length;
-          if (hasMorePaths) {
-            applyParsedBlocks(text, ollamaBlocks, true);
+    if (toasterAvailable) {
+      setOllamaProcessing(true);
+      setOllamaError(null);
+      setOllamaCleaned(false);
+      cleanGrokResponse(text, toasterConfig).then(cleaned => {
+        if (cleaned && cleaned.files.length > 0) {
+          const ollamaBlocks = cleanedResponseToBlocks(cleaned);
+          if (ollamaBlocks.length > 0) {
+            const hasMorePaths = ollamaBlocks.filter(b => b.filePath).length >= regexParsed.filter(b => b.filePath).length;
+            if (hasMorePaths) {
+              applyParsedBlocks(text, ollamaBlocks, true);
+            } else {
+              console.log('[Toaster] Regex parsed same or more paths, keeping regex result');
+            }
           }
         }
-      }
-    }).catch(() => {});
-  }, [lastClipboard, applyParsedBlocks]);
+      }).catch((err) => {
+        console.error('[Toaster] cleanGrokResponse failed:', err);
+        setOllamaError(err?.message || 'Ollama processing failed');
+      }).finally(() => {
+        setOllamaProcessing(false);
+      });
+    }
+  }, [lastClipboard, applyParsedBlocks, toasterConfig, toasterAvailable]);
 
   const readClipboard = useCallback(async () => {
     try {
@@ -363,9 +377,20 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           </button>
         )}
         {blocks.length > 0 && (
-          <span className="text-[9px] text-primary/70 ml-1" data-testid="text-blocks-detected">
+          <span className="text-[9px] text-primary/70 ml-1 flex items-center gap-1" data-testid="text-blocks-detected">
             {blocks.length} block{blocks.length > 1 ? 's' : ''} detected
-            {ollamaCleaned && <span className="ml-1 text-[8px] text-[hsl(200_70%_60%)]" data-testid="text-ollama-cleaned">(Ollama cleaned)</span>}
+            {ollamaProcessing && (
+              <span className="ml-1 text-[8px] text-[hsl(200_70%_60%)] flex items-center gap-1" data-testid="text-ollama-processing">
+                <Loader2 className="w-2.5 h-2.5 animate-spin" /> Toaster analyzing...
+              </span>
+            )}
+            {ollamaCleaned && <span className="ml-1 text-[8px] text-[hsl(150_60%_55%)]" data-testid="text-ollama-cleaned">✓ Toaster cleaned</span>}
+            {ollamaError && <span className="ml-1 text-[8px] text-red-400" data-testid="text-ollama-error">⚠ {ollamaError}</span>}
+          </span>
+        )}
+        {!blocks.length && ollamaProcessing && (
+          <span className="text-[9px] text-[hsl(200_70%_60%)] ml-1 flex items-center gap-1" data-testid="text-ollama-processing-solo">
+            <Loader2 className="w-2.5 h-2.5 animate-spin" /> Toaster analyzing response...
           </span>
         )}
         {(detectedDeps.dependencies.length > 0 || detectedDeps.devDependencies.length > 0) && (
@@ -1619,21 +1644,23 @@ const GrokBridge: React.FC = () => {
           }
         }
 
-        cleanGrokResponse(assistantSoFar, toasterConfig).then(cleaned => {
-          if (cleaned && cleaned.files.length > 0) {
-            const ollamaBlocks = cleanedResponseToBlocks(cleaned);
-            if (ollamaBlocks.length > 0) {
-              const hasMorePaths = ollamaBlocks.filter(b => b.filePath).length >= regexBlocks.filter(b => b.filePath).length;
-              if (hasMorePaths) {
-                setCleanedApiBlocks(prev => new Map(prev).set(msgIndex, ollamaBlocks));
+        if (toasterAvailability?.available) {
+          cleanGrokResponse(assistantSoFar, toasterConfig).then(cleaned => {
+            if (cleaned && cleaned.files.length > 0) {
+              const ollamaBlocks = cleanedResponseToBlocks(cleaned);
+              if (ollamaBlocks.length > 0) {
+                const hasMorePaths = ollamaBlocks.filter(b => b.filePath).length >= regexBlocks.filter(b => b.filePath).length;
+                if (hasMorePaths) {
+                  setCleanedApiBlocks(prev => new Map(prev).set(msgIndex, ollamaBlocks));
+                }
               }
             }
-          }
-        }).catch(() => {});
+          }).catch(err => console.error('[Toaster] API mode cleanGrokResponse failed:', err));
+        }
       },
       onError: (err) => { setIsLoading(false); setStatusMessage(`⚠ ${err}`); },
     });
-  }, [input, isLoading, messages, model, activeConvoId, toasterConfig]);
+  }, [input, isLoading, messages, model, activeConvoId, toasterConfig, toasterAvailability]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -3534,7 +3561,7 @@ const GrokBridge: React.FC = () => {
             )}
 
             {/* Code extractor — shared across both modes */}
-            <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} />
+            <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} />
           </div>
 
           {/* Preview panel — shared across both modes */}
