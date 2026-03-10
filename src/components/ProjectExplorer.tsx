@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   ChevronRight, ChevronDown, FileCode, Folder, FolderOpen,
-  Plus, Trash2, FolderOpen as FolderOpenIcon, RefreshCw, Loader2, X
+  Plus, Trash2, FolderOpen as FolderOpenIcon, RefreshCw, Loader2, X, GitBranch
 } from 'lucide-react';
 import {
   listProjects, createProject, deleteProject, getProjectFiles,
-  readProjectFile, type Project, type ProjectFileNode
+  readProjectFile, importFromGitHub, type Project, type ProjectFileNode,
+  type GitHubImportProgress
 } from '@/lib/project-manager';
 
 interface ProjectExplorerProps {
@@ -79,6 +80,10 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({ activeProject, onSele
   const [newFramework, setNewFramework] = useState<'react' | 'vanilla' | 'html'>('react');
   const [newDescription, setNewDescription] = useState('');
   const [creating, setCreating] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importUrl, setImportUrl] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<GitHubImportProgress | null>(null);
 
   const fetchProjects = useCallback(async () => {
     setLoading(true);
@@ -127,6 +132,26 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({ activeProject, onSele
     setCreating(false);
   };
 
+  const handleImportGitHub = async () => {
+    if (!importUrl.trim() || importing) return;
+    setImporting(true);
+    setImportProgress({ stage: 'parsing', message: 'Parsing GitHub URL...' });
+    try {
+      const result = await importFromGitHub(importUrl.trim(), (progress) => {
+        setImportProgress(progress);
+      });
+      await fetchProjects();
+      onSelectProject(result.projectName);
+      setShowImport(false);
+      setImportUrl('');
+      setImportProgress(null);
+    } catch (e: any) {
+      setImportProgress({ stage: 'error', message: e.message || 'Import failed' });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleDelete = async (name: string) => {
     try {
       await deleteProject(name);
@@ -156,6 +181,14 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({ activeProject, onSele
             <RefreshCw className="w-3 h-3 text-muted-foreground" />
           </button>
           <button
+            data-testid="button-import-github"
+            onClick={() => setShowImport(true)}
+            className="p-1 hover:bg-muted/50 rounded transition-colors"
+            title="Import from GitHub"
+          >
+            <GitBranch className="w-3 h-3 text-muted-foreground" />
+          </button>
+          <button
             data-testid="button-new-project"
             onClick={() => setShowCreate(true)}
             className="p-1 hover:bg-muted/50 rounded transition-colors"
@@ -164,6 +197,44 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({ activeProject, onSele
           </button>
         </div>
       </div>
+
+      {showImport && (
+        <div className="px-3 py-2 border-b border-border/30 bg-card/50 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-semibold text-foreground uppercase">Import from GitHub</span>
+            <button onClick={() => { setShowImport(false); setImportProgress(null); }} className="p-0.5 hover:bg-muted/50 rounded">
+              <X className="w-3 h-3 text-muted-foreground" />
+            </button>
+          </div>
+          <input
+            data-testid="input-github-url"
+            type="text"
+            placeholder="https://github.com/owner/repo"
+            value={importUrl}
+            onChange={e => setImportUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleImportGitHub(); }}
+            className="w-full px-2 py-1 text-[10px] bg-background border border-border/50 rounded focus:outline-none focus:ring-1 focus:ring-primary/50"
+            disabled={importing}
+          />
+          {importProgress && (
+            <div className={`text-[9px] px-2 py-1 rounded ${importProgress.stage === 'error' ? 'bg-destructive/10 text-destructive' : importProgress.stage === 'done' ? 'bg-[hsl(150_60%_55%/0.1)] text-[hsl(150_60%_55%)]' : 'bg-primary/10 text-primary'}`} data-testid="text-import-progress">
+              <div className="flex items-center gap-1">
+                {importProgress.stage !== 'done' && importProgress.stage !== 'error' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
+                {importProgress.message}
+              </div>
+            </div>
+          )}
+          <button
+            data-testid="button-import-github-submit"
+            onClick={handleImportGitHub}
+            disabled={!importUrl.trim() || importing}
+            className="w-full px-2 py-1 rounded text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center justify-center gap-1"
+          >
+            {importing ? <Loader2 className="w-3 h-3 animate-spin" /> : <GitBranch className="w-3 h-3" />}
+            {importing ? 'Importing...' : 'Import Repository'}
+          </button>
+        </div>
+      )}
 
       {showCreate && (
         <div className="px-3 py-2 border-b border-border/30 bg-card/50 space-y-2">

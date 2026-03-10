@@ -340,6 +340,49 @@ function projectManagementPlugin(): Plugin {
             } catch {}
           }
 
+          const indexHtmlPath = path.join(projectDir, "index.html");
+          if (fs.existsSync(indexHtmlPath)) {
+            const indexHtml = fs.readFileSync(indexHtmlPath, "utf-8");
+            if (!indexHtml.includes("guardian-console-bridge")) {
+              const consoleBridgeScript = `<script data-guardian-console-bridge>
+(function() {
+  if (window.__guardianConsoleBridge) return;
+  window.__guardianConsoleBridge = true;
+  var origLog = console.log, origWarn = console.warn, origError = console.error, origInfo = console.info;
+  function send(level, args, stack) {
+    try {
+      var serialized = [];
+      for (var i = 0; i < args.length; i++) {
+        try { serialized.push(typeof args[i] === 'object' ? JSON.parse(JSON.stringify(args[i])) : args[i]); }
+        catch(e) { serialized.push(String(args[i])); }
+      }
+      window.parent.postMessage({ type: 'guardian-console-bridge', level: level, args: serialized, stack: stack || null }, '*');
+    } catch(e) {}
+  }
+  console.log = function() { send('log', Array.prototype.slice.call(arguments)); origLog.apply(console, arguments); };
+  console.warn = function() { send('warn', Array.prototype.slice.call(arguments)); origWarn.apply(console, arguments); };
+  console.error = function() { send('error', Array.prototype.slice.call(arguments)); origError.apply(console, arguments); };
+  console.info = function() { send('info', Array.prototype.slice.call(arguments)); origInfo.apply(console, arguments); };
+  window.onerror = function(msg, source, line, column, error) {
+    send('error', [String(msg)], error && error.stack ? error.stack : null);
+    return false;
+  };
+  window.addEventListener('unhandledrejection', function(event) {
+    var reason = event.reason;
+    var msg = reason instanceof Error ? reason.message : String(reason);
+    var stack = reason instanceof Error ? reason.stack : null;
+    send('error', ['Unhandled Promise Rejection: ' + msg], stack);
+  });
+})();
+</script>`;
+              const patched = indexHtml.replace(/<head([^>]*)>/, `<head$1>\n${consoleBridgeScript}`);
+              if (patched !== indexHtml) {
+                fs.writeFileSync(indexHtmlPath, patched, "utf-8");
+                console.log(`Injected console bridge into ${name}/index.html`);
+              }
+            }
+          }
+
           const viteConfigPath = path.join(projectDir, "vite.config.ts");
           if (fs.existsSync(viteConfigPath)) {
             const viteConfigContent = fs.readFileSync(viteConfigPath, "utf-8");
@@ -660,6 +703,138 @@ function projectManagementPlugin(): Plugin {
           res.setHeader("Content-Type", "application/json");
           const allOk = results.every(r => r.installed || r.alreadyInstalled);
           res.end(JSON.stringify({ success: allOk, results }));
+        } catch (err: any) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: err.message }));
+        }
+      });
+
+      server.middlewares.use("/api/projects/import-github", async (req, res) => {
+        if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
+        try {
+          const { owner, repo } = JSON.parse(await readBody(req));
+          if (!owner || !repo || /[\/\\]|\.\./.test(owner) || /[\/\\]|\.\./.test(repo)) {
+            res.statusCode = 400; res.end(JSON.stringify({ error: "Invalid owner or repo" })); return;
+          }
+
+          const fs = await import("fs");
+          const projectsDir = path.resolve(process.cwd(), "projects");
+          if (!fs.existsSync(projectsDir)) fs.mkdirSync(projectsDir, { recursive: true });
+
+          const projectName = repo.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+          const projectDir = path.resolve(projectsDir, projectName);
+
+          if (fs.existsSync(projectDir)) {
+            res.statusCode = 409;
+            res.end(JSON.stringify({ error: `Project '${projectName}' already exists. Delete it first or use a different name.` }));
+            return;
+          }
+
+          const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`;
+          const headers: Record<string, string> = { "Accept": "application/vnd.github.v3+json", "User-Agent": "Guardian-AI" };
+
+          const treeResp = await fetch(treeUrl, { headers });
+          if (!treeResp.ok) {
+            const errBody = await treeResp.text().catch(() => "");
+            if (treeResp.status === 404) {
+              res.statusCode = 404;
+              res.end(JSON.stringify({ error: `Repository ${owner}/${repo} not found or is private` }));
+            } else if (treeResp.status === 403) {
+              res.statusCode = 429;
+              res.end(JSON.stringify({ error: "GitHub API rate limit exceeded. Try again later." }));
+            } else {
+              res.statusCode = 502;
+              res.end(JSON.stringify({ error: `GitHub API error: ${treeResp.status} ${errBody.slice(0, 200)}` }));
+            }
+            return;
+          }
+
+          const treeData: any = await treeResp.json();
+          const tree = treeData.tree || [];
+
+          const SKIP_PATTERNS = [
+            /^\.git\//,
+            /node_modules\//,
+            /\.cache\//,
+            /dist\//,
+            /build\//,
+            /\.next\//,
+            /\.DS_Store$/,
+            /\.env$/,
+            /\.env\.local$/,
+          ];
+          const MAX_FILE_SIZE = 500000;
+
+          const filesToDownload = tree.filter((item: any) => {
+            if (item.type !== "blob") return false;
+            if (item.size > MAX_FILE_SIZE) return false;
+            return !SKIP_PATTERNS.some(p => p.test(item.path));
+          });
+
+          fs.mkdirSync(projectDir, { recursive: true });
+
+          let filesWritten = 0;
+          const BATCH_SIZE = 10;
+
+          for (let i = 0; i < filesToDownload.length; i += BATCH_SIZE) {
+            const batch = filesToDownload.slice(i, i + BATCH_SIZE);
+            const results = await Promise.allSettled(
+              batch.map(async (item: any) => {
+                const blobUrl = `https://api.github.com/repos/${owner}/${repo}/git/blobs/${item.sha}`;
+                const blobResp = await fetch(blobUrl, { headers });
+                if (!blobResp.ok) return;
+                const blobData: any = await blobResp.json();
+                let content: string;
+                if (blobData.encoding === "base64") {
+                  content = Buffer.from(blobData.content, "base64").toString("utf-8");
+                } else {
+                  content = blobData.content || "";
+                }
+                const filePath = path.join(projectDir, item.path);
+                const dir = path.dirname(filePath);
+                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                fs.writeFileSync(filePath, content, "utf-8");
+                filesWritten++;
+              })
+            );
+          }
+
+          let framework = "react";
+          const pkgPath = path.join(projectDir, "package.json");
+          if (fs.existsSync(pkgPath)) {
+            try {
+              const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+              const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+              if (deps["react"]) framework = "react";
+              else if (deps["vue"]) framework = "vanilla";
+              else framework = "vanilla";
+            } catch {}
+          }
+
+          let npmInstalled = false;
+          if (fs.existsSync(pkgPath)) {
+            try {
+              const { execSync } = await import("child_process");
+              execSync("npm install --legacy-peer-deps", {
+                cwd: projectDir,
+                timeout: 60000,
+                stdio: "pipe",
+                shell: true,
+              });
+              npmInstalled = true;
+            } catch {}
+          }
+
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({
+            success: true,
+            projectName,
+            framework,
+            filesWritten,
+            totalFiles: filesToDownload.length,
+            npmInstalled,
+            sourceRepo: `https://github.com/${owner}/${repo}`,
+          }));
         } catch (err: any) {
           res.statusCode = 500;
           res.end(JSON.stringify({ error: err.message }));

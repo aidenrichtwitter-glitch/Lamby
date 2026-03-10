@@ -100,3 +100,70 @@ export function setActiveProject(projectName: string | null): void {
     }
   } catch {}
 }
+
+export interface GitHubImportProgress {
+  stage: 'parsing' | 'fetching-tree' | 'downloading' | 'writing' | 'installing' | 'done' | 'error';
+  message: string;
+  filesTotal?: number;
+  filesWritten?: number;
+  repoName?: string;
+  repoStars?: number;
+}
+
+export function parseGitHubUrl(text: string): { owner: string; repo: string; fullUrl: string } | null {
+  const match = text.match(/https?:\/\/github\.com\/([a-zA-Z0-9._-]+)\/([a-zA-Z0-9._-]+)/);
+  if (!match) return null;
+  const owner = match[1];
+  const repo = match[2].replace(/\.git$/, '');
+  return { owner, repo, fullUrl: `https://github.com/${owner}/${repo}` };
+}
+
+export function detectGitHubUrlInResponse(responseText: string): { owner: string; repo: string; fullUrl: string } | null {
+  const lines = responseText.split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const parsed = parseGitHubUrl(trimmed);
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+export async function importFromGitHub(
+  githubUrl: string,
+  onProgress?: (progress: GitHubImportProgress) => void
+): Promise<{ projectName: string; framework: string }> {
+  const parsed = parseGitHubUrl(githubUrl);
+  if (!parsed) throw new Error('Invalid GitHub URL');
+
+  onProgress?.({
+    stage: 'fetching-tree',
+    message: `Fetching repository tree from ${parsed.owner}/${parsed.repo}...`,
+    repoName: parsed.repo,
+  });
+
+  const res = await fetch('/api/projects/import-github', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ owner: parsed.owner, repo: parsed.repo }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Import failed' }));
+    throw new Error(err.error || `Import failed (${res.status})`);
+  }
+
+  const data = await res.json();
+
+  onProgress?.({
+    stage: 'done',
+    message: `Imported ${parsed.repo} (${data.filesWritten} files)`,
+    repoName: parsed.repo,
+    filesTotal: data.filesWritten,
+    filesWritten: data.filesWritten,
+  });
+
+  return {
+    projectName: data.projectName || parsed.repo,
+    framework: data.framework || 'react',
+  };
+}

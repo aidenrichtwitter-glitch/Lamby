@@ -29,6 +29,8 @@ src/
 │   ├── GrokBridge.tsx         # AI bridge (Grok Desktop launcher + API chat + clipboard extractor)
 │   └── NotFound.tsx
 ├── components/                # UI components (AIChat, CodeViewer, FileTree, etc.)
+│   ├── LogsPanel.tsx          # Preview console log capture panel (errors/warnings from iframe)
+│   └── ProjectExplorer.tsx    # Sub-project file tree + GitHub import UI
 ├── integrations/supabase/     # Supabase client + generated types
 ├── lib/                       # Core logic libraries
 │   ├── recursion-engine.ts    # Main recursion loop engine
@@ -38,6 +40,10 @@ src/
 │   ├── self-source.ts         # Virtual file system
 │   ├── evolution-bridge.ts    # Grok↔Evolution pipeline (context builder, Grok API caller, code applicator, plan manager)
 │   ├── autonomy-engine.ts     # Autonomous goal execution (code-gen steps route through Grok evolution)
+│   ├── ollama-toaster.ts      # Ollama "toaster" — dumb pre/post-processor for context bundling + response cleaning
+│   ├── guardian-config.ts     # Shared GitHub org config (PAT, org name)
+│   ├── guardian-publish.ts    # Publish successful builds to shared GitHub org with GUARDIAN-META.json
+│   ├── guardian-knowledge.ts  # Knowledge registry — query shared org for past builds, rank matches
 │   └── [50+ capability libs]  # Auto-generated capability modules
 electron-browser/              # Grok Desktop Electron app (based on AnRkey/Grok-Desktop)
 ├── src/main.js                # Electron main process
@@ -104,6 +110,45 @@ supabase/
   - Refresh button in toolbar and preview panel header force-reloads the iframe. Auto-refresh after applying code (500ms for normal files, 2.5s for config changes).
   - Electron IPC `ensure-project-polling` patches sub-project `vite.config.ts` with `usePolling` before starting preview.
 - Switching to "Main App" restores all original behavior (no project scoping)
+- **GitHub Import**: "Import from GitHub" button in project panel. Paste a repo URL → app downloads via GitHub API → creates project → installs deps → starts preview
+  - Also triggered automatically when Grok suggests a repo URL in response to "What do you want to build?"
+  - Endpoint: `/api/projects/import-github` — recursive tree fetch + blob download, skips node_modules/dist/.env, 500KB file size limit
+  - Grok is the single decision-maker for repo selection — Ollama never suggests repos
+
+## Preview Log Capture & Auto-Error Feedback
+- **LogsPanel** (`src/components/LogsPanel.tsx`): Collapsible console panel below the preview iframe
+  - Captures `console.log/warn/error/info` + `window.onerror` + `unhandledrejection` from the preview via `postMessage` bridge
+  - Bridge script auto-injected into project's `index.html` when preview starts (idempotent)
+  - Color-coded entries: red=error, yellow=warn, blue=info, gray=log
+  - "Send Logs to Grok" bundles last 20 error/warning lines + affected file contents into a diagnostic prompt → copies to clipboard
+  - Capped at 200 entries with auto-prune
+- **Diagnose & Fix** banner: After "Apply All", monitors for new errors for 5 seconds
+  - If errors appear, shows a "Diagnose & Fix" button at top of preview
+  - One-click generates prompt with: error logs + applied file contents + last Grok response snippet
+  - Loop protection: after 3 consecutive failed fix cycles, shows "Stuck" message
+
+## Ollama "Toaster" Integration
+- **Role**: Dumb, reliable pre/post-processor. Never suggests repos, code, or creative decisions. Temperature = 0.0.
+- **Pre-Grok (Context Bundler)**: Takes preview logs + file tree → outputs `{ error_summary, affected_files, missing_files, priority, suggested_context_to_include }` → used to select only relevant files for Grok's context instead of dumping everything
+- **Post-Grok (Response Cleaner)**: Takes raw Grok response → extracts code blocks into structured `{ reasoning, files: [{ path, action, content }], unparsed_text }` → falls back to regex parser if Ollama unavailable
+- **Graceful degradation**: If Ollama not running (`localhost:11434`), falls back to existing behavior (raw file concat + regex parsing)
+- **Config**: Endpoint URL + model name stored in localStorage, configurable in settings
+- **Recommended models**: `qwen2.5-coder:7b`, `llama3.2:3b`, `phi-3.5-mini`
+- UI shows "Toaster" status badge in top bar (green=connected, muted=off)
+
+## Shared GitHub Org & Knowledge Registry
+- **Publish** (`src/lib/guardian-publish.ts`): "Publish to Community" button pushes successful builds to a shared GitHub org
+  - Auto-generates `GUARDIAN-META.json` with: original_description, stack, key_patterns_used, tags, build_success_rating, source_repo
+  - Anonymizes before push: strips `.env`, redacts API keys/secrets/tokens
+  - Sets GitHub repo topics for discoverability
+  - Auth: app-owned PAT for shared org (shipped with Electron build), optional user PAT for personal GitHub
+  - Config in `src/lib/guardian-config.ts`
+- **Knowledge Registry** (`src/lib/guardian-knowledge.ts`): On new project, queries shared org for matching past builds
+  - Fetches + caches `GUARDIAN-META.json` from org repos (refreshes every 30 minutes)
+  - Keyword search against cached metadata
+  - Top 3-5 matches fed to Grok's prompt as hints: "From our proven builds library: [list]. Pick the best one or start fresh."
+  - Grok makes the final decision — no conflicting suggestions from multiple sources
+  - Shows "Built Before" indicator when matches found
 
 ## Testing
 - `npm test` — runs all Vitest tests

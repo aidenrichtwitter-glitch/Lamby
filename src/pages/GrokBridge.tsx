@@ -3,7 +3,7 @@ import {
   Send, Shield, Check, AlertTriangle, Undo2, FileCode, Sparkles, Bot,
   User, Loader2, Code2, Trash2, ChevronDown, Globe, MessageSquare,
   Clipboard, ClipboardCheck, Zap, X, ChevronUp, ChevronDown as ChevronDownIcon,
-  Dna, FolderOpen, PanelLeftClose, PanelLeft, Play, ExternalLink, Download, Terminal, AlertCircle, Key, ArrowRightLeft, FolderPlus, RefreshCw, Monitor
+  Dna, FolderOpen, PanelLeftClose, PanelLeft, Play, ExternalLink, Download, Terminal, AlertCircle, Key, ArrowRightLeft, FolderPlus, RefreshCw, Monitor, GitBranch, Upload, Settings
 } from 'lucide-react';
 import { validateChange } from '@/lib/safety-engine';
 import { SELF_SOURCE } from '@/lib/self-source';
@@ -22,9 +22,35 @@ import {
 import {
   getActiveProject, setActiveProject as persistActiveProject,
   readProjectFile, writeProjectFile, getProjectFiles,
-  type ProjectFileNode
+  importFromGitHub, detectGitHubUrlInResponse,
+  type ProjectFileNode, type GitHubImportProgress
 } from '@/lib/project-manager';
+import {
+  checkToasterAvailability,
+  buildSmartContext,
+  formatAnalysisForPrompt,
+  loadToasterConfig,
+  saveToasterConfig,
+  cleanGrokResponse,
+  cleanedResponseToBlocks,
+  type OllamaToasterConfig,
+  type ToasterAnalysis,
+  type ToasterAvailability,
+} from '@/lib/ollama-toaster';
+import { publishProject, type PublishProgress } from '@/lib/guardian-publish';
+import { hasPublishCredentials, getGuardianConfig, setSharedPat, setUserPat } from '@/lib/guardian-config';
+import {
+  startKnowledgeRefreshLoop,
+  stopKnowledgeRefreshLoop,
+  searchKnowledge,
+  formatKnowledgeForGrokPrompt,
+  getKnowledgeSummary,
+  type KnowledgeMatch,
+} from '@/lib/guardian-knowledge';
 import ProjectExplorer from '@/components/ProjectExplorer';
+import LogsPanel, { type LogEntry, formatLogsForGrok } from '@/components/LogsPanel';
+
+const MAX_LOG_ENTRIES = 200;
 
 const isElectron = typeof window !== 'undefined' && typeof (window as any).require === 'function';
 
@@ -165,22 +191,18 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
   const [flash, setFlash] = useState(false);
   const [showPasteBox, setShowPasteBox] = useState(false);
   const [clipboardAvailable, setClipboardAvailable] = useState(true);
+  const [ollamaCleaned, setOllamaCleaned] = useState(false);
   const pasteRef = useRef<HTMLTextAreaElement>(null);
   const extractorContentRef = useRef<HTMLDivElement>(null);
 
-  const extractFromText = useCallback((text: string) => {
-    if (text === lastClipboard || text.length < 10) return;
-    if (text.includes('=== PROJECT CONTEXT ===') || text.includes('=== FILE TREE ===') || text.includes('=== EVOLUTION_CONTEXT ===') || text.includes('=== INSTRUCTIONS ===\nWhen suggesting code changes')) return;
-    setLastClipboard(text);
-    setResponseContext(text);
-    setContextSections(extractContextSections(text));
-    const parsed = parseCodeBlocks(text);
+  const applyParsedBlocks = useCallback((text: string, parsed: { filePath: string; code: string; language: string }[], wasOllamaCleaned: boolean) => {
     const newBlocks: ExtractedBlock[] = parsed.map(b => ({
       ...b,
       id: crypto.randomUUID(),
       applied: false,
     }));
     setBlocks(newBlocks);
+    setOllamaCleaned(wasOllamaCleaned);
     setDetectedDeps(parseDependencies(text));
     setActionItems(parseActionItems(text));
     setCollapsed(false);
@@ -188,7 +210,30 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
     setFlash(true);
     setTimeout(() => setFlash(false), 400);
     if (onResponseCaptured) onResponseCaptured(text);
-  }, [lastClipboard, onResponseCaptured]);
+  }, [onResponseCaptured]);
+
+  const extractFromText = useCallback((text: string) => {
+    if (text === lastClipboard || text.length < 10) return;
+    if (text.includes('=== PROJECT CONTEXT ===') || text.includes('=== FILE TREE ===') || text.includes('=== EVOLUTION_CONTEXT ===') || text.includes('=== INSTRUCTIONS ===\nWhen suggesting code changes')) return;
+    setLastClipboard(text);
+    setResponseContext(text);
+    setContextSections(extractContextSections(text));
+
+    const regexParsed = parseCodeBlocks(text);
+    applyParsedBlocks(text, regexParsed, false);
+
+    cleanGrokResponse(text).then(cleaned => {
+      if (cleaned && cleaned.files.length > 0) {
+        const ollamaBlocks = cleanedResponseToBlocks(cleaned);
+        if (ollamaBlocks.length > 0) {
+          const hasMorePaths = ollamaBlocks.filter(b => b.filePath).length >= regexParsed.filter(b => b.filePath).length;
+          if (hasMorePaths) {
+            applyParsedBlocks(text, ollamaBlocks, true);
+          }
+        }
+      }
+    }).catch(() => {});
+  }, [lastClipboard, applyParsedBlocks]);
 
   const readClipboard = useCallback(async () => {
     try {
@@ -299,7 +344,10 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           </button>
         )}
         {blocks.length > 0 && (
-          <span className="text-[9px] text-primary/70 ml-1">{blocks.length} block{blocks.length > 1 ? 's' : ''} detected</span>
+          <span className="text-[9px] text-primary/70 ml-1" data-testid="text-blocks-detected">
+            {blocks.length} block{blocks.length > 1 ? 's' : ''} detected
+            {ollamaCleaned && <span className="ml-1 text-[8px] text-[hsl(200_70%_60%)]" data-testid="text-ollama-cleaned">(Ollama cleaned)</span>}
+          </span>
         )}
         {(detectedDeps.dependencies.length > 0 || detectedDeps.devDependencies.length > 0) && (
           depsInstalled ? (
@@ -956,6 +1004,208 @@ const GrokBridge: React.FC = () => {
   const [currentPlan, setCurrentPlan] = useState<EvolutionPlan | null>(loadEvolutionPlan());
   const [isEvolutionResponse, setIsEvolutionResponse] = useState(false);
   const lastFullResponseRef = useRef<string>('');
+  const [toasterAvailability, setToasterAvailability] = useState<ToasterAvailability | null>(null);
+  const [toasterConfig, setToasterConfig] = useState<OllamaToasterConfig>(() => loadToasterConfig());
+  const [lastToasterAnalysis, setLastToasterAnalysis] = useState<ToasterAnalysis | null>(null);
+  const [toasterLoading, setToasterLoading] = useState(false);
+  const [previewLogs, setPreviewLogs] = useState<LogEntry[]>([]);
+  const [githubImportProgress, setGithubImportProgress] = useState<GitHubImportProgress | null>(null);
+  const [detectedRepoUrl, setDetectedRepoUrl] = useState<string | null>(null);
+  const [showDiagnoseBanner, setShowDiagnoseBanner] = useState(false);
+  const [diagnoseFixCycleCount, setDiagnoseFixCycleCount] = useState(0);
+  const [diagnoseStuck, setDiagnoseStuck] = useState(false);
+  const [postApplyMonitoring, setPostApplyMonitoring] = useState(false);
+  const [publishProgress, setPublishProgress] = useState<PublishProgress | null>(null);
+  const [showPublishDialog, setShowPublishDialog] = useState(false);
+  const [publishDescription, setPublishDescription] = useState('');
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsSharedPat, setSettingsSharedPat] = useState(() => getGuardianConfig().sharedPat);
+  const [settingsUserPat, setSettingsUserPat] = useState(() => getGuardianConfig().userPat || '');
+  const [settingsOllamaEndpoint, setSettingsOllamaEndpoint] = useState(() => loadToasterConfig().endpoint);
+  const [settingsOllamaModel, setSettingsOllamaModel] = useState(() => loadToasterConfig().model);
+  const [knowledgeMatches, setKnowledgeMatches] = useState<KnowledgeMatch[]>([]);
+  const lastAppliedFilesRef = useRef<{ filePath: string; code: string }[]>([]);
+  const preApplyErrorCountRef = useRef(0);
+  const postApplyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [cleanedApiBlocks, setCleanedApiBlocks] = useState<Map<number, ParsedBlock[]>>(new Map());
+
+  const addPreviewLog = useCallback((entry: Omit<LogEntry, 'id'>) => {
+    setPreviewLogs(prev => {
+      const newEntry: LogEntry = { ...entry, id: crypto.randomUUID() };
+      const updated = [...prev, newEntry];
+      if (updated.length > MAX_LOG_ENTRIES) {
+        return updated.slice(updated.length - MAX_LOG_ENTRIES);
+      }
+      return updated;
+    });
+  }, []);
+
+  const clearPreviewLogs = useCallback(() => {
+    setPreviewLogs([]);
+  }, []);
+
+  const startPostApplyMonitoring = useCallback((appliedFiles: { filePath: string; code: string }[]) => {
+    if (postApplyTimerRef.current) clearTimeout(postApplyTimerRef.current);
+    lastAppliedFilesRef.current = appliedFiles;
+    preApplyErrorCountRef.current = previewLogs.filter(l => l.level === 'error').length;
+    setPostApplyMonitoring(true);
+    setShowDiagnoseBanner(false);
+    postApplyTimerRef.current = setTimeout(() => {
+      setPostApplyMonitoring(false);
+    }, 5000);
+  }, [previewLogs]);
+
+  useEffect(() => {
+    if (!postApplyMonitoring) return;
+    const currentErrorCount = previewLogs.filter(l => l.level === 'error').length;
+    if (currentErrorCount > preApplyErrorCountRef.current) {
+      if (postApplyTimerRef.current) clearTimeout(postApplyTimerRef.current);
+      setPostApplyMonitoring(false);
+      if (diagnoseFixCycleCount >= 3) {
+        setDiagnoseStuck(true);
+        setShowDiagnoseBanner(true);
+      } else {
+        setShowDiagnoseBanner(true);
+        setDiagnoseStuck(false);
+      }
+    }
+  }, [previewLogs, postApplyMonitoring, diagnoseFixCycleCount]);
+
+  useEffect(() => {
+    return () => {
+      if (postApplyTimerRef.current) clearTimeout(postApplyTimerRef.current);
+    };
+  }, []);
+
+  const buildDiagnoseFixPrompt = useCallback(async () => {
+    const errorLogs = previewLogs.filter(l => l.level === 'error' || l.level === 'warn');
+    const relevantLogs = errorLogs.length > 0 ? errorLogs.slice(-20) : previewLogs.slice(-20);
+
+    let prompt = `The app preview just failed after applying changes. Here are the exact console/build logs:\n\n`;
+    prompt += `=== CONSOLE LOGS (${relevantLogs.length} entries, errors/warnings prioritized) ===\n`;
+    for (const log of relevantLogs) {
+      const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      prompt += `[${time}] [${log.level.toUpperCase()}] ${log.message}\n`;
+      if (log.stack) {
+        prompt += `  Stack: ${log.stack.split('\n').slice(0, 5).join('\n  ')}\n`;
+      }
+      if (log.source) {
+        prompt += `  Source: ${log.source}${log.line ? `:${log.line}` : ''}${log.column ? `:${log.column}` : ''}\n`;
+      }
+    }
+    prompt += `=== END LOGS ===\n\n`;
+
+    const appliedFiles = lastAppliedFilesRef.current;
+    if (appliedFiles.length > 0) {
+      prompt += `Current files that were changed:\n\n`;
+      for (const file of appliedFiles) {
+        if (activeProject) {
+          try {
+            const content = await readProjectFile(activeProject, file.filePath);
+            if (content.length < 8000) {
+              prompt += `=== ${file.filePath} ===\n${content}\n\n`;
+            } else {
+              prompt += `=== ${file.filePath} (truncated) ===\n${content.slice(0, 8000)}\n...(truncated)\n\n`;
+            }
+          } catch {
+            prompt += `=== ${file.filePath} (applied content) ===\n${file.code.slice(0, 8000)}\n\n`;
+          }
+        } else {
+          prompt += `=== ${file.filePath} (applied content) ===\n${file.code.slice(0, 8000)}\n\n`;
+        }
+      }
+    }
+
+    const lastResponse = lastFullResponseRef.current;
+    if (lastResponse) {
+      const snippet = lastResponse.slice(0, 2000);
+      prompt += `Previous suggestion from you was:\n${snippet}${lastResponse.length > 2000 ? '\n...(truncated)' : ''}\n\n`;
+    }
+
+    prompt += `Fix the issue and provide updated code blocks for affected files only.\n`;
+    prompt += `Use this format for each file:\n`;
+    prompt += `// file: path/to/file.tsx\n\`\`\`tsx\n// corrected content\n\`\`\`\n`;
+
+    return prompt;
+  }, [previewLogs, activeProject]);
+
+  const handleDiagnoseFix = useCallback(async () => {
+    if (diagnoseStuck) return;
+    const prompt = await buildDiagnoseFixPrompt();
+    setDiagnoseFixCycleCount(prev => prev + 1);
+
+    if (mode === 'api' && inputRef.current) {
+      setInput(prompt);
+      setShowDiagnoseBanner(false);
+      return;
+    }
+
+    try {
+      if (isElectron) {
+        const { clipboard } = (window as any).require('electron');
+        clipboard.writeText(prompt);
+      } else {
+        await navigator.clipboard.writeText(prompt);
+      }
+      setStatusMessage('Diagnostic prompt copied to clipboard — paste into Grok');
+      setShowDiagnoseBanner(false);
+    } catch {
+      setStatusMessage('Could not copy diagnostic prompt');
+    }
+  }, [diagnoseStuck, buildDiagnoseFixPrompt, mode]);
+
+  const dismissDiagnoseBanner = useCallback(() => {
+    setShowDiagnoseBanner(false);
+    setDiagnoseStuck(false);
+    setDiagnoseFixCycleCount(0);
+  }, []);
+
+  const handleSendLogsToGrok = useCallback(async (formattedPrompt: string) => {
+    try {
+      if (isElectron) {
+        const { clipboard } = (window as any).require('electron');
+        clipboard.writeText(formattedPrompt);
+      } else {
+        await navigator.clipboard.writeText(formattedPrompt);
+      }
+      setStatusMessage('Diagnostic logs copied to clipboard — paste into Grok');
+    } catch {
+      setStatusMessage('Could not copy logs to clipboard');
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePreviewMessage = (event: MessageEvent) => {
+      if (!event.data || event.data.type !== 'guardian-console-bridge') return;
+      const { level, args, stack, source, line, column } = event.data;
+      const validLevels = ['error', 'warn', 'log', 'info'];
+      const logLevel = validLevels.includes(level) ? level : 'log';
+      const message = Array.isArray(args)
+        ? args.map((a: any) => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' ')
+        : String(args || '');
+      addPreviewLog({
+        level: logLevel,
+        message,
+        timestamp: Date.now(),
+        stack: stack || undefined,
+        source: source || undefined,
+        line: line || undefined,
+        column: column || undefined,
+      });
+    };
+    window.addEventListener('message', handlePreviewMessage);
+    return () => window.removeEventListener('message', handlePreviewMessage);
+  }, [addPreviewLog]);
+
+  useEffect(() => {
+    checkToasterAvailability(toasterConfig).then(setToasterAvailability);
+  }, [toasterConfig]);
+
+  useEffect(() => {
+    startKnowledgeRefreshLoop();
+    return () => stopKnowledgeRefreshLoop();
+  }, []);
 
   const handleEvolutionApply = useCallback(async (fullResponse: string, appliedFiles: string[]) => {
     if (!isEvolutionResponse || appliedFiles.length === 0) return;
@@ -991,11 +1241,54 @@ const GrokBridge: React.FC = () => {
     setPreviewPort(null);
     setShowPreviewEmbed(false);
     setProjectContext('');
+    setPreviewLogs([]);
     setStatusMessage(name ? `Project: ${name}` : 'Switched to Main App');
     if (name) {
       autoStartPreviewRef.current = name;
     }
   }, [activeProject, previewPort]);
+
+  const handleGitHubImport = useCallback(async (repoUrl: string) => {
+    setDetectedRepoUrl(null);
+    setGithubImportProgress({ stage: 'fetching-tree', message: 'Cloning repository...' });
+    try {
+      const result = await importFromGitHub(repoUrl, (progress) => {
+        setGithubImportProgress(progress);
+      });
+      setGithubImportProgress({
+        stage: 'done',
+        message: `Imported ${result.projectName} — switching to project`,
+        repoName: result.projectName,
+      });
+      handleSelectProject(result.projectName);
+      setTimeout(() => setGithubImportProgress(null), 4000);
+    } catch (e: any) {
+      setGithubImportProgress({ stage: 'error', message: e.message || 'Import failed' });
+      setTimeout(() => setGithubImportProgress(null), 6000);
+    }
+  }, [handleSelectProject]);
+
+  const handlePublish = useCallback(async () => {
+    if (!activeProject || !publishDescription.trim()) return;
+    const cfg = getGuardianConfig();
+    if (!hasPublishCredentials(cfg)) {
+      setStatusMessage('No GitHub PAT configured. Add one in Settings first.');
+      return;
+    }
+    setPublishedUrl(null);
+    try {
+      const result = await publishProject(activeProject, publishDescription.trim(), (progress) => {
+        setPublishProgress(progress);
+      }, undefined, cfg);
+      setPublishedUrl(result.repoUrl);
+      setStatusMessage(`Published ${activeProject} to ${result.repoUrl} (${result.filesPublished} files)`);
+      setShowPublishDialog(false);
+      setTimeout(() => { setPublishProgress(null); setPublishedUrl(null); }, 8000);
+    } catch (e: any) {
+      setPublishProgress({ stage: 'error', message: e.message || 'Publish failed' });
+      setTimeout(() => setPublishProgress(null), 8000);
+    }
+  }, [activeProject, publishDescription]);
 
   const startPreview = useCallback(async () => {
     if (!activeProject) return;
@@ -1077,7 +1370,16 @@ const GrokBridge: React.FC = () => {
   const sendMessage = useCallback(async () => {
     const text = input.trim();
     if (!text || isLoading) return;
-    const userMsg: Msg = { role: 'user', content: text };
+
+    const matches = searchKnowledge(text);
+    setKnowledgeMatches(matches);
+
+    let enrichedText = text;
+    if (messages.length === 0 && matches.length > 0) {
+      enrichedText = text + '\n\n' + formatKnowledgeForGrokPrompt(matches);
+    }
+
+    const userMsg: Msg = { role: 'user', content: enrichedText };
     setInput('');
     const allMessages = [...messages, userMsg];
     setMessages(allMessages);
@@ -1102,11 +1404,30 @@ const GrokBridge: React.FC = () => {
       },
       onDone: () => {
         setIsLoading(false);
+        const msgIndex = allMessages.length;
         setConversations(prev => prev.map(c => c.id === convoId ? { ...c, messages: [...allMessages, { role: 'assistant' as const, content: assistantSoFar }], title: generateTitle(allMessages), model } : c));
+        lastFullResponseRef.current = assistantSoFar;
+        const repoMatch = detectGitHubUrlInResponse(assistantSoFar);
+        if (repoMatch && !assistantSoFar.toLowerCase().includes('starting fresh')) {
+          setDetectedRepoUrl(repoMatch.fullUrl);
+          setStatusMessage(`Grok suggested repo: ${repoMatch.owner}/${repoMatch.repo} — click to clone`);
+        }
+        cleanGrokResponse(assistantSoFar, toasterConfig).then(cleaned => {
+          if (cleaned && cleaned.files.length > 0) {
+            const ollamaBlocks = cleanedResponseToBlocks(cleaned);
+            if (ollamaBlocks.length > 0) {
+              const regexBlocks = parseCodeBlocks(assistantSoFar);
+              const hasMorePaths = ollamaBlocks.filter(b => b.filePath).length >= regexBlocks.filter(b => b.filePath).length;
+              if (hasMorePaths) {
+                setCleanedApiBlocks(prev => new Map(prev).set(msgIndex, ollamaBlocks));
+              }
+            }
+          }
+        }).catch(() => {});
       },
       onError: (err) => { setIsLoading(false); setStatusMessage(`⚠ ${err}`); },
     });
-  }, [input, isLoading, messages, model, activeConvoId]);
+  }, [input, isLoading, messages, model, activeConvoId, toasterConfig]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -1291,6 +1612,10 @@ const GrokBridge: React.FC = () => {
         backupPath: lastBackupPathRef.current,
       }]);
 
+      if (previewPort) {
+        startPostApplyMonitoring([{ filePath, code: newContent }]);
+      }
+
       if (isEvolutionResponse && lastFullResponseRef.current) {
         handleEvolutionApply(lastFullResponseRef.current, [filePath]);
         setIsEvolutionResponse(false);
@@ -1299,7 +1624,7 @@ const GrokBridge: React.FC = () => {
       setApplyStage('error');
       setApplyStageMessage(`Error: ${e.message || 'Unknown failure'}`);
     }
-  }, [pendingApply, isEvolutionResponse, handleEvolutionApply, activeProject, previewPort]);
+  }, [pendingApply, isEvolutionResponse, handleEvolutionApply, activeProject, previewPort, startPostApplyMonitoring]);
 
   const rollbackPending = useCallback(async () => {
     if (!pendingApply) { setPendingApply(null); return; }
@@ -1461,6 +1786,10 @@ const GrokBridge: React.FC = () => {
         const previewNote = previewPort ? (needsRestart ? ' — preview restarting' : ' — HMR updating') : '';
         setBatchMessage(`${blocks.length} files written${hasDeps ? ' + deps installed' : ''} to ${activeProject}${previewNote}`);
         setTimeout(() => { setBatchStage('idle'); setBatchMessage(''); }, 4000);
+
+        if (previewPort) {
+          startPostApplyMonitoring(blocks.map(b => ({ filePath: b.filePath, code: b.code })));
+        }
       } catch (e: any) {
         setBatchStage('error');
         setBatchMessage(`Batch write failed: ${e.message}`);
@@ -1567,11 +1896,13 @@ const GrokBridge: React.FC = () => {
       setBatchMessage(`${blocks.length} files applied${gitNote}`);
 
       setTimeout(() => { setBatchStage('idle'); setBatchMessage(''); }, 4000);
+
+      startPostApplyMonitoring(blocks.map(b => ({ filePath: b.filePath, code: b.code })));
     } catch (e: any) {
       setBatchStage('error');
       setBatchMessage(`Error: ${e.message || 'Unknown'}`);
     }
-  }, [activeProject, previewPort]);
+  }, [activeProject, previewPort, startPostApplyMonitoring]);
 
   const batchRollback = useCallback(async () => {
     if (!isElectron || batchBackups.length === 0) { setBatchStage('idle'); return; }
@@ -1592,15 +1923,101 @@ const GrokBridge: React.FC = () => {
   const [contextLoading, setContextLoading] = useState(false);
   const [lastErrors, setLastErrors] = useState<string>('');
 
+  const estimateTokens = useCallback((text: string): number => {
+    return Math.ceil(text.length / 4);
+  }, []);
+
+  const summarizeChatHistory = useCallback((msgs: Msg[], maxTurns = 3): string => {
+    if (msgs.length === 0) return '';
+    const recent = msgs.slice(-maxTurns * 2);
+    if (recent.length === 0) return '';
+    let summary = `=== RECENT CHAT HISTORY (last ${Math.min(maxTurns, Math.ceil(recent.length / 2))} turns) ===\n`;
+    for (const msg of recent) {
+      const label = msg.role === 'user' ? 'User' : 'Grok';
+      const content = msg.content.length > 300 ? msg.content.slice(0, 300) + '...(truncated)' : msg.content;
+      summary += `[${label}]: ${content}\n`;
+    }
+    summary += `=== END CHAT HISTORY ===\n`;
+    return summary;
+  }, []);
+
   const buildProjectContext = useCallback(async () => {
     setContextLoading(true);
+    const TOKEN_BUDGET = 8000;
+    const CHARS_BUDGET = TOKEN_BUDGET * 4;
+
     try {
-      let context = `=== PROJECT CONTEXT ===\n`;
+      const sections: { label: string; content: string; priority: number }[] = [];
+
+      let header = `=== PROJECT CONTEXT ===\n`;
+      if (activeProject) {
+        header += `This is a project called "${activeProject}" managed by Guardian AI.\n`;
+        header += `All file paths are relative to the project root.\n`;
+      } else {
+        header += `This is a React + TypeScript + Vite desktop app (Electron) called Guardian AI ("lambda Recursive").\n`;
+      }
+      sections.push({ label: 'header', content: header, priority: 0 });
+
+      const errorLogs = previewLogs.filter(l => l.level === 'error' || l.level === 'warn');
+      if (errorLogs.length > 0) {
+        const recentErrors = errorLogs.slice(-20);
+        let errorSection = `=== PREVIEW ERRORS/WARNINGS (${recentErrors.length} entries) ===\n`;
+        for (const log of recentErrors) {
+          const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          errorSection += `[${time}] [${log.level.toUpperCase()}] ${log.message}\n`;
+          if (log.stack) {
+            errorSection += `  Stack: ${log.stack.split('\n').slice(0, 3).join('\n  ')}\n`;
+          }
+        }
+        errorSection += `=== END PREVIEW ERRORS ===\n`;
+        sections.push({ label: 'errors', content: errorSection, priority: 1 });
+      }
+
+      if (lastErrors) {
+        sections.push({ label: 'lastErrors', content: `\n=== CURRENT ERRORS ===\n${lastErrors}\n`, priority: 1 });
+      }
+
+      let toasterSection = '';
+      if (toasterAvailability?.available && activeProject && (lastErrors || errorLogs.length > 0)) {
+        try {
+          setToasterLoading(true);
+          const tree = await getProjectFiles(activeProject);
+          const flatPaths: string[] = [];
+          const collectAllPaths = (nodes: ProjectFileNode[], prefix = '') => {
+            for (const n of nodes) {
+              const p = prefix ? `${prefix}/${n.name}` : n.name;
+              if (n.type === 'file') flatPaths.push(p);
+              if (n.children) collectAllPaths(n.children, p);
+            }
+          };
+          collectAllPaths(tree);
+
+          const errorText = lastErrors || errorLogs.map(l => `[${l.level}] ${l.message}`).join('\n');
+          const smartCtx = await buildSmartContext(errorText, flatPaths, undefined, toasterConfig);
+          if (smartCtx.usedOllama && smartCtx.analysis) {
+            setLastToasterAnalysis(smartCtx.analysis);
+            toasterSection = formatAnalysisForPrompt(smartCtx.analysis);
+            sections.push({ label: 'toasterAnalysis', content: toasterSection, priority: 2 });
+          }
+        } catch {} finally {
+          setToasterLoading(false);
+        }
+      }
+
+      const changedFiles = lastAppliedFilesRef.current.map(f => f.filePath);
+      if (changedFiles.length > 0) {
+        let changedSection = `=== RECENTLY CHANGED FILES ===\n`;
+        changedSection += changedFiles.join('\n') + '\n';
+        changedSection += `=== END CHANGED FILES ===\n`;
+        sections.push({ label: 'changedFiles', content: changedSection, priority: 3 });
+      }
+
+      const historySummary = summarizeChatHistory(messages);
+      if (historySummary) {
+        sections.push({ label: 'chatHistory', content: historySummary, priority: 5 });
+      }
 
       if (activeProject) {
-        context += `This is a project called "${activeProject}" managed by Guardian AI.\n`;
-        context += `All file paths are relative to the project root.\n\n`;
-
         try {
           const tree = await getProjectFiles(activeProject);
           const flatPaths: string[] = [];
@@ -1613,28 +2030,32 @@ const GrokBridge: React.FC = () => {
           };
           collectPaths(tree);
 
-          context += `=== FILE TREE ===\n`;
-          context += flatPaths.join('\n') + '\n';
+          sections.push({ label: 'fileTree', content: `=== FILE TREE ===\n${flatPaths.join('\n')}\n`, priority: 4 });
 
-          const keyFiles = flatPaths.filter(f =>
-            f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
-            f === 'index.html' || f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css') || f.endsWith('.html')
-          ).slice(0, 20);
+          const changedSet = new Set(changedFiles);
+          const changedKeyFiles = flatPaths.filter(f => changedSet.has(f));
+          const unchangedKeyFiles = flatPaths.filter(f =>
+            !changedSet.has(f) && (
+              f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
+              f === 'index.html' || f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css') || f.endsWith('.html')
+            )
+          );
 
-          for (const fp of keyFiles) {
+          const prioritizedFiles = [...changedKeyFiles, ...unchangedKeyFiles].slice(0, 20);
+
+          for (const fp of prioritizedFiles) {
             try {
               const content = await readProjectFile(activeProject, fp);
               if (content.length < 8000) {
-                context += `\n=== ${fp} ===\n${content}\n`;
+                const marker = changedSet.has(fp) ? ' (CHANGED)' : '';
+                sections.push({ label: `file:${fp}`, content: `\n=== ${fp}${marker} ===\n${content}\n`, priority: changedSet.has(fp) ? 3 : 6 });
               }
             } catch {}
           }
         } catch {
-          context += `(Could not read project files)\n`;
+          sections.push({ label: 'fileError', content: `(Could not read project files)\n`, priority: 10 });
         }
       } else {
-        context += `This is a React + TypeScript + Vite desktop app (Electron) called Guardian AI ("lambda Recursive").\n\n`;
-
         if (isElectron) {
           const { ipcRenderer } = (window as any).require('electron');
 
@@ -1656,58 +2077,72 @@ const GrokBridge: React.FC = () => {
             maxSizePerFile: 6000,
           });
 
-          context += `=== FILE TREE ===\n`;
-          context += fileTree.slice(0, 80).join('\n') + '\n';
-          if (fileTree.length > 80) context += `... (${fileTree.length} total files)\n`;
+          let treeContent = `=== FILE TREE ===\n`;
+          treeContent += fileTree.slice(0, 80).join('\n') + '\n';
+          if (fileTree.length > 80) treeContent += `... (${fileTree.length} total files)\n`;
+          sections.push({ label: 'fileTree', content: treeContent, priority: 4 });
 
           if (gitResult.success && gitResult.log) {
-            context += `\n=== RECENT GIT LOG ===\n${gitResult.log}\n`;
+            sections.push({ label: 'gitLog', content: `\n=== RECENT GIT LOG ===\n${gitResult.log}\n`, priority: 7 });
           }
 
           if (contentsResult.success) {
             for (const file of contentsResult.files) {
-              context += `\n=== ${file.path} ===\n${file.content}\n`;
+              sections.push({ label: `file:${file.path}`, content: `\n=== ${file.path} ===\n${file.content}\n`, priority: 6 });
             }
           }
         } else {
-          context += `=== FILE TREE ===\n`;
-          context += SELF_SOURCE.map(f => f.path).join('\n') + '\n';
+          sections.push({ label: 'fileTree', content: `=== FILE TREE ===\n${SELF_SOURCE.map(f => f.path).join('\n')}\n`, priority: 4 });
 
           for (const file of SELF_SOURCE.filter(f => f.content && f.content.length < 8000).slice(0, 15)) {
-            context += `\n=== ${file.path} ===\n${file.content}\n`;
+            sections.push({ label: `file:${file.path}`, content: `\n=== ${file.path} ===\n${file.content}\n`, priority: 6 });
           }
         }
       }
 
-      if (lastErrors) {
-        context += `\n=== CURRENT ERRORS ===\n${lastErrors}\n`;
+      if (knowledgeMatches.length > 0) {
+        const knowledgeSection = formatKnowledgeForGrokPrompt(knowledgeMatches);
+        sections.push({ label: 'knowledgeHints', content: knowledgeSection, priority: 5 });
       }
 
-      context += `\n=== INSTRUCTIONS ===\n`;
-      context += `When suggesting code changes, use this exact format for each file:\n`;
-      context += `// file: path/to/file.tsx\n`;
-      context += `\`\`\`tsx\n// full file content here\n\`\`\`\n`;
-      context += `Include the complete file content, not partial patches.\n`;
-      context += `The code extractor will automatically detect and apply these blocks.\n\n`;
-      context += `If your changes require new npm packages, include a dependencies block BEFORE the code blocks:\n\n`;
-      context += `=== DEPENDENCIES ===\n`;
-      context += `package-name\n`;
-      context += `another-package\n`;
-      context += `dev: @types/package-name\n`;
-      context += `dev: some-dev-tool\n`;
-      context += `=== END_DEPENDENCIES ===\n\n`;
-      context += `List one package per line. Prefix dev dependencies with "dev: ".\n`;
-      context += `The app will automatically install these before applying code changes.\n`;
+      let instructions = `\n=== INSTRUCTIONS ===\n`;
+      instructions += `When suggesting code changes, use this exact format for each file:\n`;
+      instructions += `// file: path/to/file.tsx\n`;
+      instructions += `\`\`\`tsx\n// file content here\n\`\`\`\n`;
+      instructions += `Prefer minimal patches — only include files that need changes.\n`;
+      instructions += `The code extractor will automatically detect and apply these blocks.\n\n`;
+      instructions += `If your changes require new npm packages, include a dependencies block BEFORE the code blocks:\n\n`;
+      instructions += `=== DEPENDENCIES ===\n`;
+      instructions += `package-name\n`;
+      instructions += `dev: @types/package-name\n`;
+      instructions += `=== END_DEPENDENCIES ===\n\n`;
+      instructions += `List one package per line. Prefix dev dependencies with "dev: ".\n`;
+      instructions += `The app will automatically install these before applying code changes.\n`;
+      sections.push({ label: 'instructions', content: instructions, priority: 0 });
+
+      sections.sort((a, b) => a.priority - b.priority);
+
+      let context = '';
+      let currentChars = 0;
+
+      for (const section of sections) {
+        const sectionChars = section.content.length;
+        if (currentChars + sectionChars > CHARS_BUDGET && section.priority > 4) {
+          continue;
+        }
+        context += section.content;
+        currentChars += sectionChars;
+      }
 
       setProjectContext(context);
       setContextLoading(false);
       return context;
     } catch (e: any) {
       setContextLoading(false);
-      setStatusMessage(`⚠ Context build failed: ${e.message}`);
+      setStatusMessage(`Context build failed: ${e.message}`);
       return '';
     }
-  }, [lastErrors, activeProject]);
+  }, [lastErrors, activeProject, toasterAvailability, toasterConfig, previewLogs, messages, summarizeChatHistory, knowledgeMatches]);
 
   useEffect(() => {
     if (mode === 'browser') {
@@ -1773,7 +2208,43 @@ const GrokBridge: React.FC = () => {
 
   const buildErrorFeedback = useCallback(async (errorText: string) => {
     setLastErrors(errorText);
+
+    let analysisSection = '';
+    if (toasterAvailability?.available && activeProject) {
+      try {
+        setToasterLoading(true);
+        const tree = await getProjectFiles(activeProject);
+        const flatPaths: string[] = [];
+        const collectFeedbackPaths = (nodes: ProjectFileNode[], prefix = '') => {
+          for (const n of nodes) {
+            const p = prefix ? `${prefix}/${n.name}` : n.name;
+            if (n.type === 'file') flatPaths.push(p);
+            if (n.children) collectFeedbackPaths(n.children, p);
+          }
+        };
+        collectFeedbackPaths(tree);
+
+        const smartCtx = await buildSmartContext(errorText, flatPaths, undefined, toasterConfig);
+        if (smartCtx.usedOllama && smartCtx.analysis) {
+          setLastToasterAnalysis(smartCtx.analysis);
+          analysisSection = '\n' + formatAnalysisForPrompt(smartCtx.analysis);
+
+          for (const fp of smartCtx.filesToInclude.slice(0, 10)) {
+            try {
+              const content = await readProjectFile(activeProject, fp);
+              if (content.length < 6000) {
+                analysisSection += `\n=== ${fp} ===\n${content}\n`;
+              }
+            } catch {}
+          }
+        }
+      } catch {} finally {
+        setToasterLoading(false);
+      }
+    }
+
     const errorPrompt = `The following errors occurred after applying code changes:\n\n${errorText}\n\n` +
+      analysisSection +
       `Please fix these errors. Return the corrected files using this format:\n` +
       `// file: path/to/file.tsx\n\`\`\`tsx\n// corrected content\n\`\`\`\n\n` +
       (projectContext ? `Current project context:\n${projectContext.slice(0, 3000)}` : '');
@@ -1784,11 +2255,11 @@ const GrokBridge: React.FC = () => {
       } else {
         await navigator.clipboard.writeText(errorPrompt);
       }
-      setStatusMessage('✓ Error feedback copied — paste into Grok for fix');
+      setStatusMessage(analysisSection ? '✓ Error feedback + Ollama analysis copied — paste into Grok' : '✓ Error feedback copied — paste into Grok for fix');
     } catch {
       setStatusMessage('⚠ Could not copy error feedback');
     }
-  }, [projectContext]);
+  }, [projectContext, toasterAvailability, toasterConfig, activeProject]);
 
   const renderMessage = (msg: Msg, idx: number) => {
     if (msg.role === 'user') {
@@ -1803,7 +2274,8 @@ const GrokBridge: React.FC = () => {
         </div>
       );
     }
-    const blocks = parseCodeBlocks(msg.content);
+    const regexBlocks = parseCodeBlocks(msg.content);
+    const blocks = cleanedApiBlocks.get(idx) || regexBlocks;
     const textParts = msg.content.split(/```[\s\S]*?```/);
     return (
       <div key={idx} className="flex gap-3">
@@ -1976,6 +2448,240 @@ const GrokBridge: React.FC = () => {
         </div>
       )}
 
+      {detectedRepoUrl && (
+        <div className="shrink-0 px-3 py-2 bg-primary/10 border-b border-primary/30 flex items-center gap-3 flex-wrap" data-testid="banner-detected-repo">
+          <GitBranch className="w-4 h-4 text-primary shrink-0" />
+          <span className="text-[11px] text-foreground">Grok suggested a GitHub repo:</span>
+          <span className="text-[11px] font-mono text-primary">{detectedRepoUrl}</span>
+          <button
+            data-testid="button-clone-detected-repo"
+            onClick={() => handleGitHubImport(detectedRepoUrl)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium"
+          >
+            <GitBranch className="w-3 h-3" /> Clone & Import
+          </button>
+          <button
+            data-testid="button-dismiss-detected-repo"
+            onClick={() => setDetectedRepoUrl(null)}
+            className="p-1 text-muted-foreground/50 hover:text-foreground transition-colors"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
+      {githubImportProgress && (
+        <div className={`shrink-0 px-3 py-2 border-b flex items-center gap-3 ${
+          githubImportProgress.stage === 'error' ? 'bg-destructive/10 border-destructive/30' :
+          githubImportProgress.stage === 'done' ? 'bg-[hsl(150_60%_55%/0.1)] border-[hsl(150_60%_55%/0.3)]' :
+          'bg-primary/10 border-primary/30'
+        }`} data-testid="banner-github-import-progress">
+          {githubImportProgress.stage !== 'done' && githubImportProgress.stage !== 'error' && (
+            <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
+          )}
+          {githubImportProgress.stage === 'done' && (
+            <Check className="w-4 h-4 text-[hsl(150_60%_55%)] shrink-0" />
+          )}
+          {githubImportProgress.stage === 'error' && (
+            <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
+          )}
+          <span className={`text-[11px] ${
+            githubImportProgress.stage === 'error' ? 'text-destructive' :
+            githubImportProgress.stage === 'done' ? 'text-[hsl(150_60%_55%)]' : 'text-primary'
+          }`}>
+            {githubImportProgress.message}
+          </span>
+          {githubImportProgress.stage === 'error' && (
+            <button
+              onClick={() => setGithubImportProgress(null)}
+              className="ml-auto p-1 text-muted-foreground/50 hover:text-foreground transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {publishProgress && (
+        <div className={`shrink-0 px-3 py-2 border-b flex items-center gap-3 ${
+          publishProgress.stage === 'error' ? 'bg-destructive/10 border-destructive/30' :
+          publishProgress.stage === 'done' ? 'bg-[hsl(150_60%_55%/0.1)] border-[hsl(150_60%_55%/0.3)]' :
+          'bg-[hsl(280_60%_50%/0.1)] border-[hsl(280_60%_50%/0.3)]'
+        }`} data-testid="banner-publish-progress">
+          {publishProgress.stage !== 'done' && publishProgress.stage !== 'error' && (
+            <Loader2 className="w-4 h-4 text-[hsl(280_60%_65%)] animate-spin shrink-0" />
+          )}
+          {publishProgress.stage === 'done' && (
+            <Check className="w-4 h-4 text-[hsl(150_60%_55%)] shrink-0" />
+          )}
+          {publishProgress.stage === 'error' && (
+            <AlertTriangle className="w-4 h-4 text-destructive shrink-0" />
+          )}
+          <span className={`text-[11px] ${
+            publishProgress.stage === 'error' ? 'text-destructive' :
+            publishProgress.stage === 'done' ? 'text-[hsl(150_60%_55%)]' : 'text-[hsl(280_60%_65%)]'
+          }`}>
+            {publishProgress.message}
+          </span>
+          {publishProgress.stage === 'done' && publishedUrl && (
+            <a href={publishedUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-primary hover:underline" data-testid="link-published-repo">
+              <ExternalLink className="w-3 h-3" /> View on GitHub
+            </a>
+          )}
+          {(publishProgress.stage === 'error' || publishProgress.stage === 'done') && (
+            <button
+              onClick={() => setPublishProgress(null)}
+              className="ml-auto p-1 text-muted-foreground/50 hover:text-foreground transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {showPublishDialog && (
+        <div className="shrink-0 border-b border-[hsl(280_60%_50%/0.3)] bg-[hsl(280_60%_50%/0.05)] px-4 py-3" data-testid="dialog-publish">
+          <div className="flex items-center gap-2 mb-2">
+            <Upload className="w-4 h-4 text-[hsl(280_60%_65%)]" />
+            <span className="text-[12px] font-bold text-foreground">Publish to Community</span>
+            <button onClick={() => setShowPublishDialog(false)} className="ml-auto p-1 text-muted-foreground/50 hover:text-foreground transition-colors">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground mb-2">
+            Publish <strong>{activeProject}</strong> to the shared GitHub org. Sensitive files (.env, keys) are auto-stripped.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              data-testid="input-publish-description"
+              value={publishDescription}
+              onChange={e => setPublishDescription(e.target.value)}
+              placeholder="Brief project description (e.g., 'todo app with drag-drop')"
+              className="flex-1 bg-background border border-border/50 rounded px-3 py-1.5 text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-[hsl(280_60%_50%/0.5)]"
+            />
+            <button
+              data-testid="button-confirm-publish"
+              onClick={handlePublish}
+              disabled={!publishDescription.trim() || (publishProgress !== null && publishProgress.stage !== 'done' && publishProgress.stage !== 'error')}
+              className="flex items-center gap-1 px-3 py-1.5 rounded text-[10px] font-bold bg-[hsl(280_60%_50%/0.2)] text-[hsl(280_60%_65%)] hover:bg-[hsl(280_60%_50%/0.3)] transition-colors border border-[hsl(280_60%_50%/0.3)] disabled:opacity-40"
+            >
+              <Upload className="w-3 h-3" /> Publish
+            </button>
+          </div>
+          {!hasPublishCredentials(getGuardianConfig()) && (
+            <p className="text-[9px] text-destructive/80 mt-2 flex items-center gap-1">
+              <Key className="w-3 h-3" /> No GitHub PAT configured. Add one in the Settings panel below.
+            </p>
+          )}
+        </div>
+      )}
+
+      {showSettings && (
+        <div className="shrink-0 border-b border-border/40 bg-card/80 px-4 py-3" data-testid="dialog-settings">
+          <div className="flex items-center gap-2 mb-3">
+            <Settings className="w-4 h-4 text-muted-foreground" />
+            <span className="text-[12px] font-bold text-foreground">Settings</span>
+            <button onClick={() => setShowSettings(false)} className="ml-auto p-1 text-muted-foreground/50 hover:text-foreground transition-colors" data-testid="button-close-settings">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+                <Key className="w-3 h-3" /> GitHub — Shared Org PAT
+              </p>
+              <p className="text-[9px] text-muted-foreground/60 mb-1">
+                Token for the shared community org ({getGuardianConfig().orgName}). Needed for publishing builds.
+              </p>
+              <input
+                type="password"
+                data-testid="input-shared-pat"
+                value={settingsSharedPat}
+                onChange={e => setSettingsSharedPat(e.target.value)}
+                placeholder="ghp_..."
+                className="w-full bg-background border border-border/50 rounded px-3 py-1.5 text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
+              />
+            </div>
+
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+                <Key className="w-3 h-3" /> GitHub — Personal PAT (optional)
+              </p>
+              <p className="text-[9px] text-muted-foreground/60 mb-1">
+                Your personal GitHub token. Used instead of shared PAT when set. Pushes to your account.
+              </p>
+              <input
+                type="password"
+                data-testid="input-user-pat"
+                value={settingsUserPat}
+                onChange={e => setSettingsUserPat(e.target.value)}
+                placeholder="ghp_..."
+                className="w-full bg-background border border-border/50 rounded px-3 py-1.5 text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
+              />
+            </div>
+
+            <div className="border-t border-border/30 pt-3">
+              <p className="text-[10px] font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+                <Bot className="w-3 h-3" /> Ollama Toaster — Endpoint
+              </p>
+              <input
+                type="text"
+                data-testid="input-ollama-endpoint"
+                value={settingsOllamaEndpoint}
+                onChange={e => setSettingsOllamaEndpoint(e.target.value)}
+                placeholder="http://localhost:11434"
+                className="w-full bg-background border border-border/50 rounded px-3 py-1.5 text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
+              />
+            </div>
+
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+                <Bot className="w-3 h-3" /> Ollama Toaster — Model
+              </p>
+              <p className="text-[9px] text-muted-foreground/60 mb-1">
+                Recommended: qwen2.5-coder:7b, llama3.2:3b, phi-3.5-mini
+              </p>
+              <input
+                type="text"
+                data-testid="input-ollama-model"
+                value={settingsOllamaModel}
+                onChange={e => setSettingsOllamaModel(e.target.value)}
+                placeholder="qwen2.5-coder:7b"
+                className="w-full bg-background border border-border/50 rounded px-3 py-1.5 text-[11px] text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary/50 font-mono"
+              />
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                data-testid="button-save-settings"
+                onClick={() => {
+                  setSharedPat(settingsSharedPat);
+                  setUserPat(settingsUserPat || null);
+                  const newConfig = { endpoint: settingsOllamaEndpoint, model: settingsOllamaModel };
+                  saveToasterConfig(newConfig);
+                  setToasterConfig(newConfig);
+                  checkToasterAvailability(newConfig).then(setToasterAvailability);
+                  setShowSettings(false);
+                  setStatusMessage('Settings saved');
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 rounded text-[10px] font-bold bg-primary/20 text-primary hover:bg-primary/30 transition-colors border border-primary/30"
+              >
+                <Check className="w-3 h-3" /> Save
+              </button>
+              <button
+                data-testid="button-cancel-settings"
+                onClick={() => setShowSettings(false)}
+                className="px-3 py-1.5 rounded text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Top bar ── */}
       <div className="shrink-0 border-b border-border/40 bg-card/60">
         <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap">
@@ -2037,6 +2743,13 @@ const GrokBridge: React.FC = () => {
                   </button>
                 </>
               )}
+              <button
+                data-testid="button-publish-community"
+                onClick={() => { setPublishDescription(''); setShowPublishDialog(true); }}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-[hsl(280_60%_50%/0.15)] text-[hsl(280_60%_65%)] hover:bg-[hsl(280_60%_50%/0.25)] transition-colors border border-[hsl(280_60%_50%/0.3)]"
+              >
+                <Upload className="w-3 h-3" /> Publish
+              </button>
             </div>
           )}
 
@@ -2089,6 +2802,52 @@ const GrokBridge: React.FC = () => {
               </button>
             )}
           </div>
+
+          {toasterAvailability !== null && (
+            <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border shrink-0 ${
+              toasterAvailability.available
+                ? 'bg-[hsl(150_60%_40%/0.1)] text-[hsl(150_60%_55%)] border-[hsl(150_60%_40%/0.2)]'
+                : 'bg-secondary/20 text-muted-foreground/50 border-border/20'
+            }`} data-testid="status-ollama-toaster">
+              <Bot className="w-3 h-3" />
+              {toasterLoading ? (
+                <><Loader2 className="w-2.5 h-2.5 animate-spin" /> Analyzing...</>
+              ) : toasterAvailability.available ? (
+                <span>Toaster</span>
+              ) : (
+                <span>Toaster off</span>
+              )}
+            </div>
+          )}
+
+          <button
+            data-testid="button-open-settings"
+            onClick={() => {
+              const cfg = getGuardianConfig();
+              const tc = loadToasterConfig();
+              setSettingsSharedPat(cfg.sharedPat);
+              setSettingsUserPat(cfg.userPat || '');
+              setSettingsOllamaEndpoint(tc.endpoint);
+              setSettingsOllamaModel(tc.model);
+              setShowSettings(prev => !prev);
+            }}
+            className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border shrink-0 transition-colors ${
+              showSettings
+                ? 'bg-primary/20 text-primary border-primary/30'
+                : 'bg-secondary/20 text-muted-foreground/50 border-border/20 hover:text-foreground hover:border-border/40'
+            }`}
+          >
+            <Settings className="w-3 h-3" />
+          </button>
+
+          {lastToasterAnalysis && (
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border shrink-0 bg-[hsl(280_60%_50%/0.1)] text-[hsl(280_60%_65%)] border-[hsl(280_60%_50%/0.2)]" data-testid="status-toaster-analysis">
+              <Zap className="w-2.5 h-2.5" />
+              <span className="truncate max-w-[150px]" title={lastToasterAnalysis.error_summary}>
+                {lastToasterAnalysis.priority}: {lastToasterAnalysis.affected_files.length} file{lastToasterAnalysis.affected_files.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+          )}
 
           {statusMessage && (
             <span className="text-[9px] text-primary/70 truncate max-w-[200px]" title={statusMessage}>{statusMessage}</span>
@@ -2147,6 +2906,54 @@ const GrokBridge: React.FC = () => {
                     </button>
                   </div>
                 </div>
+                {showDiagnoseBanner && (
+                  <div className={`shrink-0 px-3 py-2 border-b flex items-center gap-3 flex-wrap ${
+                    diagnoseStuck
+                      ? 'bg-amber-500/10 border-amber-500/30'
+                      : 'bg-destructive/10 border-destructive/30'
+                  }`} data-testid="banner-diagnose-fix">
+                    <AlertCircle className={`w-4 h-4 shrink-0 ${diagnoseStuck ? 'text-amber-400' : 'text-destructive'}`} />
+                    {diagnoseStuck ? (
+                      <>
+                        <span className="text-[11px] text-amber-400 font-medium" data-testid="text-diagnose-stuck">
+                          Stuck — {diagnoseFixCycleCount} fix cycles without success. Try describing the issue manually or revert changes.
+                        </span>
+                        <button
+                          data-testid="button-diagnose-reset"
+                          onClick={dismissDiagnoseBanner}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 transition-colors border border-amber-500/30 font-medium"
+                        >
+                          <RefreshCw className="w-3 h-3" /> Reset Cycles
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-[11px] text-destructive font-medium" data-testid="text-diagnose-errors-detected">
+                          Errors detected after applying changes
+                        </span>
+                        <button
+                          data-testid="button-diagnose-fix"
+                          onClick={handleDiagnoseFix}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded text-[10px] bg-destructive/20 text-destructive hover:bg-destructive/30 transition-colors border border-destructive/30 font-bold"
+                        >
+                          <Zap className="w-3 h-3" /> Diagnose & Fix
+                        </button>
+                        {diagnoseFixCycleCount > 0 && (
+                          <span className="text-[9px] text-muted-foreground/60" data-testid="text-diagnose-cycle-count">
+                            Cycle {diagnoseFixCycleCount}/3
+                          </span>
+                        )}
+                      </>
+                    )}
+                    <button
+                      data-testid="button-dismiss-diagnose"
+                      onClick={dismissDiagnoseBanner}
+                      className="ml-auto p-1 text-muted-foreground/50 hover:text-foreground transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
                 <iframe
                   ref={previewIframeRef}
                   key={previewKey}
@@ -2155,6 +2962,12 @@ const GrokBridge: React.FC = () => {
                   className="flex-1 w-full border-0 bg-white"
                   sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
                   title={`${activeProject} preview`}
+                />
+                <LogsPanel
+                  logs={previewLogs}
+                  onClearLogs={clearPreviewLogs}
+                  onSendLogsToGrok={handleSendLogsToGrok}
+                  activeProject={activeProject}
                 />
               </div>
             )}
@@ -2246,11 +3059,30 @@ const GrokBridge: React.FC = () => {
 
             {/* Input */}
             <div className="shrink-0 border-t border-border/50 bg-card/50 p-4">
+              {knowledgeMatches.length > 0 && messages.length === 0 && (
+                <div className="mb-2 px-3 py-1.5 rounded bg-[hsl(280_60%_50%/0.1)] border border-[hsl(280_60%_50%/0.25)] flex items-center gap-2 flex-wrap" data-testid="indicator-built-before">
+                  <Dna className="w-3.5 h-3.5 text-[hsl(280_60%_65%)] shrink-0" />
+                  <span className="text-[10px] text-[hsl(280_60%_65%)] font-medium" data-testid="text-built-before-count">
+                    Similar apps have been built {knowledgeMatches.reduce((sum, m) => sum + (m.entry.stars || 0), 0) || knowledgeMatches.length} time{knowledgeMatches.length !== 1 ? 's' : ''}
+                  </span>
+                  <span className="text-[9px] text-[hsl(280_60%_65%/0.7)]">
+                    Grok will pick the best starting point
+                  </span>
+                </div>
+              )}
               <div className="flex gap-3 items-end">
                 <textarea
                   ref={inputRef}
                   value={input}
-                  onChange={e => setInput(e.target.value)}
+                  onChange={e => {
+                    setInput(e.target.value);
+                    if (messages.length === 0 && e.target.value.trim().length > 3) {
+                      const matches = searchKnowledge(e.target.value.trim());
+                      setKnowledgeMatches(matches);
+                    } else if (e.target.value.trim().length <= 3) {
+                      setKnowledgeMatches([]);
+                    }
+                  }}
                   onKeyDown={handleKeyDown}
                   placeholder="Ask Grok to modify code... (Enter to send)"
                   rows={1}
