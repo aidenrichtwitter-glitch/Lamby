@@ -788,7 +788,10 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
     const onLoading = () => {
       setLoading(true);
       if (loadTimer) clearTimeout(loadTimer);
-      loadTimer = setTimeout(() => setLoading(false), 15000);
+      loadTimer = setTimeout(() => {
+        console.warn('[webview] Loading timeout — hiding overlay');
+        setLoading(false);
+      }, 5000);
     };
     const onLoaded = () => {
       if (loadTimer) clearTimeout(loadTimer);
@@ -806,11 +809,16 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
       }
       setLoading(false);
     };
+    const onDomReady = () => {
+      if (loadTimer) clearTimeout(loadTimer);
+      setLoading(false);
+    };
 
     wv.addEventListener('did-start-loading', onLoading);
     wv.addEventListener('did-stop-loading', onLoaded);
     wv.addEventListener('did-navigate', onNavigation);
     wv.addEventListener('did-fail-load', onFailLoad);
+    wv.addEventListener('dom-ready', onDomReady);
 
     return () => {
       if (loadTimer) clearTimeout(loadTimer);
@@ -818,6 +826,7 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
       wv.removeEventListener('did-stop-loading', onLoaded);
       wv.removeEventListener('did-navigate', onNavigation);
       wv.removeEventListener('did-fail-load', onFailLoad);
+      wv.removeEventListener('dom-ready', onDomReady);
     };
   }, [setBrowserUrl]);
 
@@ -902,9 +911,9 @@ function GrokDesktopBrowser({ browserUrl, setBrowserUrl, customUrl, setCustomUrl
           allowpopups="true"
         />
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
-            <div className="flex flex-col items-center gap-3">
-              <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <div className="absolute inset-x-0 top-0 flex items-center justify-center py-2 z-10 pointer-events-none">
+            <div className="flex items-center gap-2 bg-background/90 backdrop-blur-sm rounded-full px-4 py-2 shadow-lg border border-border/30">
+              <Loader2 className="w-4 h-4 text-primary animate-spin" />
               <p className="text-xs text-muted-foreground">Loading {currentSite?.name || 'page'}...</p>
             </div>
           </div>
