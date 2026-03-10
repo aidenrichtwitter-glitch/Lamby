@@ -194,17 +194,33 @@ function projectManagementPlugin(): Plugin {
           const fs = await import("fs");
           if (!fs.existsSync(check.resolved)) { res.statusCode = 404; res.end(JSON.stringify({ success: false, error: "Project not found" })); return; }
 
+          const SKIP_DIRS = new Set(["node_modules", ".cache", "dist", ".git", ".next", ".nuxt", ".turbo", ".vercel", ".output", ".svelte-kit", "__pycache__", ".parcel-cache"]);
           function walkDir(dir: string, base: string): any[] {
-            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            let entries: any[];
+            try {
+              entries = fs.readdirSync(dir, { withFileTypes: true });
+            } catch {
+              return [];
+            }
             const result: any[] = [];
             for (const entry of entries) {
-              if (entry.name === "node_modules" || entry.name === ".cache" || entry.name === "dist") continue;
-              const relPath = path.join(base, entry.name);
-              if (entry.isDirectory()) {
-                result.push({ name: entry.name, path: relPath, type: "directory", children: walkDir(path.join(dir, entry.name), relPath) });
-              } else {
-                result.push({ name: entry.name, path: relPath, type: "file" });
-              }
+              if (entry.name === ".DS_Store") continue;
+              const relPath = base ? base + "/" + entry.name : entry.name;
+              try {
+                let isDir = false;
+                try { isDir = entry.isDirectory(); } catch { continue; }
+                if (isDir) {
+                  if (SKIP_DIRS.has(entry.name)) continue;
+                  const children = walkDir(path.join(dir, entry.name), relPath);
+                  result.push({ name: entry.name, path: relPath, type: "directory", children });
+                } else {
+                  let isFile = false;
+                  try { isFile = entry.isFile(); } catch { isFile = false; }
+                  if (isFile) {
+                    result.push({ name: entry.name, path: relPath, type: "file" });
+                  }
+                }
+              } catch {}
             }
             return result.sort((a, b) => {
               if (a.type === b.type) return a.name.localeCompare(b.name);
