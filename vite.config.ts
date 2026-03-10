@@ -1249,6 +1249,7 @@ function projectManagementPlugin(): Plugin {
       };
 
       server.middlewares.use("/__preview", async (req, res) => {
+        const http = await import("http");
         const match = req.url?.match(/^\/(\d+)(\/.*)?$/) || req.url?.match(/^\/__preview\/(\d+)(\/.*)?$/);
         if (!match) { res.statusCode = 400; res.end("Invalid preview URL"); return; }
         const port = parseInt(match[1], 10);
@@ -1261,7 +1262,41 @@ function projectManagementPlugin(): Plugin {
         if (!isValidPort) { res.statusCode = 404; res.end("No preview running on this port"); return; }
 
         activePreviewPort = port;
-        await proxyToPreview(req, res, port, targetPath);
+        const basePath = `/__preview/${port}`;
+
+        const proxyReq = http.request(
+          {
+            hostname: "127.0.0.1",
+            port,
+            path: targetPath,
+            method: req.method,
+            headers: { ...req.headers, host: `localhost:${port}` },
+          },
+          (proxyRes) => {
+            const ct = proxyRes.headers["content-type"] || "";
+            if (ct.includes("text/html") && (targetPath === "/" || targetPath === "" || targetPath.endsWith(".html"))) {
+              const chunks: Buffer[] = [];
+              proxyRes.on("data", (c: Buffer) => chunks.push(c));
+              proxyRes.on("end", () => {
+                let html = Buffer.concat(chunks).toString("utf-8");
+                html = html.replace(/\b(src|href)="\/(?!__preview\/)/g, `$1="${basePath}/`);
+                html = html.replace(/\b(src|href)='\/(?!__preview\/)/g, `$1='${basePath}/`);
+                const hdrs = { ...proxyRes.headers };
+                delete hdrs["content-length"];
+                delete hdrs["content-encoding"];
+                res.writeHead(proxyRes.statusCode || 200, hdrs);
+                res.end(html);
+              });
+            } else {
+              res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+              proxyRes.pipe(res, { end: true });
+            }
+          }
+        );
+        proxyReq.on("error", () => {
+          if (!res.headersSent) { res.statusCode = 502; res.end("Preview server not responding"); }
+        });
+        req.pipe(proxyReq, { end: true });
       });
 
       server.middlewares.use("/api/projects/preview-info", async (req, res) => {
