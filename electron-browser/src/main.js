@@ -353,21 +353,6 @@ function createWindow() {
       if (typeof grokSession.setSpellCheckerLanguages === 'function') {
         grokSession.setSpellCheckerLanguages(languages);
       }
-
-      grokSession.webRequest.onHeadersReceived((details, callback) => {
-        const headers = { ...details.responseHeaders };
-        const strip = ['x-frame-options', 'content-security-policy', 'content-security-policy-report-only'];
-        for (const key of Object.keys(headers)) {
-          if (strip.includes(key.toLowerCase())) {
-            delete headers[key];
-          }
-        }
-        callback({ cancel: false, responseHeaders: headers });
-      });
-
-      grokSession.setUserAgent(
-        grokSession.getUserAgent().replace(/Electron\/\S+\s*/g, '').replace(/\s{2,}/g, ' ').trim()
-      );
     }
   } catch (_) {}
 

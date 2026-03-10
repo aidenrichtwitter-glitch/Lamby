@@ -2095,7 +2095,7 @@ const GrokBridge: React.FC = () => {
             </div>
           )}
           <div className="flex-1 flex min-h-0 overflow-hidden">
-            <div className="flex-1 min-w-0" style={showPreviewEmbed && previewPort ? { flex: '1 1 50%' } : undefined}>
+            <div className="flex-1 min-w-0 flex flex-col min-h-0 overflow-hidden" style={showPreviewEmbed && previewPort ? { flex: '1 1 50%' } : undefined}>
               <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} />
             </div>
             {showPreviewEmbed && previewPort && (
