@@ -961,7 +961,43 @@ function setupIpcHandlers() {
     if (!resolvedDir.startsWith(projectsRoot)) return { success: false, error: 'Invalid project path' };
     if (!fs.existsSync(projectDir)) return { success: false, error: `Project directory not found: ${projectDir}` };
 
-    const actualCmd = trimmed === 'npm install' ? 'npm install --legacy-peer-deps' : trimmed;
+    const isWin = process.platform === 'win32';
+    let actualCmd = trimmed === 'npm install' ? 'npm install --legacy-peer-deps' : trimmed;
+    if (isWin) {
+      if (/^rm\s+(-rf?)\s+/i.test(actualCmd)) {
+        const targets = actualCmd.replace(/^rm\s+(-rf?\s+)?/i, '').trim().split(/\s+/);
+        const delCmds = targets.map(t => {
+          const winPath = t.replace(/\//g, '\\');
+          return `(if exist "${winPath}" rmdir /s /q "${winPath}") & (if exist "${winPath}" del /f /q "${winPath}")`;
+        });
+        actualCmd = delCmds.join(' & ');
+      } else if (/^rm\s/i.test(actualCmd)) {
+        const target = actualCmd.replace(/^rm\s+/i, '').trim().replace(/\//g, '\\');
+        actualCmd = `del /f /q "${target}"`;
+      } else if (/^mkdir\s+(-p\s+)?/i.test(actualCmd)) {
+        const dir = actualCmd.replace(/^mkdir\s+(-p\s+)?/i, '').trim().replace(/\//g, '\\');
+        actualCmd = `if not exist "${dir}" mkdir "${dir}"`;
+      } else if (/^mv\s/i.test(actualCmd)) {
+        const args = actualCmd.replace(/^mv\s+/i, '').trim();
+        actualCmd = `move /y ${args.replace(/\//g, '\\')}`;
+      } else if (/^cp\s/i.test(actualCmd)) {
+        const args = actualCmd.replace(/^cp\s+(-r\s+)?/i, '').trim();
+        const isRecursive = /^cp\s+-r/i.test(actualCmd);
+        actualCmd = isRecursive ? `xcopy /e /i /y ${args.replace(/\//g, '\\')}` : `copy /y ${args.replace(/\//g, '\\')}`;
+      } else if (/^touch\s/i.test(actualCmd)) {
+        const file = actualCmd.replace(/^touch\s+/i, '').trim().replace(/\//g, '\\');
+        actualCmd = `type nul > "${file}"`;
+      } else if (/^cat\s/i.test(actualCmd)) {
+        const file = actualCmd.replace(/^cat\s+/i, '').trim().replace(/\//g, '\\');
+        actualCmd = `type "${file}"`;
+      } else if (/^ls(\s|$)/i.test(actualCmd)) {
+        actualCmd = actualCmd.replace(/^ls/i, 'dir').replace(/\//g, '\\');
+      } else if (/^chmod\s/i.test(actualCmd) || /^chown\s/i.test(actualCmd) || /^ln\s/i.test(actualCmd)) {
+        actualCmd = `echo Skipped (not supported on Windows): ${trimmed.slice(0, 60)}`;
+      } else if (/^corepack\s/i.test(actualCmd)) {
+        actualCmd = `npx ${actualCmd}`;
+      }
+    }
     return new Promise((resolve) => {
       exec(actualCmd, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
         if (err) {
