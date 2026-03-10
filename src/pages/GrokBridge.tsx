@@ -202,6 +202,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
   const [ollamaCleaned, setOllamaCleaned] = useState(false);
   const [ollamaProcessing, setOllamaProcessing] = useState(false);
   const [ollamaError, setOllamaError] = useState<string | null>(null);
+  const [ollamaResult, setOllamaResult] = useState<string | null>(null);
   const [detectedGithubUrls, setDetectedGithubUrls] = useState<{ owner: string; repo: string; fullUrl: string }[]>([]);
   const pasteRef = useRef<HTMLTextAreaElement>(null);
   const extractorContentRef = useRef<HTMLDivElement>(null);
@@ -240,21 +241,31 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
       setOllamaProcessing(true);
       setOllamaError(null);
       setOllamaCleaned(false);
+      setOllamaResult(null);
+      const startTime = Date.now();
       cleanGrokResponse(text, toasterConfig).then(cleaned => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
         if (cleaned && cleaned.files.length > 0) {
           const ollamaBlocks = cleanedResponseToBlocks(cleaned);
           if (ollamaBlocks.length > 0) {
-            const hasMorePaths = ollamaBlocks.filter(b => b.filePath).length >= regexParsed.filter(b => b.filePath).length;
-            if (hasMorePaths) {
+            const regexPathCount = regexParsed.filter(b => b.filePath).length;
+            const ollamaPathCount = ollamaBlocks.filter(b => b.filePath).length;
+            if (ollamaPathCount >= regexPathCount) {
               applyParsedBlocks(text, ollamaBlocks, true);
+              setOllamaResult(`Toaster found ${ollamaBlocks.length} block${ollamaBlocks.length > 1 ? 's' : ''} (${elapsed}s)`);
             } else {
-              console.log('[Toaster] Regex parsed same or more paths, keeping regex result');
+              setOllamaResult(`Regex kept (${regexPathCount} paths vs Toaster ${ollamaPathCount}) — ${elapsed}s`);
             }
+          } else {
+            setOllamaResult(`Toaster found no blocks — regex result kept (${elapsed}s)`);
           }
+        } else {
+          setOllamaResult(`Toaster returned empty — regex result kept (${elapsed}s)`);
         }
       }).catch((err) => {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
         console.error('[Toaster] cleanGrokResponse failed:', err);
-        setOllamaError(err?.message || 'Ollama processing failed');
+        setOllamaError(`${err?.message || 'Processing failed'} (${elapsed}s)`);
       }).finally(() => {
         setOllamaProcessing(false);
       });
@@ -385,8 +396,34 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
               </span>
             )}
             {ollamaCleaned && <span className="ml-1 text-[8px] text-[hsl(150_60%_55%)]" data-testid="text-ollama-cleaned">✓ Toaster cleaned</span>}
+            {ollamaResult && !ollamaCleaned && <span className="ml-1 text-[8px] text-[hsl(40_80%_60%)]" data-testid="text-ollama-result">⚙ {ollamaResult}</span>}
             {ollamaError && <span className="ml-1 text-[8px] text-red-400" data-testid="text-ollama-error">⚠ {ollamaError}</span>}
           </span>
+        )}
+        {blocks.filter(b => b.filePath && !b.applied).length > 0 && (
+          <button
+            onClick={() => {
+              const applyable = blocks.filter(b => b.filePath && !b.applied);
+              if (applyable.length === 1) {
+                onApply(applyable[0].filePath, applyable[0].code);
+              } else if (onApplyAll) {
+                onApplyAll(applyable.map(b => ({ filePath: b.filePath, code: b.code })));
+              } else {
+                applyable.forEach(b => onApply(b.filePath, b.code));
+              }
+              if (!isElectron) {
+                const ids = new Set(applyable.map(b => b.id));
+                setBlocks(prev => prev.map(b => ids.has(b.id) ? { ...b, applied: true } : b));
+              }
+            }}
+            data-testid="button-apply-toolbar"
+            className="flex items-center gap-1 px-3 py-1.5 rounded bg-primary/20 text-primary hover:bg-primary/30 text-[10px] font-bold transition-colors border border-primary/30"
+          >
+            <Zap className="w-3 h-3" />
+            Apply {blocks.filter(b => b.filePath && !b.applied).length === 1
+              ? blocks.find(b => b.filePath && !b.applied)!.filePath.split('/').pop()
+              : `All (${blocks.filter(b => b.filePath && !b.applied).length})`}
+          </button>
         )}
         {!blocks.length && ollamaProcessing && (
           <span className="text-[9px] text-[hsl(200_70%_60%)] ml-1 flex items-center gap-1" data-testid="text-ollama-processing-solo">
@@ -441,18 +478,6 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
             {gh.owner}/{gh.repo} → Clone
           </button>
         ))}
-        {isElectron && onApplyAll && blocks.filter(b => b.filePath && !b.applied).length > 1 && (
-          <button
-            onClick={() => {
-              const applyable = blocks.filter(b => b.filePath && !b.applied);
-              onApplyAll(applyable.map(b => ({ filePath: b.filePath, code: b.code })));
-            }}
-            data-testid="button-apply-all"
-            className="flex items-center gap-1 px-3 py-1.5 rounded bg-primary/20 text-primary hover:bg-primary/30 text-[10px] font-bold transition-colors border border-primary/30"
-          >
-            <Zap className="w-3 h-3" /> Apply All ({blocks.filter(b => b.filePath && !b.applied).length})
-          </button>
-        )}
         <div className="ml-auto flex items-center gap-2">
           {blocks.length > 0 && (
             <button onClick={() => { setBlocks([]); setActionItems([]); setDetectedDeps({ dependencies: [], devDependencies: [] }); setDepsInstalled(false); setDepsError(null); setProgramResults(null); }} className="p-1 text-muted-foreground/50 hover:text-destructive transition-colors">
@@ -3372,7 +3397,7 @@ const GrokBridge: React.FC = () => {
 
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Main content area — switches between Browser and API */}
-          <div className="flex-1 min-w-0 flex flex-col min-h-0 overflow-hidden" style={showPreviewEmbed && previewPort ? { flex: '1 1 50%' } : undefined}>
+          <div className="flex-1 min-w-0 flex flex-col min-h-0 overflow-y-auto" style={showPreviewEmbed && previewPort ? { flex: '1 1 50%' } : undefined}>
             {mode === 'browser' && (
               <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} />
             )}
