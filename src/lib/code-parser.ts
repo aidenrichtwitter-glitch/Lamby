@@ -357,7 +357,7 @@ export function parseActionItems(text: string): ActionItem[] {
 
     const deleteMatch = line.match(/(?:delete|remove)\s+(?:the\s+)?(?:file\s+)?`?([^\s`]+\.\w+)`?/i);
     if (deleteMatch) {
-      addItem({ type: 'delete', description: `Delete: ${deleteMatch[1]}` }, lineStart);
+      addItem({ type: 'delete', description: `Delete: ${deleteMatch[1]}`, command: `rm -rf ${deleteMatch[1]}` }, lineStart);
     }
 
     const downloadMatch = line.match(/(?:download|fetch|get|grab)\s+(?:the\s+)?(?:\w+\s+)?(?:from\s+)?`?(https?:\/\/[^\s`]+)`?/i);
