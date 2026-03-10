@@ -2288,31 +2288,51 @@ const GrokBridge: React.FC = () => {
         sections.push({ label: 'knowledgeHints', content: knowledgeSection, priority: 5 });
       }
 
+      const configFiles = new Set(['package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js', '.gitignore', '.eslintrc.json', '.prettierrc']);
+      const projectSourceFiles = sections.filter(s => {
+        if (!s.label.startsWith('file:')) return false;
+        const filePath = s.label.replace('file:', '');
+        const fileName = filePath.split('/').pop() || '';
+        return !configFiles.has(fileName) && !fileName.endsWith('.lock') && !fileName.endsWith('.json');
+      });
+      const hasSourceFiles = projectSourceFiles.length > 0;
+      const isEmptyProject = activeProject && !hasSourceFiles;
+
       let instructions = `\n=== INSTRUCTIONS ===\n`;
       instructions += `You are assisting with code for a self-recursive IDE called λ Recursive (Guardian AI).\n`;
-      instructions += `Think step-by-step: understand the request → check the current files provided in context → plan minimal changes → output code.\n\n`;
 
-      instructions += `REPO SELECTION (for new project requests or major feature additions):\n`;
-      instructions += `When the user asks to build something new or significantly enhance a project:\n`;
-      instructions += `1) FIRST suggest a popular public GitHub repo as a starting point (React/TS/Vite/Tailwind preferred, high stars, MIT/Apache license). Provide the full GitHub URL.\n`;
-      instructions += `2) SECOND, consider any proven builds from the shared library if listed above.\n`;
-      instructions += `3) LAST RESORT: start fresh only if nothing fits.\n`;
-      instructions += `Always prefer leveraging existing open-source work over starting from scratch.\n\n`;
+      if (isEmptyProject) {
+        instructions += `This is a BRAND NEW empty project. There are no source files yet.\n`;
+        instructions += `Do NOT generate code files directly. Instead:\n\n`;
+        instructions += `REPO SELECTION PRIORITY:\n`;
+        instructions += `1) FIRST: Suggest a popular public GitHub repo as a starting point (React/TS/Vite/Tailwind preferred, high stars, MIT/Apache license). Provide the full clone URL so the user can import it.\n`;
+        instructions += `2) SECOND: Consider any proven builds from the community knowledge base if listed above.\n`;
+        instructions += `3) LAST RESORT: Only if nothing fits, describe what files/structure to create and let the user confirm before generating code.\n`;
+        instructions += `Always prefer leveraging existing open-source work over starting from scratch.\n`;
+        instructions += `The user will clone/import the repo through Guardian AI's GitHub import feature.\n\n`;
+      } else {
+        instructions += `Think step-by-step: understand the request → check the current files provided in context → plan minimal changes → output code.\n\n`;
+      }
 
       instructions += `RULES:\n`;
-      instructions += `1. ALWAYS use \`// file: path/to/file.ext\` headers immediately before each fenced code block.\n`;
-      instructions += `2. Prefer minimal, targeted patches over full file rewrites. Only include files that need changes.\n`;
-      instructions += `3. Only cite real, published npm packages — never invent package names.\n`;
-      instructions += `4. Keep explanations brief. Focus on what changed and why.\n`;
-      instructions += `5. The code extractor will automatically detect and apply these blocks.\n\n`;
-
-      instructions += `If your changes require new npm packages, include a dependencies block BEFORE the code blocks:\n\n`;
-      instructions += `=== DEPENDENCIES ===\n`;
-      instructions += `package-name\n`;
-      instructions += `dev: @types/package-name\n`;
-      instructions += `=== END_DEPENDENCIES ===\n\n`;
-      instructions += `List one package per line. Prefix dev dependencies with "dev: ".\n`;
-      instructions += `The app will automatically install these before applying code changes.\n`;
+      if (hasSourceFiles) {
+        instructions += `1. ALWAYS use \`// file: path/to/file.ext\` headers immediately before each fenced code block.\n`;
+        instructions += `2. Prefer minimal, targeted patches over full file rewrites. Only include files that need changes.\n`;
+        instructions += `3. Only cite real, published npm packages — never invent package names.\n`;
+        instructions += `4. Keep explanations brief. Focus on what changed and why.\n`;
+        instructions += `5. The code extractor will automatically detect and apply these blocks.\n\n`;
+        instructions += `If your changes require new npm packages, include a dependencies block BEFORE the code blocks:\n\n`;
+        instructions += `=== DEPENDENCIES ===\n`;
+        instructions += `package-name\n`;
+        instructions += `dev: @types/package-name\n`;
+        instructions += `=== END_DEPENDENCIES ===\n\n`;
+        instructions += `List one package per line. Prefix dev dependencies with "dev: ".\n`;
+        instructions += `The app will automatically install these before applying code changes.\n`;
+      } else {
+        instructions += `1. Only cite real, published npm packages — never invent package names.\n`;
+        instructions += `2. Keep explanations brief and actionable.\n`;
+        instructions += `3. Suggest a GitHub repo URL when possible instead of writing code from scratch.\n`;
+      }
       sections.push({ label: 'instructions', content: instructions, priority: 0 });
 
       sections.sort((a, b) => a.priority - b.priority);

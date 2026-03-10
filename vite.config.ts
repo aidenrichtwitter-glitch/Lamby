@@ -145,58 +145,15 @@ function projectManagementPlugin(): Plugin {
           if (fs.existsSync(projectDir)) { res.statusCode = 409; res.end(JSON.stringify({ success: false, error: "Project already exists" })); return; }
 
           fs.mkdirSync(projectDir, { recursive: true });
-          fs.mkdirSync(path.join(projectDir, "src"), { recursive: true });
 
-          const scaffoldFiles: Record<string, string> = {
-            "package.json": JSON.stringify({
-              name,
-              version: "0.0.1",
-              private: true,
-              description,
-              _framework: framework,
-              scripts: { dev: "vite", build: "vite build", preview: "vite preview" },
-              dependencies: framework === "react" ? { react: "^18.3.1", "react-dom": "^18.3.1" } : {},
-              devDependencies: framework === "react"
-                ? { "@vitejs/plugin-react-swc": "^3.7.0", vite: "^5.4.0", "@types/react": "^18.3.0", "@types/react-dom": "^18.3.0", typescript: "^5.5.0" }
-                : { vite: "^5.4.0", typescript: "^5.5.0" },
-            }, null, 2),
-            "index.html": framework === "react"
-              ? `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <title>${name}</title>\n</head>\n<body>\n  <div id="root"></div>\n  <script type="module" src="/src/main.tsx"></script>\n</body>\n</html>`
-              : `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <title>${name}</title>\n</head>\n<body>\n  <div id="app"></div>\n  <script type="module" src="/src/main.ts"></script>\n</body>\n</html>`,
-            "vite.config.ts": framework === "react"
-              ? `import { defineConfig } from "vite";\nimport react from "@vitejs/plugin-react-swc";\n\nexport default defineConfig({\n  plugins: [react()],\n  server: {\n    watch: {\n      usePolling: true,\n      interval: 500,\n    },\n  },\n});`
-              : `import { defineConfig } from "vite";\n\nexport default defineConfig({\n  server: {\n    watch: {\n      usePolling: true,\n      interval: 500,\n    },\n  },\n});`,
-            "tsconfig.json": JSON.stringify({
-              compilerOptions: {
-                target: "ES2020",
-                useDefineForClassFields: true,
-                lib: ["ES2020", "DOM", "DOM.Iterable"],
-                module: "ESNext",
-                skipLibCheck: true,
-                moduleResolution: "bundler",
-                allowImportingTsExtensions: true,
-                isolatedModules: true,
-                moduleDetection: "force",
-                noEmit: true,
-                jsx: framework === "react" ? "react-jsx" : undefined,
-                strict: true,
-              },
-              include: ["src"],
-            }, null, 2),
-          };
-
-          if (framework === "react") {
-            scaffoldFiles["src/main.tsx"] = `import { createRoot } from "react-dom/client";\n\nfunction App() {\n  return <div><h1>${name}</h1><p>Welcome to your new project!</p></div>;\n}\n\ncreateRoot(document.getElementById("root")!).render(<App />);`;
-          } else {
-            scaffoldFiles["src/main.ts"] = `document.getElementById("app")!.innerHTML = "<h1>${name}</h1><p>Welcome to your new project!</p>";`;
-          }
-
-          for (const [filePath, content] of Object.entries(scaffoldFiles)) {
-            const fullPath = path.join(projectDir, filePath);
-            const dir = path.dirname(fullPath);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(fullPath, content, "utf-8");
-          }
+          const pkgJson = JSON.stringify({
+            name,
+            version: "0.0.1",
+            private: true,
+            description,
+            _framework: framework,
+          }, null, 2);
+          fs.writeFileSync(path.join(projectDir, "package.json"), pkgJson, "utf-8");
 
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ success: true, name, framework, description, path: `projects/${name}` }));
