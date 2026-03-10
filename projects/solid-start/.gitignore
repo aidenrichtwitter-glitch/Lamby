@@ -1,0 +1,57 @@
+coverage/
+types/
+
+.turbo
+.nitro
+.output
+.vinxi
+
+*.log
+
+playground
+
+dist
+worker
+.solid
+
+# dependencies
+node_modules
+
+# IDEs and editors
+.idea
+.project
+.classpath
+*.launch
+.settings/
+
+.tmp
+test/playwright-report
+tests/server-function/cypress/screenshots
+
+# Temp
+gitignore
+
+.env
+
+# System Files
+.DS_Store
+Thumbs.db
+
+# Local Netlify folder
+.netlify
+netlify
+
+# miniflare cache
+.mf
+.vercel
+
+vite.config.ts.timestamp*
+
+.nitro
+.output
+
+.data
+tsconfig.tsbuildinfo
+
+apps/tests/**/test-results
+.solid-start

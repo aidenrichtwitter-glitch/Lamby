@@ -265,7 +265,11 @@ function projectManagementPlugin(): Plugin {
       });
 
       const previewProcesses = new Map<string, { process: any; port: number }>();
-      let nextPreviewPort = 5100;
+      const projectPort = (name: string): number => {
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+        return 5100 + (((hash % 100) + 100) % 100);
+      };
 
       server.middlewares.use("/api/projects/preview", async (req, res) => {
         if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
@@ -279,13 +283,34 @@ function projectManagementPlugin(): Plugin {
 
           if (previewProcesses.has(name)) {
             const existing = previewProcesses.get(name)!;
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ port: existing.port, reused: true }));
-            return;
+            const processAlive = existing.process && !existing.process.killed && existing.process.exitCode === null;
+            if (processAlive) {
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ port: existing.port, reused: true }));
+              return;
+            }
+            previewProcesses.delete(name);
+            console.log(`[Preview] Cleaned up dead process entry for ${name}`);
           }
 
-          const port = nextPreviewPort++;
-          const { spawn } = await import("child_process");
+          let port = projectPort(name);
+          const usedPorts = new Set([...previewProcesses.values()].map(e => e.port));
+          while (usedPorts.has(port)) port++;
+          const { spawn, execSync } = await import("child_process");
+
+          const net = await import("net");
+          const portInUse = await new Promise<boolean>((resolve) => {
+            const tester = net.createServer().once("error", (err: any) => {
+              resolve(err.code === "EADDRINUSE");
+            }).once("listening", () => {
+              tester.close(() => resolve(false));
+            }).listen(port);
+          });
+          if (portInUse) {
+            console.log(`[Preview] Port ${port} still in use — attempting cleanup`);
+            try { execSync(`kill -9 $(ss -tlnp 'sport = :${port}' | grep -oP 'pid=\\K[0-9]+') 2>/dev/null || true`, { stdio: "ignore" }); } catch {}
+            await new Promise(r => setTimeout(r, 500));
+          }
 
           const hasPkg = fs.existsSync(path.join(projectDir, "package.json"));
           const hasNodeModules = fs.existsSync(path.join(projectDir, "node_modules"));
@@ -364,6 +389,18 @@ function projectManagementPlugin(): Plugin {
               if (startScript.includes("next")) {
                 return { cmd: "npx", args: ["next", "dev", "--port", String(port)] };
               }
+              if (startScript.includes("webpack")) {
+                return { cmd: "npx", args: ["webpack", "serve", "--port", String(port)] };
+              }
+              if (startScript.includes("vite")) {
+                return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", String(port)] };
+              }
+              if (startScript.includes("nuxt")) {
+                return { cmd: "npx", args: ["nuxt", "dev", "--port", String(port)] };
+              }
+              if (startScript.includes("astro")) {
+                return { cmd: "npx", args: ["astro", "dev", "--port", String(port)] };
+              }
               return { cmd: pm === "npm" ? "npm" : `npx ${pm}`, args: pm === "npm" ? ["run", "start"] : ["run", "start"] };
             }
 
@@ -371,6 +408,7 @@ function projectManagementPlugin(): Plugin {
             if (deps["react-scripts"]) return { cmd: "npx", args: ["react-scripts", "start"] };
             if (deps["nuxt"]) return { cmd: "npx", args: ["nuxt", "dev", "--port", String(port)] };
             if (deps["astro"]) return { cmd: "npx", args: ["astro", "dev", "--port", String(port)] };
+            if (deps["webpack-dev-server"]) return { cmd: "npx", args: ["webpack", "serve", "--port", String(port)] };
 
             if (fs.existsSync(path.join(projectDir, "vite.config.ts")) || fs.existsSync(path.join(projectDir, "vite.config.js")) || fs.existsSync(path.join(projectDir, "vite.config.mjs"))) {
               return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", String(port)] };
@@ -1301,11 +1339,7 @@ function projectManagementPlugin(): Plugin {
         const port = parseInt(match[1], 10);
         const targetPath = match[2] || "/";
 
-        let isValidPort = false;
-        for (const [, entry] of previewProcesses) {
-          if (entry.port === port) { isValidPort = true; break; }
-        }
-        if (!isValidPort) { res.statusCode = 404; res.end("No preview running on this port"); return; }
+        if (port < 5100 || port > 5200) { res.statusCode = 400; res.end("Port out of preview range"); return; }
 
         activePreviewPort = port;
         await proxyToPreview(req, res, port, targetPath);

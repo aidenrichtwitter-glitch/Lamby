@@ -1,0 +1,47 @@
+{
+  "name": "solid-start-monorepo",
+  "description": "monorepo for the SolidStart ecosystem",
+  "version": "0.2.0",
+  "author": "Ryan Carniato",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/solidjs/solid-start"
+  },
+  "private": true,
+  "scripts": {
+    "bump": "node scripts/bump.js",
+    "build": "pnpm run packages:build",
+    "build:all": "pnpm run packages:build && pnpm run lp:build",
+    "clean": "pnpm run clean:all",
+    "clean:all": "pnpm run packages:clean && pnpm run clean:root",
+    "clean:root": "pnpx rimraf ./node_modules ./.vinxi/ ./.output/",
+    "lp:dev": "pnpm --filter landing-page dev",
+    "lp:build": "pnpm --filter landing-page build",
+    "lp:start": "pnpm --filter landing-page start",
+    "lp:clean": "pnpx rimraf ./packages/landing-page/node_modules ./packages/landing-page/.vinxi/ ./packages/landing-page/.output/",
+    "packages:build": "pnpm --filter=./packages/* build",
+    "packages:clean": "pnpx rimraf ./packages/*/node_modules/ ./packages/*/dist/",
+    "clean:test": "pnpx rimraf .tmp",
+    "release": "pnpm build && changeset publish",
+    "format": "pnpm oxfmt",
+    "rewrite-exports": "pnpm --filter='./packages/*' -c exec \"echo \\$(cat package.json | jq '.exports = .publishConfig.exports') > package.json\"",
+    "vite-ecosystem-ci:build": "pnpm run build:all && pnpm --filter fixture-nitro-3 build",
+    "vite-ecosystem-ci:before-test": "pnpm --filter tests exec playwright install chromium",
+    "vite-ecosystem-ci:test": "pnpm --filter tests run test:all"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.8",
+    "citty": "^0.1.5",
+    "oxfmt": "^0.28.0",
+    "tinyglobby": "^0.2.2",
+    "tippy.js": "^6.3.7",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "pnpm": "^10.8.1",
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.8.1"
+}

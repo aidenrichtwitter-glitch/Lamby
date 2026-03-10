@@ -1,0 +1,21 @@
+{
+  "name": "fixture-notes",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@solidjs/router": "^0.15.0",
+    "@solidjs/start": "workspace:*",
+    "date-fns": "^3.6.0",
+    "marked": "^12.0.1",
+    "solid-js": "^1.9.9",
+    "unstorage": "1.10.2",
+    "vite": "7.1.10"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

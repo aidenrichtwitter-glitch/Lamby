@@ -1,0 +1,1185 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Cell component check Cell renders correct 1`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+  border-color: #dddddd;
+  cursor: default;
+  color: rgba(0,0,0,0);
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1);
+  filter: brightness(1);
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    0
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 2`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+  border-color: #dddddd;
+  cursor: default;
+  color: #2a48ec;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1);
+  filter: brightness(1);
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    1
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 3`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+  border-color: #dddddd;
+  cursor: default;
+  color: #2bb13d;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1);
+  filter: brightness(1);
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    2
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 4`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+  border-color: #dddddd;
+  cursor: default;
+  color: #ec6561;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1);
+  filter: brightness(1);
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    3
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 5`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+  border-color: #dddddd;
+  cursor: default;
+  color: #233db7;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1);
+  filter: brightness(1);
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    4
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 6`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+  border-color: #dddddd;
+  cursor: default;
+  color: #a6070f;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1);
+  filter: brightness(1);
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    5
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 7`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+  border-color: #dddddd;
+  cursor: default;
+  color: #e400af;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1);
+  filter: brightness(1);
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    6
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 8`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+  border-color: #dddddd;
+  cursor: default;
+  color: #906a02;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1);
+  filter: brightness(1);
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    7
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 9`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+  border-color: #dddddd;
+  cursor: default;
+  color: #fa0707;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1);
+  filter: brightness(1);
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    8
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 10`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+  border-color: #dddddd;
+  cursor: default;
+  color: rgba(0,0,0,0);
+  background-color: #ec433c;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1);
+  filter: brightness(1);
+}
+
+.emotion-1 {
+  border-radius: 50%;
+  width: 1vh;
+  height: 1vh;
+  background-color: #333;
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    <div
+      class="emotion-1"
+      data-testid="bomb_1,1"
+    />
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 11`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    10
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 12`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-1 {
+  width: 0px;
+  height: 0px;
+  color: rgba(0,0,0,0);
+  border-top: 0.5vh solid transparent;
+  border-bottom: 0.5vh solid transparent;
+  border-left: 0.5vh solid #ec433c;
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    <div
+      class="emotion-1"
+      data-testid="flag_1,1"
+    >
+      11
+    </div>
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Cell renders correct 13`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: white #9e9e9e #9e9e9e white;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+.emotion-1 {
+  width: 0px;
+  height: 0px;
+  color: rgba(0,0,0,0);
+  border-top: 0.5vh solid transparent;
+  border-bottom: 0.5vh solid transparent;
+  border-left: 0.5vh solid #ec433c;
+  border-left: 0.5vh solid #f19996;
+}
+
+<div
+    class="emotion-0"
+    data-testid="1,1"
+    role="cell"
+  >
+    <div
+      class="emotion-1"
+      data-testid="weakFlag_1,1"
+    />
+  </div>
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 1`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 2`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 3`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 4`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 5`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 6`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 7`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 8`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 9`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 10`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 11`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 12`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;
+
+exports[`Cell component check Closed Frame renders correct 13`] = `
+<DocumentFragment>
+  .emotion-0 {
+  display: -webkit-box;
+  display: -webkit-flex;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-align-items: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  -webkit-justify-content: center;
+  justify-content: center;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  cursor: pointer;
+  width: 1.8vh;
+  height: 1.8vh;
+  color: transparent;
+  background-color: #d1d1d1;
+  border: 0.6vh solid transparent;
+  border-color: transparent;
+}
+
+.emotion-0:hover {
+  -webkit-filter: brightness(1.1);
+  filter: brightness(1.1);
+}
+
+<div
+    class="emotion-0"
+  />
+</DocumentFragment>
+`;

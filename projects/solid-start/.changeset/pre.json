@@ -1,0 +1,23 @@
+{
+  "mode": "pre",
+  "tag": "alpha",
+  "initialVersions": {
+    "@solidjs/start": "2.0.0-alpha.0",
+    "@solidjs/vite-plugin-nitro-2": "0.1.0"
+  },
+  "changesets": [
+    "brave-baboons-talk",
+    "calm-paths-pull",
+    "chilled-turkeys-leave",
+    "eager-wings-crash",
+    "eight-months-camp",
+    "fifty-flies-yell",
+    "fresh-eyes-bet",
+    "little-gifts-wave",
+    "moody-hands-check",
+    "nasty-ladybugs-trade",
+    "sharp-llamas-grab",
+    "tricky-hounds-relate",
+    "wicked-laws-bake"
+  ]
+}

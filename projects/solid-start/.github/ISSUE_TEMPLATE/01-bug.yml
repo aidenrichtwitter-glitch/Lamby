@@ -1,0 +1,68 @@
+name: Bug report 🐛
+description: Create a bug report for SolidStart.
+labels: ["bug", "needs triage"]
+title: "[Bug?]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please provide a searchable summary of the issue in the title above ⬆️.
+
+        Thanks for contributing by creating an issue! ❤️
+  - type: checkboxes
+    attributes:
+      label: Duplicates
+      description: Please [search the history](https://github.com/solidjs/solid-start/issues) to see if an issue already exists for the same problem.
+      options:
+        - label: I have searched the existing issues
+          required: true
+  - type: checkboxes
+    attributes:
+      label: Latest version
+      description: We roll bug fixes, performance enhancements, and other improvements into new releases.
+      options:
+        - label: I have tested the latest version
+          required: true
+  - type: textarea
+    attributes:
+      label: Current behavior 😯
+      description: Describe what happens instead of the expected behavior.
+  - type: textarea
+    attributes:
+      label: Expected behavior 🤔
+      description: Describe what should happen.
+  - type: textarea
+    attributes:
+      label: Steps to reproduce 🕹
+      description: |
+        Provide a link to a live example (you can use codesandbox.io) and an unambiguous set of steps to reproduce this bug.
+        Include code to reproduce, if relevant (which it most likely is).
+
+        :bangbang: &nbsp; Issues that we can't reproduce will be closed. :bangbang:
+      value: |
+        Steps:
+
+        1.
+        2.
+        3.
+        4.
+  - type: textarea
+    attributes:
+      label: Context 🔦
+      description: What are you trying to accomplish? How has this issue affected you? Providing context helps us come up with a solution that is more useful in the real world.
+  - type: textarea
+    attributes:
+      label: Your environment 🌎
+      description: Please paste the output of running whatever the command is for your environment.
+      placeholder: |
+        System:
+          OS: Linux 5.10 Debian GNU/Linux 9 (stretch)
+          CPU: (8) arm64
+        Binaries:
+          Node: 20.0.0 - /usr/local/bin/node
+          Yarn: 3.0.0 - /usr/local/bin/yarn
+          npm: 9.8.0 - /usr/local/bin/npm
+          pnpm: 9.0.0 - /usr/local/bin/pnpm
+        npmPackages:
+          @solidjs/start: 1.0.0 => 1.0.0
+      render: shell
