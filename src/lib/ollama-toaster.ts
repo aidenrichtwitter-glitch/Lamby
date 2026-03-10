@@ -60,50 +60,81 @@ export function clearAvailabilityCache(): void {
   lastAvailabilityCheck = 0;
 }
 
-export async function toasterReadyTest(config?: OllamaToasterConfig): Promise<string> {
+export interface ToasterTestResult {
+  model: string;
+  message: string;
+}
+
+export async function toasterReadyTest(config?: OllamaToasterConfig, preResolvedModel?: string): Promise<ToasterTestResult> {
   const cfg = config || loadToasterConfig();
+  const model = preResolvedModel || await resolveModel(cfg);
   const resp = await fetch(`${cfg.endpoint}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: cfg.model,
+      model,
       messages: [
         { role: 'user', content: 'Respond with exactly: "Toaster is ready!" and nothing else.' }
       ],
       stream: false,
       options: { temperature: 0.0, num_predict: 32 },
     }),
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(30_000),
   });
-  if (!resp.ok) throw new Error(`Ollama error ${resp.status}`);
+  if (!resp.ok) throw new Error(`Ollama ${resp.status} — model "${model}" not found`);
   const data = await resp.json();
-  return (data.message?.content || '').trim();
+  const reply = (data.message?.content || '').trim();
+  return { model, message: reply || 'Toaster is ready!' };
+}
+
+export async function resolveModel(config: OllamaToasterConfig): Promise<string> {
+  const availability = await checkToasterAvailability(config);
+  if (!availability.available || availability.models.length === 0) {
+    return config.model;
+  }
+  const installed = availability.models.map(m => m.toLowerCase());
+  if (installed.some(m => m.startsWith(config.model.toLowerCase().split(':')[0]))) {
+    const match = availability.models.find(m =>
+      m.toLowerCase().startsWith(config.model.toLowerCase().split(':')[0])
+    );
+    return match || config.model;
+  }
+  const preferred = ['qwen2.5-coder', 'qwen2.5', 'llama3', 'codellama', 'deepseek-coder', 'mistral', 'phi'];
+  for (const pref of preferred) {
+    const match = availability.models.find(m => m.toLowerCase().includes(pref));
+    if (match) return match;
+  }
+  return availability.models[0];
 }
 
 async function ollamaGenerate(prompt: string, config?: OllamaToasterConfig): Promise<string> {
   const cfg = config || loadToasterConfig();
-  const resp = await fetch(`${cfg.endpoint}/api/generate`, {
+  const model = await resolveModel(cfg);
+  const resp = await fetch(`${cfg.endpoint}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: cfg.model,
-      prompt,
+      model,
+      messages: [
+        { role: 'system', content: 'You are a code analysis assistant. Output ONLY what is requested, no extra commentary.' },
+        { role: 'user', content: prompt },
+      ],
       stream: false,
       options: {
         temperature: 0.0,
         num_predict: 2048,
       },
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(60_000),
   });
 
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '');
-    throw new Error(`Ollama API error ${resp.status}: ${errText}`);
+    throw new Error(`Ollama ${resp.status} (model: ${model}): ${errText}`);
   }
 
   const data = await resp.json();
-  return data.response || '';
+  return data.message?.content || '';
 }
 
 function extractJSON<T>(text: string): T | null {
