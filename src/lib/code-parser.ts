@@ -253,7 +253,9 @@ export function parseActionItems(text: string): ActionItem[] {
       if (rawTrimmed && !rawTrimmed.startsWith('#')) {
         const trimmed = rawTrimmed.replace(/\s+#\s+.*$/, '').trim();
         const DEV_SERVER_RE = /^(?:npm\s+(?:run\s+)?(?:dev|start)|yarn\s+(?:dev|start)|pnpm\s+(?:dev|start)|bun\s+(?:dev|start)|npx\s+vite(?:\s|$))/i;
-        if (/^(?:npm|yarn|pnpm|bun)\s+(?:install|i|add)\s+[^-]/i.test(trimmed) && !/\s-g\b/.test(trimmed) && !/\s--global\b/.test(trimmed)) {
+        const SCAFFOLD_RE = /^(?:npm\s+(?:create|init)|npx\s+create-|yarn\s+create|pnpm\s+create|bun\s+create)\s/i;
+        if (SCAFFOLD_RE.test(trimmed)) {
+        } else if (/^(?:npm|yarn|pnpm|bun)\s+(?:install|i|add)\s+[^-]/i.test(trimmed) && !/\s-g\b/.test(trimmed) && !/\s--global\b/.test(trimmed)) {
         } else if (DEV_SERVER_RE.test(trimmed)) {
         } else if (/^(?:npm|yarn|pnpm|bun)\s+(?:install|i)\s*$/i.test(trimmed)) {
           addItem({ type: 'command', description: `Install dependencies: ${trimmed}`, command: trimmed }, lineOffset);
@@ -277,7 +279,8 @@ export function parseActionItems(text: string): ActionItem[] {
         } else if (/^(?:export|set)\s+\w+=/.test(trimmed)) {
           const varName = trimmed.match(/^(?:export|set)\s+(\w+)=/)?.[1] || '';
           addItem({ type: 'env', description: `Set environment variable: ${varName}`, command: trimmed }, lineOffset);
-        } else if (/^(?:cd|node|python|pip)\s+/.test(trimmed)) {
+        } else if (/^cd\s+/.test(trimmed)) {
+        } else if (/^(?:node|python|pip)\s+/.test(trimmed)) {
           addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed }, lineOffset);
         } else if (/^corepack\s+/i.test(trimmed)) {
           addItem({ type: 'command', description: `Run: ${trimmed}`, command: trimmed }, lineOffset);
