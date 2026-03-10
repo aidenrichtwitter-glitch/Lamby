@@ -2094,11 +2094,11 @@ const GrokBridge: React.FC = () => {
               <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} />
             </div>
           )}
-          {showPreviewEmbed && previewPort ? (
-            <div className="flex-1 flex min-h-0 overflow-hidden">
-              <div className={isElectron ? 'flex-1 min-w-0' : 'flex-1 min-w-0'} style={{ flex: '1 1 50%' }}>
-                <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} />
-              </div>
+          <div className="flex-1 flex min-h-0 overflow-hidden">
+            <div className="flex-1 min-w-0" style={showPreviewEmbed && previewPort ? { flex: '1 1 50%' } : undefined}>
+              <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} />
+            </div>
+            {showPreviewEmbed && previewPort && (
               <div className="border-l border-border/30 flex flex-col" style={{ flex: '1 1 50%' }}>
                 <div className="flex items-center gap-2 px-2 py-1 bg-card/50 border-b border-border/30 shrink-0">
                   <Monitor className="w-3 h-3 text-[hsl(150_60%_55%)]" />
@@ -2131,10 +2131,8 @@ const GrokBridge: React.FC = () => {
                   title={`${activeProject} preview`}
                 />
               </div>
-            </div>
-          ) : (
-            <GrokDesktopBrowser browserUrl={browserUrl} setBrowserUrl={setBrowserUrl} customUrl={customUrl} setCustomUrl={setCustomUrl} onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} />
-          )}
+            )}
+          </div>
         </div>
       )}
 
