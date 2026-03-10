@@ -925,6 +925,40 @@ function setupIpcHandlers() {
     });
   });
 
+  ipcMain.handle('run-project-command', async (_event, { projectName, command }) => {
+    if (!projectName || typeof projectName !== 'string' || /[\/\\]|\.\./.test(projectName)) {
+      return { success: false, error: 'Invalid project name' };
+    }
+    if (!command || typeof command !== 'string') {
+      return { success: false, error: 'No command specified' };
+    }
+    const allowedPrefixes = ['npm install', 'npm run', 'npm update', 'npm ci', 'npx ', 'yarn ', 'pnpm ', 'node ', 'tsc', 'mkdir ', 'cp ', 'mv '];
+    const trimmed = command.trim();
+    const isAllowed = allowedPrefixes.some(p => trimmed.startsWith(p)) || trimmed === 'npm install';
+    if (!isAllowed) return { success: false, error: `Command not allowed: ${trimmed.slice(0, 50)}` };
+    if (/[;&|`$(){}]/.test(trimmed) && !trimmed.includes('--legacy-peer-deps')) {
+      return { success: false, error: 'Shell metacharacters not allowed' };
+    }
+
+    const projectRoot = getProjectRoot();
+    const projectDir = path.join(projectRoot, 'projects', projectName);
+    const resolvedDir = path.resolve(projectDir);
+    const projectsRoot = path.resolve(path.join(projectRoot, 'projects'));
+    if (!resolvedDir.startsWith(projectsRoot)) return { success: false, error: 'Invalid project path' };
+    if (!fs.existsSync(projectDir)) return { success: false, error: 'Project not found' };
+
+    const actualCmd = trimmed === 'npm install' ? 'npm install --legacy-peer-deps' : trimmed;
+    return new Promise((resolve) => {
+      exec(actualCmd, { cwd: projectDir, timeout: 120000, shell: true, maxBuffer: 1024 * 1024 }, (err, stdout, stderr) => {
+        if (err) {
+          resolve({ success: false, error: err.message?.slice(0, 500), output: (stdout || '').slice(0, 4000), stderr: (stderr || '').slice(0, 2000) });
+        } else {
+          resolve({ success: true, output: (stdout || '').slice(0, 4000) });
+        }
+      });
+    });
+  });
+
   ipcMain.handle('ensure-project-polling', async (_event, { projectName }) => {
     if (!projectName || typeof projectName !== 'string' || /[\/\\]|\.\./.test(projectName)) {
       return { success: false, error: 'Invalid project name' };

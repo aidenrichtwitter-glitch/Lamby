@@ -519,6 +519,39 @@ function projectManagementPlugin(): Plugin {
         }
       });
 
+      server.middlewares.use("/api/projects/run-command", async (req, res) => {
+        if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
+        try {
+          const { name, command } = JSON.parse(await readBody(req));
+          if (!name || /[\/\\]|\.\./.test(name)) { res.statusCode = 400; res.end(JSON.stringify({ error: "Invalid project name" })); return; }
+          if (!command || typeof command !== "string") { res.statusCode = 400; res.end(JSON.stringify({ error: "No command specified" })); return; }
+
+          const allowedPrefixes = ["npm install", "npm run", "npm update", "npm ci", "npx ", "yarn ", "pnpm ", "node ", "tsc", "mkdir ", "cp ", "mv "];
+          const trimmed = command.trim();
+          const isAllowed = allowedPrefixes.some(p => trimmed.startsWith(p)) || trimmed === "npm install";
+          if (!isAllowed) { res.statusCode = 403; res.end(JSON.stringify({ error: `Command not allowed: ${trimmed.slice(0, 50)}` })); return; }
+          if (/[;&|`$(){}]/.test(trimmed) && !trimmed.includes("--legacy-peer-deps")) {
+            res.statusCode = 403; res.end(JSON.stringify({ error: "Shell metacharacters not allowed" })); return;
+          }
+
+          const fs = await import("fs");
+          const projectDir = path.resolve(process.cwd(), "projects", name);
+          if (!fs.existsSync(projectDir)) { res.statusCode = 404; res.end(JSON.stringify({ error: "Project not found" })); return; }
+
+          const { execSync } = await import("child_process");
+          const actualCmd = trimmed === "npm install" ? "npm install --legacy-peer-deps" : trimmed;
+          const output = execSync(actualCmd, { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true, encoding: "utf-8" });
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ success: true, output: (output || "").slice(0, 4000) }));
+        } catch (err: any) {
+          const stderr = err.stderr ? String(err.stderr).slice(0, 2000) : "";
+          const stdout = err.stdout ? String(err.stdout).slice(0, 2000) : "";
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ success: false, error: err.message?.slice(0, 500), output: stdout, stderr }));
+        }
+      });
+
       server.middlewares.use("/api/programs/install", async (req, res) => {
         if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
         try {

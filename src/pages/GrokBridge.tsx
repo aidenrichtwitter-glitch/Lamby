@@ -155,6 +155,8 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [programsInstalling, setProgramsInstalling] = useState(false);
   const [programResults, setProgramResults] = useState<{ program: string; label: string; installed: boolean; alreadyInstalled: boolean; error?: string }[] | null>(null);
+  const [runningCommands, setRunningCommands] = useState<Set<number>>(new Set());
+  const [commandResults, setCommandResults] = useState<Map<number, { success: boolean; output?: string; error?: string }>>(new Map());
   const [responseContext, setResponseContext] = useState<string>('');
   const [contextSections, setContextSections] = useState<string[]>([]);
   const [showContext, setShowContext] = useState(false);
@@ -483,15 +485,56 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
                           </span>
                         )}
                         {item.command && !progResult && (
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(item.command!);
-                            }}
-                            className="ml-2 text-[8px] text-primary/60 hover:text-primary underline cursor-pointer"
-                            data-testid={`button-copy-action-${i}`}
-                          >
-                            copy
-                          </button>
+                          <>
+                            {activeProject && item.type === 'command' && (
+                              <button
+                                disabled={runningCommands.has(i)}
+                                onClick={async () => {
+                                  setRunningCommands(prev => new Set(prev).add(i));
+                                  setCommandResults(prev => { const m = new Map(prev); m.delete(i); return m; });
+                                  try {
+                                    const isElectron = typeof (window as any).require === 'function';
+                                    let result: any;
+                                    if (isElectron) {
+                                      const { ipcRenderer } = (window as any).require('electron');
+                                      result = await ipcRenderer.invoke('run-project-command', { projectName: activeProject, command: item.command });
+                                    } else {
+                                      const res = await fetch('/api/projects/run-command', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ name: activeProject, command: item.command }),
+                                      });
+                                      result = await res.json();
+                                    }
+                                    setCommandResults(prev => new Map(prev).set(i, result));
+                                  } catch (err: any) {
+                                    setCommandResults(prev => new Map(prev).set(i, { success: false, error: err.message }));
+                                  } finally {
+                                    setRunningCommands(prev => { const s = new Set(prev); s.delete(i); return s; });
+                                  }
+                                }}
+                                className="ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-green-500/20 text-green-300 hover:bg-green-500/30 text-[8px] font-bold transition-colors border border-green-500/30 disabled:opacity-50"
+                                data-testid={`button-run-action-${i}`}
+                              >
+                                {runningCommands.has(i) ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Play className="w-2.5 h-2.5" />}
+                                {runningCommands.has(i) ? 'Running...' : 'Run'}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(item.command!);
+                              }}
+                              className="ml-1 text-[8px] text-primary/60 hover:text-primary underline cursor-pointer"
+                              data-testid={`button-copy-action-${i}`}
+                            >
+                              copy
+                            </button>
+                            {commandResults.has(i) && (
+                              <span className={`ml-1 text-[8px] ${commandResults.get(i)!.success ? 'text-green-400' : 'text-red-400'}`}>
+                                {commandResults.get(i)!.success ? '✓ done' : `✗ ${commandResults.get(i)!.error?.slice(0, 80) || 'failed'}`}
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
