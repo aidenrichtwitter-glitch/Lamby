@@ -336,7 +336,7 @@ function projectManagementPlugin(): Plugin {
           if (hasPkg && !hasNodeModules) {
             try {
               const { execSync } = await import("child_process");
-              execSync("npm install", { cwd: projectDir, timeout: 30000, stdio: "pipe", shell: true });
+              execSync("npm install --legacy-peer-deps", { cwd: projectDir, timeout: 30000, stdio: "pipe", shell: true });
             } catch {}
           }
 
@@ -493,7 +493,7 @@ function projectManagementPlugin(): Plugin {
 
           if (safeDeps.length > 0) {
             try {
-              execSync(`npm install ${safeDeps.join(" ")}`, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true });
+              execSync(`npm install --legacy-peer-deps ${safeDeps.join(" ")}`, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true });
               results.push(`Installed: ${safeDeps.join(", ")}`);
             } catch (err: any) {
               errors.push(`Failed to install deps: ${err.message}`);
@@ -502,7 +502,7 @@ function projectManagementPlugin(): Plugin {
 
           if (safeDevDeps.length > 0) {
             try {
-              execSync(`npm install --save-dev ${safeDevDeps.join(" ")}`, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true });
+              execSync(`npm install --legacy-peer-deps --save-dev ${safeDevDeps.join(" ")}`, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true });
               results.push(`Installed dev: ${safeDevDeps.join(", ")}`);
             } catch (err: any) {
               errors.push(`Failed to install dev deps: ${err.message}`);

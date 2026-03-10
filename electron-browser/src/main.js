@@ -974,7 +974,7 @@ function setupIpcHandlers() {
     if (safeDeps.length > 0) {
       try {
         const { execFileSync } = require('child_process');
-        execFileSync(npmCmd, ['install', ...safeDeps], { cwd: projectDir, timeout: 60000, stdio: 'pipe' });
+        execFileSync(npmCmd, ['install', '--legacy-peer-deps', ...safeDeps], { cwd: projectDir, timeout: 60000, stdio: 'pipe' });
         results.push(`Installed: ${safeDeps.join(', ')}`);
       } catch (err) {
         errors.push(`Failed to install deps: ${err.message}`);
@@ -984,7 +984,7 @@ function setupIpcHandlers() {
     if (safeDevDeps.length > 0) {
       try {
         const { execFileSync } = require('child_process');
-        execFileSync(npmCmd, ['install', '--save-dev', ...safeDevDeps], { cwd: projectDir, timeout: 60000, stdio: 'pipe' });
+        execFileSync(npmCmd, ['install', '--legacy-peer-deps', '--save-dev', ...safeDevDeps], { cwd: projectDir, timeout: 60000, stdio: 'pipe' });
         results.push(`Installed dev: ${safeDevDeps.join(', ')}`);
       } catch (err) {
         errors.push(`Failed to install dev deps: ${err.message}`);
