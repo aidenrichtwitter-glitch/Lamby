@@ -1528,6 +1528,9 @@ const GrokBridge: React.FC = () => {
       const { ipcRenderer } = (window as any).require('electron');
       await ipcRenderer.invoke('write-file', { filePath, content });
       setStatusMessage(`Saved ${filePath}`);
+    } else {
+      await writeProjectFile('__main__', filePath, content);
+      setStatusMessage(`Saved ${filePath}`);
     }
   }, [activeProject, previewPort]);
 
@@ -3485,7 +3488,7 @@ const GrokBridge: React.FC = () => {
             <FileEditor
               filePath={editorFile.path}
               content={editorFile.content}
-              projectName={activeProject}
+              projectName={activeProject || '__main__'}
               onSave={handleEditorSave}
               onClose={handleEditorClose}
               onSendToGrok={handleEditorSendToGrok}

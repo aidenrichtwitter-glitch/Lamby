@@ -73,6 +73,20 @@ function projectManagementPlugin(): Plugin {
 
       function validateProjectPath(projectName: string, filePath?: string): { valid: boolean; resolved: string; error?: string } {
         const projectRoot = process.cwd();
+        if (projectName === "__main__") {
+          if (!filePath) return { valid: true, resolved: projectRoot };
+          const BLOCKED_MAIN_DIRS = new Set(["node_modules", ".git", "projects", ".local", ".agents", ".upm", ".config", ".cache", "dist", "attached_assets", "path", ".replit"]);
+          const BLOCKED_MAIN_FILES = new Set([".env", ".env.local", ".env.development", ".env.production", ".gitattributes", ".gitignore", "bun.lock", "package-lock.json"]);
+          const firstSeg = filePath.split(/[\/\\]/)[0];
+          if (BLOCKED_MAIN_DIRS.has(firstSeg)) return { valid: false, resolved: "", error: "Access to this directory is blocked" };
+          const fileName = filePath.split(/[\/\\]/).pop() || "";
+          if (BLOCKED_MAIN_FILES.has(fileName) && !filePath.includes("/")) return { valid: false, resolved: "", error: "Access to this file is blocked" };
+          const resolved = path.resolve(projectRoot, filePath);
+          if (!resolved.startsWith(projectRoot + path.sep) && resolved !== projectRoot) {
+            return { valid: false, resolved: "", error: "File path traversal blocked" };
+          }
+          return { valid: true, resolved };
+        }
         const projectsDir = path.resolve(projectRoot, "projects");
         if (!projectName || /[\/\\]|\.\./.test(projectName) || projectName === '.' || projectName.startsWith('.')) {
           return { valid: false, resolved: "", error: "Invalid project name" };
@@ -177,6 +191,46 @@ function projectManagementPlugin(): Plugin {
           fs.rmSync(check.resolved, { recursive: true, force: true });
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({ success: true, name }));
+        } catch (err: any) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+
+      server.middlewares.use("/api/projects/files-main", async (req, res) => {
+        if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
+        try {
+          const fs = await import("fs");
+          const rootDir = process.cwd();
+          const SKIP_DIRS = new Set(["node_modules", ".cache", "dist", ".git", ".next", ".nuxt", ".turbo", ".vercel", ".output", ".svelte-kit", "__pycache__", ".parcel-cache", "projects", "attached_assets", ".local", ".agents", ".upm", ".config", "path", ".replit"]);
+          function walkDir(dir: string, base: string, maxDepth: number): any[] {
+            if (maxDepth <= 0) return [];
+            let names: string[];
+            try { names = fs.readdirSync(dir); } catch { return []; }
+            const result: any[] = [];
+            for (const name of names) {
+              if (name === ".DS_Store" || name === "bun.lock" || name === "package-lock.json") continue;
+              const fullPath = path.join(dir, name);
+              const relPath = base ? base + "/" + name : name;
+              try {
+                const stat = fs.lstatSync(fullPath);
+                if (stat.isDirectory()) {
+                  if (SKIP_DIRS.has(name)) continue;
+                  const children = walkDir(fullPath, relPath, maxDepth - 1);
+                  result.push({ name, path: relPath, type: "directory", children });
+                } else if (stat.isFile()) {
+                  result.push({ name, path: relPath, type: "file" });
+                }
+              } catch {}
+            }
+            return result.sort((a: any, b: any) => {
+              if (a.type === b.type) return a.name.localeCompare(b.name);
+              return a.type === "directory" ? -1 : 1;
+            });
+          }
+          const tree = walkDir(rootDir, "", 6);
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ success: true, name: "__main__", files: tree }));
         } catch (err: any) {
           res.statusCode = 500;
           res.end(JSON.stringify({ success: false, error: err.message }));
@@ -402,10 +456,10 @@ function projectManagementPlugin(): Plugin {
             const portStr = String(port);
 
             const matchScript = (scriptBody: string): { cmd: string; args: string[] } | null => {
-              if (scriptBody.includes("next")) return { cmd: "npx", args: ["next", "dev", "--port", portStr] };
+              if (scriptBody.includes("next")) return { cmd: "npx", args: ["next", "dev", "--port", portStr, "--hostname", "0.0.0.0"] };
               if (scriptBody.includes("react-scripts")) return { cmd: "npx", args: ["react-scripts", "start"] };
               if (scriptBody.includes("nuxt")) return { cmd: "npx", args: ["nuxt", "dev", "--port", portStr] };
-              if (scriptBody.includes("astro")) return { cmd: "npx", args: ["astro", "dev", "--port", portStr] };
+              if (scriptBody.includes("astro")) return { cmd: "npx", args: ["astro", "dev", "--port", portStr, "--host", "0.0.0.0"] };
               if (scriptBody.includes("ng ") || scriptBody.includes("ng serve")) return { cmd: "npx", args: ["ng", "serve", "--host", "0.0.0.0", "--port", portStr, "--disable-host-check"] };
               if (scriptBody.includes("remix")) return { cmd: "npx", args: ["remix", "vite:dev", "--host", "0.0.0.0", "--port", portStr] };
               if (scriptBody.includes("gatsby")) return { cmd: "npx", args: ["gatsby", "develop", "-H", "0.0.0.0", "-p", portStr] };
@@ -424,49 +478,99 @@ function projectManagementPlugin(): Plugin {
               return null;
             };
 
+            const extractDevServerCmd = (scriptBody: string): string => {
+              let cleaned = scriptBody;
+              cleaned = cleaned.replace(/^cross-env\s+[\w=]+\s*/g, "");
+              cleaned = cleaned.replace(/^dotenv\s+(-e\s+\S+\s+)*--\s*/g, "");
+              cleaned = cleaned.replace(/^env-cmd\s+(-f\s+\S+\s+)*/g, "");
+              if (cleaned.includes("concurrently")) {
+                const parts = cleaned.match(/"([^"]+)"|'([^']+)'/g);
+                if (parts) {
+                  for (const part of parts) {
+                    const inner = part.replace(/^["']|["']$/g, "");
+                    const matched = matchScript(inner);
+                    if (matched) return inner;
+                  }
+                }
+                return cleaned;
+              }
+              if (cleaned.includes("&&")) {
+                const segments = cleaned.split("&&").map(s => s.trim());
+                for (const seg of segments) {
+                  if (/^tsc\b|^tsc-watch|^node\s|^echo\b|^rm\s|^cp\s|^mkdir\s/.test(seg)) continue;
+                  const matched = matchScript(seg);
+                  if (matched) return seg;
+                }
+                const lastSeg = segments[segments.length - 1];
+                return lastSeg || cleaned;
+              }
+              if (cleaned.includes("||")) {
+                const segments = cleaned.split("||").map(s => s.trim());
+                for (const seg of segments) {
+                  const matched = matchScript(seg);
+                  if (matched) return seg;
+                }
+              }
+              return cleaned;
+            };
+
             const isSvelteKit = deps["@sveltejs/kit"] || deps["sveltekit"];
             const isPnpmMonorepo = fs.existsSync(path.join(projectDir, "pnpm-workspace.yaml"));
 
             if (isPnpmMonorepo) {
-              const wsYaml = fs.readFileSync(path.join(projectDir, "pnpm-workspace.yaml"), "utf-8");
-              const hasPackages = wsYaml.includes("packages:");
-              if (hasPackages) {
-                for (const key of Object.keys(scripts)) {
-                  if (scripts[key].includes("--filter") && (key.includes("dev") || key === "lp:dev")) {
-                    console.log(`[Preview] Detected pnpm monorepo, using script "${key}": ${scripts[key]}`);
-                    return { cmd: pm === "pnpm" ? "pnpm" : "npx pnpm", args: ["run", key] };
+              try {
+                const wsYaml = fs.readFileSync(path.join(projectDir, "pnpm-workspace.yaml"), "utf-8");
+                const hasPackages = wsYaml.includes("packages:");
+                if (hasPackages) {
+                  for (const key of Object.keys(scripts)) {
+                    if (scripts[key].includes("--filter") && (key.includes("dev") || key === "lp:dev")) {
+                      console.log(`[Preview] Detected pnpm monorepo, using script "${key}": ${scripts[key]}`);
+                      return { cmd: pm === "pnpm" ? "pnpm" : "npx pnpm", args: ["run", key] };
+                    }
                   }
                 }
-              }
+              } catch {}
             }
 
             if (scripts.dev) {
               if (isSvelteKit) {
                 return { cmd: "npx", args: ["vite", "dev", "--host", "0.0.0.0", "--port", portStr] };
               }
-              const matched = matchScript(scripts.dev);
+              const extracted = extractDevServerCmd(scripts.dev);
+              const matched = matchScript(extracted);
               if (matched) return matched;
               return { cmd: pm === "npm" ? "npm" : `npx ${pm}`, args: pm === "npm" ? ["run", "dev"] : ["run", "dev"] };
             }
 
             if (scripts.start) {
-              const matched = matchScript(scripts.start);
+              const extracted = extractDevServerCmd(scripts.start);
+              const matched = matchScript(extracted);
               if (matched) return matched;
               return { cmd: pm === "npm" ? "npm" : `npx ${pm}`, args: pm === "npm" ? ["run", "start"] : ["run", "start"] };
             }
 
             if (scripts.serve || scripts["serve:rspack"]) {
               const serveScript = scripts.serve || scripts["serve:rspack"];
-              const matched = matchScript(serveScript);
+              const extracted = extractDevServerCmd(serveScript);
+              const matched = matchScript(extracted);
               if (matched) return matched;
               const serveKey = scripts.serve ? "serve" : "serve:rspack";
               return { cmd: pm === "npm" ? "npm" : `npx ${pm}`, args: pm === "npm" ? ["run", serveKey] : ["run", serveKey] };
             }
 
-            if (deps["next"]) return { cmd: "npx", args: ["next", "dev", "--port", portStr] };
+            for (const key of ["develop", "dev:app", "dev:client", "dev:frontend", "dev:web", "watch"]) {
+              if (scripts[key]) {
+                const extracted = extractDevServerCmd(scripts[key]);
+                const matched = matchScript(extracted);
+                if (matched) return matched;
+                return { cmd: pm === "npm" ? "npm" : `npx ${pm}`, args: pm === "npm" ? ["run", key] : ["run", key] };
+              }
+            }
+
+            if (deps["next"]) return { cmd: "npx", args: ["next", "dev", "--port", portStr, "--hostname", "0.0.0.0"] };
             if (deps["react-scripts"]) return { cmd: "npx", args: ["react-scripts", "start"] };
             if (deps["nuxt"]) return { cmd: "npx", args: ["nuxt", "dev", "--port", portStr] };
-            if (deps["astro"]) return { cmd: "npx", args: ["astro", "dev", "--port", portStr] };
+            if (deps["astro"]) return { cmd: "npx", args: ["astro", "dev", "--port", portStr, "--host", "0.0.0.0"] };
             if (deps["@angular/cli"]) return { cmd: "npx", args: ["ng", "serve", "--host", "0.0.0.0", "--port", portStr, "--disable-host-check"] };
             if (deps["@remix-run/dev"]) return { cmd: "npx", args: ["remix", "vite:dev", "--host", "0.0.0.0", "--port", portStr] };
             if (deps["gatsby"]) return { cmd: "npx", args: ["gatsby", "develop", "-H", "0.0.0.0", "-p", portStr] };
@@ -479,8 +583,134 @@ function projectManagementPlugin(): Plugin {
               return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", portStr] };
             }
 
+            if (!hasPkg && fs.existsSync(path.join(projectDir, "index.html"))) {
+              return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", portStr] };
+            }
+
             return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", portStr] };
           };
+
+          if (!hasPkg && fs.existsSync(path.join(projectDir, "index.html"))) {
+            console.log(`[Preview] Static HTML project detected for ${name}, bootstrapping with vite`);
+            const minPkg = { name, private: true, devDependencies: { vite: "^5" } };
+            fs.writeFileSync(path.join(projectDir, "package.json"), JSON.stringify(minPkg, null, 2));
+            try {
+              const { execSync: es } = await import("child_process");
+              es("npm install", { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true });
+            } catch (e: any) {
+              console.log(`[Preview] Static HTML bootstrap install warning: ${e.message?.slice(0, 200)}`);
+            }
+            pkg = JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf-8"));
+          }
+
+          const patchPortInEnvFiles = () => {
+            const envFiles = [".env", ".env.local", ".env.development", ".env.development.local"];
+            for (const envFile of envFiles) {
+              const envPath = path.join(projectDir, envFile);
+              if (!fs.existsSync(envPath)) continue;
+              try {
+                let content = fs.readFileSync(envPath, "utf-8");
+                let changed = false;
+                if (/^PORT\s*=/m.test(content)) {
+                  content = content.replace(/^PORT\s*=.*/m, `PORT=${port}`);
+                  changed = true;
+                }
+                if (/^HOST\s*=/m.test(content)) {
+                  content = content.replace(/^HOST\s*=.*/m, `HOST=0.0.0.0`);
+                  changed = true;
+                }
+                if (changed) {
+                  fs.writeFileSync(envPath, content);
+                  console.log(`[Preview] Patched port/host in ${envFile} for ${name}`);
+                }
+              } catch {}
+            }
+          };
+          patchPortInEnvFiles();
+
+          const patchViteConfig = () => {
+            const viteConfigNames = ["vite.config.ts", "vite.config.js", "vite.config.mjs"];
+            for (const vcName of viteConfigNames) {
+              const vcPath = path.join(projectDir, vcName);
+              if (!fs.existsSync(vcPath)) continue;
+              try {
+                let content = fs.readFileSync(vcPath, "utf-8");
+                let changed = false;
+                const portMatch = content.match(/port\s*:\s*(\d+)/);
+                if (portMatch && portMatch[1] !== String(port)) {
+                  content = content.replace(/port\s*:\s*\d+/, `port: ${port}`);
+                  changed = true;
+                }
+                if (/host\s*:\s*['"]localhost['"]/.test(content)) {
+                  content = content.replace(/host\s*:\s*['"]localhost['"]/, `host: '0.0.0.0'`);
+                  changed = true;
+                }
+                if (/open\s*:\s*true/.test(content)) {
+                  content = content.replace(/open\s*:\s*true/g, "open: false");
+                  changed = true;
+                }
+                if (changed) {
+                  fs.writeFileSync(vcPath, content);
+                  console.log(`[Preview] Patched ${vcName} for ${name} (port/host/open)`);
+                }
+              } catch {}
+            }
+          };
+          patchViteConfig();
+
+          const fixPostCSSAndTailwind = async () => {
+            const isESM = pkg.type === "module";
+            const postcssConfigs = ["postcss.config.js", "postcss.config.mjs", "postcss.config.cjs"];
+            for (const pcName of postcssConfigs) {
+              const pcPath = path.join(projectDir, pcName);
+              if (!fs.existsSync(pcPath)) continue;
+              try {
+                const content = fs.readFileSync(pcPath, "utf-8");
+                if (isESM && content.includes("module.exports") && !pcName.endsWith(".cjs")) {
+                  const newName = pcName.replace(/\.(js|ts|mjs)$/, ".cjs");
+                  const newPath = path.join(projectDir, newName);
+                  fs.renameSync(pcPath, newPath);
+                  console.log(`[Preview] Renamed ${pcName} -> ${newName} (ESM project uses module.exports)`);
+                }
+                if (!isESM && content.includes("export default") && !pcName.endsWith(".mjs")) {
+                  const newName = pcName.replace(/\.(js|ts|cjs)$/, ".mjs");
+                  const newPath = path.join(projectDir, newName);
+                  fs.renameSync(pcPath, newPath);
+                  console.log(`[Preview] Renamed ${pcName} -> ${newName} (CJS project uses export default)`);
+                }
+                const refsTailwind = content.includes("tailwindcss");
+                const refsAutoprefixer = content.includes("autoprefixer");
+                const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+                const missingPkgs: string[] = [];
+                if (refsTailwind && !allDeps["tailwindcss"]) missingPkgs.push("tailwindcss");
+                if (refsAutoprefixer && !allDeps["autoprefixer"]) missingPkgs.push("autoprefixer");
+                if (missingPkgs.length > 0) {
+                  try {
+                    const { execSync: es } = await import("child_process");
+                    const installCmd = pm === "npm" ? `npm install --save-dev --legacy-peer-deps ${missingPkgs.join(" ")}` : `npx ${pm} add -D ${missingPkgs.join(" ")}`;
+                    console.log(`[Preview] Installing missing PostCSS deps: ${missingPkgs.join(", ")}`);
+                    es(installCmd, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true });
+                  } catch (e: any) {
+                    console.log(`[Preview] PostCSS dep install warning: ${e.message?.slice(0, 200)}`);
+                  }
+                }
+              } catch {}
+            }
+            const tailwindConfigs = ["tailwind.config.js", "tailwind.config.cjs", "tailwind.config.mjs"];
+            for (const twName of tailwindConfigs) {
+              const twPath = path.join(projectDir, twName);
+              if (!fs.existsSync(twPath)) continue;
+              try {
+                const content = fs.readFileSync(twPath, "utf-8");
+                if (isESM && content.includes("module.exports") && !twName.endsWith(".cjs")) {
+                  const newName = twName.replace(/\.(js|ts|mjs)$/, ".cjs");
+                  fs.renameSync(twPath, path.join(projectDir, newName));
+                  console.log(`[Preview] Renamed ${twName} -> ${newName} (ESM compat)`);
+                }
+              } catch {}
+            }
+          };
+          await fixPostCSSAndTailwind();
 
           const devCmd = detectDevCommand();
           console.log(`[Preview] Starting ${name} with: ${devCmd.cmd} ${devCmd.args.join(" ")}`);
@@ -777,6 +1007,71 @@ function projectManagementPlugin(): Plugin {
             await new Promise(r => setTimeout(r, 300));
           }
 
+          const isValidNpmPackageName = (name: string): boolean => {
+            return /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+$/.test(name) && name.length <= 214;
+          };
+          const NODE_BUILTINS = new Set(["fs", "path", "os", "child_process", "http", "https", "url", "util", "crypto", "stream", "events", "assert", "buffer", "net", "tls", "dns", "zlib", "querystring", "module", "vm", "cluster", "dgram", "readline", "tty", "worker_threads", "perf_hooks", "async_hooks", "v8", "inspector", "string_decoder", "timers", "console"]);
+          const extractMissingPackages = (output: string): string[] => {
+            const pkgs = new Set<string>();
+            const addIfValid = (raw: string) => {
+              const mod = raw.startsWith("@") ? raw.split("/").slice(0, 2).join("/") : raw.split("/")[0];
+              if (mod && !mod.startsWith(".") && !mod.startsWith("/") && !mod.startsWith("~") && !NODE_BUILTINS.has(mod) && isValidNpmPackageName(mod)) {
+                pkgs.add(mod);
+              }
+            };
+            const cannotFind = output.matchAll(/Cannot find (?:module|package) ['"]([^'"]+)['"]/g);
+            for (const m of cannotFind) addIfValid(m[1]);
+            const couldNotResolve = output.matchAll(/Could not resolve ["']([^"']+)["']/g);
+            for (const m of couldNotResolve) addIfValid(m[1]);
+            const moduleNotFound = output.matchAll(/Module not found.*['"]([^'"]+)['"]/g);
+            for (const m of moduleNotFound) addIfValid(m[1]);
+            return [...pkgs];
+          };
+
+          let retried = false;
+          if (exited && !serverReady && !retried) {
+            const missingPkgs = extractMissingPackages(startupOutput);
+            if (missingPkgs.length > 0 && missingPkgs.length <= 5) {
+              retried = true;
+              console.log(`[Preview] Detected missing packages: ${missingPkgs.join(", ")} — installing and retrying`);
+              try {
+                const { execFileSync: efs } = await import("child_process");
+                const installArgs = pm === "npm"
+                  ? ["install", "--save-dev", "--legacy-peer-deps", ...missingPkgs]
+                  : pm === "pnpm" ? ["add", "-D", ...missingPkgs]
+                  : pm === "yarn" ? ["add", "-D", ...missingPkgs]
+                  : ["add", "-D", ...missingPkgs];
+                const installBin = pm === "npm" ? "npm" : pm;
+                efs(installBin, installArgs, { cwd: projectDir, timeout: 60000, stdio: "pipe", windowsHide: true });
+                console.log(`[Preview] Installed ${missingPkgs.join(", ")} — retrying startup`);
+
+                const child2 = spawn(devCmd.cmd, devCmd.args, {
+                  cwd: projectDir, stdio: "pipe", shell: true,
+                  detached: !isWin, windowsHide: true, env: portEnv,
+                });
+                if (!isWin) child2.unref();
+                startupOutput = "";
+                serverReady = false;
+                exited = false;
+                startupErrors.length = 0;
+                child2.stdout?.on("data", collectOutput);
+                child2.stderr?.on("data", collectOutput);
+                previewProcesses.set(name, { process: child2, port });
+                child2.on("error", () => { exited = true; });
+                child2.on("exit", (code: number | null) => {
+                  exited = true;
+                  if (code !== 0 && code !== null) previewProcesses.delete(name);
+                });
+                const start2 = Date.now();
+                while (Date.now() - start2 < maxWait && !serverReady && !exited) {
+                  await new Promise(r => setTimeout(r, 300));
+                }
+              } catch (e: any) {
+                console.log(`[Preview] Auto-install retry failed: ${e.message?.slice(0, 200)}`);
+              }
+            }
+          }
+
           res.setHeader("Content-Type", "application/json");
           if (exited && !serverReady) {
             previewProcesses.delete(name);
@@ -786,6 +1081,7 @@ function projectManagementPlugin(): Plugin {
               error: `Dev server failed to start. ${startupErrors.join(" | ").slice(0, 800)}`,
               output: startupOutput.slice(-2000),
               detectedCommand: `${devCmd.cmd} ${devCmd.args.join(" ")}`,
+              retried,
             }));
           } else {
             res.end(JSON.stringify({
@@ -794,6 +1090,7 @@ function projectManagementPlugin(): Plugin {
               ready: serverReady,
               detectedCommand: `${devCmd.cmd} ${devCmd.args.join(" ")}`,
               packageManager: pm,
+              retried,
             }));
           }
         } catch (err: any) {

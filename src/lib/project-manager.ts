@@ -59,6 +59,13 @@ export async function getProjectFiles(name: string): Promise<ProjectFileNode[]> 
   return data.files ?? data.tree ?? [];
 }
 
+export async function getMainAppFiles(): Promise<ProjectFileNode[]> {
+  const res = await fetch('/api/projects/files-main', { method: 'POST' });
+  if (!res.ok) throw new Error('Failed to get main app files');
+  const data = await res.json();
+  return data.files ?? [];
+}
+
 export async function readProjectFile(project: string, filePath: string): Promise<string> {
   const res = await fetch('/api/projects/read-file', {
     method: 'POST',

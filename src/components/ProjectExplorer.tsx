@@ -4,7 +4,7 @@ import {
   Plus, Trash2, FolderOpen as FolderOpenIcon, RefreshCw, Loader2, X, GitBranch, Pencil, Copy, Check
 } from 'lucide-react';
 import {
-  listProjects, createProject, deleteProject, getProjectFiles,
+  listProjects, createProject, deleteProject, getProjectFiles, getMainAppFiles,
   readProjectFile, importFromGitHub, type Project, type ProjectFileNode,
   type GitHubImportProgress
 } from '@/lib/project-manager';
@@ -163,14 +163,26 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({ activeProject, onSele
     fetchProjects();
   }, [fetchProjects]);
 
+  const fetchMainAppTree = useCallback(async () => {
+    setTreeLoading(true);
+    try {
+      const tree = await getMainAppFiles();
+      setFileTree(tree);
+    } catch {
+      setFileTree([]);
+    }
+    setTreeLoading(false);
+  }, []);
+
   useEffect(() => {
     if (activeProject) {
       fetchFileTree(activeProject);
       setSelectedFile(null);
     } else {
-      setFileTree([]);
+      fetchMainAppTree();
+      setSelectedFile(null);
     }
-  }, [activeProject, fetchFileTree]);
+  }, [activeProject, fetchFileTree, fetchMainAppTree]);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -401,31 +413,29 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({ activeProject, onSele
           </>
         )}
 
-        {activeProject && (
-          <>
-            <div className="px-3 py-1.5 border-t border-border/30 flex items-center justify-between">
-              <span className="text-[9px] font-semibold text-foreground/60 uppercase tracking-wider">Files</span>
-              <button
-                data-testid="button-refresh-files"
-                onClick={() => fetchFileTree(activeProject)}
-                className="p-0.5 hover:bg-muted/50 rounded transition-colors"
-              >
-                <RefreshCw className="w-2.5 h-2.5 text-muted-foreground" />
-              </button>
+        <>
+          <div className="px-3 py-1.5 border-t border-border/30 flex items-center justify-between">
+            <span className="text-[9px] font-semibold text-foreground/60 uppercase tracking-wider">Files</span>
+            <button
+              data-testid="button-refresh-files"
+              onClick={() => activeProject ? fetchFileTree(activeProject) : fetchMainAppTree()}
+              className="p-0.5 hover:bg-muted/50 rounded transition-colors"
+            >
+              <RefreshCw className="w-2.5 h-2.5 text-muted-foreground" />
+            </button>
+          </div>
+          {treeLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
             </div>
-            {treeLoading ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
-              </div>
-            ) : fileTree.length > 0 ? (
-              fileTree.map(node => (
-                <FileNode key={node.path} node={node} depth={0} projectName={activeProject} selectedFile={selectedFile} onSelect={handleFileSelect} onEdit={onFileEdit} />
-              ))
-            ) : (
-              <p className="text-[9px] text-muted-foreground/40 text-center py-3">No files yet</p>
-            )}
-          </>
-        )}
+          ) : fileTree.length > 0 ? (
+            fileTree.map(node => (
+              <FileNode key={node.path} node={node} depth={0} projectName={activeProject || '__main__'} selectedFile={selectedFile} onSelect={handleFileSelect} onEdit={onFileEdit} />
+            ))
+          ) : (
+            <p className="text-[9px] text-muted-foreground/40 text-center py-3">No files yet</p>
+          )}
+        </>
       </div>
     </div>
   );

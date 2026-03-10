@@ -98,8 +98,9 @@ supabase/
 - API endpoints in `vite.config.ts`: `/api/projects/list`, `/api/projects/create`, `/api/projects/delete`, `/api/projects/files`, `/api/projects/read-file`, `/api/projects/write-file`, `/api/projects/preview`, `/api/projects/stop-preview`, `/api/projects/install-deps`, `/api/projects/run-command`
   - `/api/projects/run-command`: Runs whitelisted commands (`npm install`, `npm run`, `npx`, `yarn`, etc.) in a sub-project directory. Auto-appends `--legacy-peer-deps` for `npm install`. Shell metacharacters blocked. 120s timeout.
   - `/api/projects/install-deps`: Detects project's package manager (bun/pnpm/yarn/npm) from lockfiles and uses it for installs. Falls back to npm on failure. 120s timeout per command.
-- Client-side store: `src/lib/project-manager.ts` — `listProjects`, `createProject`, `deleteProject`, `getProjectFiles`, `readProjectFile`, `writeProjectFile`, `getActiveProject`, `setActiveProject`
-- UI component: `src/components/ProjectExplorer.tsx` — file tree browser for active project
+- Client-side store: `src/lib/project-manager.ts` — `listProjects`, `createProject`, `deleteProject`, `getProjectFiles`, `getMainAppFiles`, `readProjectFile`, `writeProjectFile`, `getActiveProject`, `setActiveProject`
+- UI component: `src/components/ProjectExplorer.tsx` — file tree browser for active project or main app
+- **Main App file tree**: When "Main App" is selected (activeProject=null), shows the main λ Recursive app's file tree via `/api/projects/files-main` endpoint. Files are readable/editable using project name `__main__`. Skips node_modules, .git, projects/, dist/, .cache/, attached_assets/, .local/, .agents/, .upm/, .config/.
 - When a project is active in GrokBridge:
   - `applyBlock`/`confirmApply`/`batchApplyAll` write to project directory instead of main app
   - `buildProjectContext` reads project files instead of SELF_SOURCE
@@ -108,7 +109,12 @@ supabase/
   - **HMR-first updates**: Normal file writes rely on Vite's Hot Module Replacement (no server kill). Full preview restart only triggered for config file changes (`vite.config.ts`, `tsconfig.json`, `tailwind.config.ts`, `package.json`, `postcss.config.*`) or after dependency installs.
   - **Windows polling**: Sub-project `vite.config.ts` is scaffolded with `usePolling: true` for reliable file watching on Windows. Existing projects without polling are auto-patched when preview starts.
   - **Auto config patching**: Preview startup auto-cleans stale `base: "/__preview/..."` from vite configs, patches rspack configs with correct port/host, and adds usePolling to vite configs.
-  - **Framework detection**: Supports next, vite, react-scripts, webpack (preserves `--config` flags), rspack, nuxt, astro, SvelteKit (`vite dev` not `vite`), Angular, Remix, Gatsby, Parcel, Ember, pnpm monorepos (auto-finds `--filter` dev scripts + pre-builds workspace packages).
+  - **Framework detection**: Supports next, vite, react-scripts, webpack (preserves `--config` flags), rspack, nuxt, astro, SvelteKit (`vite dev` not `vite`), Angular, Remix, Gatsby, Parcel, Ember, pnpm monorepos (auto-finds `--filter` dev scripts + pre-builds workspace packages). Also checks alternative script names: `develop`, `dev:app`, `dev:client`, `dev:frontend`, `dev:web`, `watch`.
+  - **Compound script parsing**: `extractDevServerCmd` handles `tsc && vite`, `concurrently "..." "..."`, `cross-env VAR=val vite`, `dotenv ... -- vite`, `env-cmd -f ... vite`. Extracts the actual dev server command from compound scripts.
+  - **Static HTML project support**: If no `package.json` exists but `index.html` does, auto-bootstraps with a minimal `package.json` + vite, installs, and serves.
+  - **Port/host injection**: Before spawning, patches `.env`/`.env.local`/`.env.development` files (PORT/HOST vars) and project's `vite.config.ts/js` (hardcoded `port:`, `host: 'localhost'`, `open: true`).
+  - **PostCSS/Tailwind auto-fix**: Detects ESM/CJS config format mismatches and renames files (`.js` → `.cjs` for ESM projects using `module.exports`, `.js` → `.mjs` for CJS projects using `export default`). Auto-installs missing `tailwindcss`/`autoprefixer` deps if referenced in postcss config.
+  - **Auto-install missing dependencies on failure**: After process exits with errors, parses output for `Cannot find module`, `Could not resolve`, `Module not found` patterns. Auto-installs up to 5 missing packages and retries once.
   - **OpenSSL legacy provider**: Auto-added for webpack/webpack-dev-server/vue-cli-service/react-scripts projects to fix `ERR_OSSL_EVP_UNSUPPORTED` with older webpack versions.
   - **CHOKIDAR_USEPOLLING**: Enabled for all preview spawns to prevent ENOSPC file watcher exhaustion in large monorepos.
   - **Node 20 iterator compatibility**: Auto-patches `vue-router` (and other libs) that use Node 22+ iterator helpers (`.values().filter()`) by wrapping in `Array.from()`. Runs on preview startup when Node < 22.
