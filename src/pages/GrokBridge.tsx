@@ -1269,17 +1269,31 @@ const GrokBridge: React.FC = () => {
     return () => window.removeEventListener('message', handlePreviewMessage);
   }, [addPreviewLog]);
 
+  const toasterMsgTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fireToasterReadyTest = useCallback((cfg: OllamaToasterConfig) => {
+    if (toasterMsgTimerRef.current) clearTimeout(toasterMsgTimerRef.current);
+    setToasterReadyMsg('Pinging toaster...');
+    toasterReadyTest(cfg).then(msg => {
+      console.log('[Toaster] Ready test response:', msg);
+      setToasterReadyMsg(msg || 'Toaster is ready!');
+      if (toasterMsgTimerRef.current) clearTimeout(toasterMsgTimerRef.current);
+      toasterMsgTimerRef.current = setTimeout(() => setToasterReadyMsg(null), 8000);
+    }).catch(err => {
+      console.error('[Toaster] Ready test failed:', err);
+      setToasterReadyMsg(`Test failed: ${err.message || 'Unknown error'}`);
+      if (toasterMsgTimerRef.current) clearTimeout(toasterMsgTimerRef.current);
+      toasterMsgTimerRef.current = setTimeout(() => setToasterReadyMsg(null), 5000);
+    });
+  }, []);
+
   useEffect(() => {
     checkToasterAvailability(toasterConfig).then(result => {
       setToasterAvailability(result);
       if (result.available) {
-        toasterReadyTest(toasterConfig).then(msg => {
-          setToasterReadyMsg(msg || 'Toaster is ready!');
-          setTimeout(() => setToasterReadyMsg(null), 6000);
-        }).catch(() => {});
+        fireToasterReadyTest(toasterConfig);
       }
     });
-  }, [toasterConfig]);
+  }, [toasterConfig, fireToasterReadyTest]);
 
   useEffect(() => {
     const poll = setInterval(async () => {
@@ -1289,10 +1303,7 @@ const GrokBridge: React.FC = () => {
         if (prev && prev.available !== result.available) {
           if (result.available) {
             setStatusMessage(`Toaster reconnected — ${result.models.slice(0, 2).join(', ')}`);
-            toasterReadyTest(toasterConfig).then(msg => {
-              setToasterReadyMsg(msg || 'Toaster is ready!');
-              setTimeout(() => setToasterReadyMsg(null), 6000);
-            }).catch(() => {});
+            fireToasterReadyTest(toasterConfig);
           } else {
             setStatusMessage(`Toaster disconnected${result.error ? ': ' + result.error : ''}`);
           }
@@ -1301,7 +1312,7 @@ const GrokBridge: React.FC = () => {
       });
     }, 60_000);
     return () => clearInterval(poll);
-  }, [toasterConfig]);
+  }, [toasterConfig, fireToasterReadyTest]);
 
   useEffect(() => {
     startKnowledgeRefreshLoop();
@@ -3162,12 +3173,10 @@ const GrokBridge: React.FC = () => {
                   setToasterAvailability(result);
                   if (result.available) {
                     setStatusMessage(`Toaster connected — ${result.models.length} model${result.models.length !== 1 ? 's' : ''}: ${result.models.slice(0, 3).join(', ')}${result.version ? ` (v${result.version})` : ''}`);
-                    toasterReadyTest(toasterConfig).then(msg => {
-                      setToasterReadyMsg(msg || 'Toaster is ready!');
-                      setTimeout(() => setToasterReadyMsg(null), 6000);
-                    }).catch(() => {});
+                    fireToasterReadyTest(toasterConfig);
                   } else {
                     setStatusMessage(`Toaster: ${result.error || 'Connection failed'}`);
+                    setToasterReadyMsg(null);
                   }
                 }}
                 className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] border cursor-pointer transition-colors ${
@@ -3177,8 +3186,8 @@ const GrokBridge: React.FC = () => {
                 }`}
                 data-testid="button-ollama-toaster"
                 title={toasterAvailability.available
-                  ? `Connected — ${toasterAvailability.models.slice(0, 3).join(', ')}${toasterAvailability.version ? ` (v${toasterAvailability.version})` : ''}\nClick to test connection`
-                  : `${toasterAvailability.error || 'Not connected'}\nClick to test connection`
+                  ? `Connected — ${toasterAvailability.models.slice(0, 3).join(', ')}${toasterAvailability.version ? ` (v${toasterAvailability.version})` : ''}\nClick to ping toaster`
+                  : `${toasterAvailability.error || 'Not connected'}\nClick to retry connection`
                 }
               >
                 <Bot className="w-3 h-3" />
@@ -3191,8 +3200,35 @@ const GrokBridge: React.FC = () => {
                 )}
               </button>
               {toasterReadyMsg && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1.5 rounded-lg bg-[hsl(150_60%_20%)] text-[hsl(150_60%_80%)] text-[10px] font-medium border border-[hsl(150_60%_40%/0.4)] shadow-lg whitespace-nowrap animate-in fade-in slide-in-from-bottom-2 z-50" data-testid="bubble-toaster-ready">
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-[hsl(150_60%_20%)]" />
+                <div
+                  className="fixed z-[9999] px-4 py-2 rounded-lg shadow-xl border text-[11px] font-medium"
+                  style={{
+                    bottom: '48px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: toasterReadyMsg.startsWith('Test failed')
+                      ? 'hsl(0 60% 15%)'
+                      : toasterReadyMsg === 'Pinging toaster...'
+                        ? 'hsl(220 40% 15%)'
+                        : 'hsl(150 60% 12%)',
+                    color: toasterReadyMsg.startsWith('Test failed')
+                      ? 'hsl(0 80% 75%)'
+                      : toasterReadyMsg === 'Pinging toaster...'
+                        ? 'hsl(220 60% 75%)'
+                        : 'hsl(150 70% 75%)',
+                    borderColor: toasterReadyMsg.startsWith('Test failed')
+                      ? 'hsla(0, 60%, 40%, 0.5)'
+                      : toasterReadyMsg === 'Pinging toaster...'
+                        ? 'hsla(220, 40%, 40%, 0.5)'
+                        : 'hsla(150, 60%, 35%, 0.5)',
+                    animation: 'toasterBubbleIn 0.3s ease-out',
+                  }}
+                  data-testid="bubble-toaster-ready"
+                >
+                  {toasterReadyMsg === 'Pinging toaster...' && (
+                    <Loader2 className="w-3 h-3 animate-spin inline mr-1.5 -mt-0.5" />
+                  )}
+                  {toasterReadyMsg.startsWith('Test failed') ? '⚠ ' : toasterReadyMsg !== 'Pinging toaster...' ? '🍞 ' : ''}
                   {toasterReadyMsg}
                 </div>
               )}

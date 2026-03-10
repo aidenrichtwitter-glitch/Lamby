@@ -62,20 +62,22 @@ export function clearAvailabilityCache(): void {
 
 export async function toasterReadyTest(config?: OllamaToasterConfig): Promise<string> {
   const cfg = config || loadToasterConfig();
-  const resp = await fetch(`${cfg.endpoint}/api/generate`, {
+  const resp = await fetch(`${cfg.endpoint}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: cfg.model,
-      prompt: 'Respond with exactly: "Toaster is ready! 🍞" and nothing else.',
+      messages: [
+        { role: 'user', content: 'Respond with exactly: "Toaster is ready!" and nothing else.' }
+      ],
       stream: false,
       options: { temperature: 0.0, num_predict: 32 },
     }),
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(15_000),
   });
   if (!resp.ok) throw new Error(`Ollama error ${resp.status}`);
   const data = await resp.json();
-  return (data.response || '').trim();
+  return (data.message?.content || '').trim();
 }
 
 async function ollamaGenerate(prompt: string, config?: OllamaToasterConfig): Promise<string> {
