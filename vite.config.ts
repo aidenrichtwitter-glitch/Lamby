@@ -290,18 +290,99 @@ function projectManagementPlugin(): Plugin {
           const hasPkg = fs.existsSync(path.join(projectDir, "package.json"));
           const hasNodeModules = fs.existsSync(path.join(projectDir, "node_modules"));
 
+          let pkg: any = {};
+          if (hasPkg) {
+            try { pkg = JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf-8")); } catch {}
+          }
+
+          const detectPackageManager = (): string => {
+            if (fs.existsSync(path.join(projectDir, "bun.lockb")) || fs.existsSync(path.join(projectDir, "bun.lock"))) return "bun";
+            if (fs.existsSync(path.join(projectDir, "pnpm-lock.yaml"))) return "pnpm";
+            if (fs.existsSync(path.join(projectDir, "yarn.lock"))) return "yarn";
+            return "npm";
+          };
+
+          const pm = detectPackageManager();
+
           if (hasPkg && !hasNodeModules) {
             try {
               const { execSync } = await import("child_process");
-              execSync("npm install --legacy-peer-deps", { cwd: projectDir, timeout: 30000, stdio: "pipe", shell: true });
-            } catch {}
+              const installCmd = pm === "npm" ? "npm install --legacy-peer-deps"
+                : pm === "pnpm" ? "npx pnpm install --no-frozen-lockfile"
+                : pm === "yarn" ? "npx yarn install --ignore-engines"
+                : "npx bun install";
+              console.log(`[Preview] Installing deps for ${name} with: ${installCmd}`);
+              execSync(installCmd, { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true });
+              console.log(`[Preview] Deps installed for ${name}`);
+            } catch (installErr: any) {
+              console.error(`[Preview] Install failed for ${name}:`, installErr.message?.slice(0, 300));
+              try {
+                const { execSync } = await import("child_process");
+                console.log(`[Preview] Retrying with npm for ${name}`);
+                execSync("npm install --legacy-peer-deps", { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true });
+              } catch (retryErr: any) {
+                console.error(`[Preview] Retry also failed for ${name}:`, retryErr.message?.slice(0, 300));
+              }
+            }
           }
 
-          const indexHtmlPath = path.join(projectDir, "index.html");
-          if (fs.existsSync(indexHtmlPath)) {
-            const indexHtml = fs.readFileSync(indexHtmlPath, "utf-8");
-            if (!indexHtml.includes("guardian-console-bridge")) {
-              const consoleBridgeScript = `<script data-guardian-console-bridge>
+          const detectDevCommand = (): { cmd: string; args: string[] } => {
+            const scripts = pkg.scripts || {};
+            const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+
+            if (scripts.dev) {
+              const devScript = scripts.dev;
+              if (devScript.includes("next")) {
+                return { cmd: "npx", args: ["next", "dev", "--port", String(port)] };
+              }
+              if (devScript.includes("vite")) {
+                return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", String(port)] };
+              }
+              if (devScript.includes("react-scripts")) {
+                return { cmd: "npx", args: ["react-scripts", "start"] };
+              }
+              if (devScript.includes("webpack")) {
+                return { cmd: "npx", args: ["webpack", "serve", "--port", String(port)] };
+              }
+              if (devScript.includes("nuxt")) {
+                return { cmd: "npx", args: ["nuxt", "dev", "--port", String(port)] };
+              }
+              if (devScript.includes("astro")) {
+                return { cmd: "npx", args: ["astro", "dev", "--port", String(port)] };
+              }
+              if (devScript.includes("svelte") || devScript.includes("sveltekit")) {
+                return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", String(port)] };
+              }
+              return { cmd: pm === "npm" ? "npm" : `npx ${pm}`, args: pm === "npm" ? ["run", "dev"] : ["run", "dev"] };
+            }
+
+            if (scripts.start) {
+              const startScript = scripts.start;
+              if (startScript.includes("react-scripts")) {
+                return { cmd: "npx", args: ["react-scripts", "start"] };
+              }
+              if (startScript.includes("next")) {
+                return { cmd: "npx", args: ["next", "dev", "--port", String(port)] };
+              }
+              return { cmd: pm === "npm" ? "npm" : `npx ${pm}`, args: pm === "npm" ? ["run", "start"] : ["run", "start"] };
+            }
+
+            if (deps["next"]) return { cmd: "npx", args: ["next", "dev", "--port", String(port)] };
+            if (deps["react-scripts"]) return { cmd: "npx", args: ["react-scripts", "start"] };
+            if (deps["nuxt"]) return { cmd: "npx", args: ["nuxt", "dev", "--port", String(port)] };
+            if (deps["astro"]) return { cmd: "npx", args: ["astro", "dev", "--port", String(port)] };
+
+            if (fs.existsSync(path.join(projectDir, "vite.config.ts")) || fs.existsSync(path.join(projectDir, "vite.config.js")) || fs.existsSync(path.join(projectDir, "vite.config.mjs"))) {
+              return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", String(port)] };
+            }
+
+            return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", String(port)] };
+          };
+
+          const devCmd = detectDevCommand();
+          console.log(`[Preview] Starting ${name} with: ${devCmd.cmd} ${devCmd.args.join(" ")}`);
+
+          const consoleBridgeScript = `<script data-guardian-console-bridge>
 (function() {
   if (window.__guardianConsoleBridge) return;
   window.__guardianConsoleBridge = true;
@@ -332,58 +413,128 @@ function projectManagementPlugin(): Plugin {
   });
 })();
 </script>`;
-              const patched = indexHtml.replace(/<head([^>]*)>/, `<head$1>\n${consoleBridgeScript}`);
-              if (patched !== indexHtml) {
-                fs.writeFileSync(indexHtmlPath, patched, "utf-8");
-                console.log(`Injected console bridge into ${name}/index.html`);
+
+          const indexHtmlPaths = [
+            path.join(projectDir, "index.html"),
+            path.join(projectDir, "public", "index.html"),
+            path.join(projectDir, "src", "index.html"),
+          ];
+          for (const indexHtmlPath of indexHtmlPaths) {
+            if (fs.existsSync(indexHtmlPath)) {
+              const indexHtml = fs.readFileSync(indexHtmlPath, "utf-8");
+              if (!indexHtml.includes("guardian-console-bridge")) {
+                const patched = indexHtml.replace(/<head([^>]*)>/, `<head$1>\n${consoleBridgeScript}`);
+                if (patched !== indexHtml) {
+                  fs.writeFileSync(indexHtmlPath, patched, "utf-8");
+                  console.log(`[Preview] Injected console bridge into ${name}/${path.relative(projectDir, indexHtmlPath)}`);
+                }
               }
             }
           }
 
-          const viteConfigPath = path.join(projectDir, "vite.config.ts");
-          if (fs.existsSync(viteConfigPath)) {
-            const viteConfigContent = fs.readFileSync(viteConfigPath, "utf-8");
-            if (!viteConfigContent.includes("usePolling")) {
-              const patched = viteConfigContent.includes("plugins:")
-                ? viteConfigContent.replace(
-                    /defineConfig\(\{/,
-                    `defineConfig({\n  server: {\n    watch: {\n      usePolling: true,\n      interval: 500,\n    },\n  },`
-                  )
-                : viteConfigContent.replace(
-                    /defineConfig\(\{/,
-                    `defineConfig({\n  server: {\n    watch: {\n      usePolling: true,\n      interval: 500,\n    },\n  },`
-                  );
-              if (patched !== viteConfigContent) {
-                fs.writeFileSync(viteConfigPath, patched, "utf-8");
-                console.log(`Patched ${name}/vite.config.ts with usePolling for Windows compatibility`);
+          for (const cfgName of ["vite.config.ts", "vite.config.js", "vite.config.mjs"]) {
+            const viteConfigPath = path.join(projectDir, cfgName);
+            if (fs.existsSync(viteConfigPath)) {
+              const viteConfigContent = fs.readFileSync(viteConfigPath, "utf-8");
+              if (!viteConfigContent.includes("usePolling")) {
+                const patched = viteConfigContent.replace(
+                  /defineConfig\(\{/,
+                  `defineConfig({\n  server: {\n    watch: {\n      usePolling: true,\n      interval: 500,\n    },\n  },`
+                );
+                if (patched !== viteConfigContent) {
+                  fs.writeFileSync(viteConfigPath, patched, "utf-8");
+                  console.log(`[Preview] Patched ${name}/${cfgName} with usePolling`);
+                }
               }
+              break;
             }
           }
 
-          const child = spawn("npx", ["vite", "--host", "0.0.0.0", "--port", String(port)], {
+          const portEnv: Record<string, string> = {
+            ...process.env as Record<string, string>,
+            BROWSER: "none",
+            PORT: String(port),
+          };
+
+          const isReactScripts = devCmd.args.includes("react-scripts");
+          if (isReactScripts) {
+            portEnv.PORT = String(port);
+            portEnv.HOST = "0.0.0.0";
+          }
+
+          const isNextDev = devCmd.args.includes("next");
+          if (isNextDev) {
+            portEnv.HOSTNAME = "0.0.0.0";
+          }
+
+          const child = spawn(devCmd.cmd, devCmd.args, {
             cwd: projectDir,
             stdio: "pipe",
             shell: true,
             detached: false,
-            env: { ...process.env, BROWSER: "none" },
+            env: portEnv,
           });
+
+          let startupOutput = "";
+          let serverReady = false;
+          const startupErrors: string[] = [];
+
+          const collectOutput = (data: Buffer) => {
+            const text = data.toString();
+            startupOutput += text;
+            console.log(`[Preview:${name}] ${text.trim()}`);
+            if (/ready|VITE.*ready|compiled|started server|listening|Local:/i.test(text)) {
+              serverReady = true;
+            }
+            if (/error|ERR!|Cannot find|MODULE_NOT_FOUND|SyntaxError|ENOENT/i.test(text)) {
+              startupErrors.push(text.trim().slice(0, 300));
+            }
+          };
+
+          child.stdout?.on("data", collectOutput);
+          child.stderr?.on("data", collectOutput);
 
           previewProcesses.set(name, { process: child, port });
 
+          let exited = false;
           child.on("error", (err: any) => {
-            console.error(`Preview process error for ${name}:`, err.message);
-            previewProcesses.delete(name);
+            console.error(`[Preview] Process error for ${name}:`, err.message);
+            exited = true;
           });
 
           child.on("exit", (code: number | null) => {
+            exited = true;
             if (code !== 0 && code !== null) {
-              console.error(`Preview process for ${name} exited with code ${code}`);
+              console.error(`[Preview] Process for ${name} exited with code ${code}`);
             }
             previewProcesses.delete(name);
           });
 
+          const maxWait = 15000;
+          const start = Date.now();
+          while (Date.now() - start < maxWait && !serverReady && !exited) {
+            await new Promise(r => setTimeout(r, 300));
+          }
+
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ port, started: true }));
+          if (exited && !serverReady) {
+            previewProcesses.delete(name);
+            res.end(JSON.stringify({
+              port,
+              started: false,
+              error: `Dev server failed to start. ${startupErrors.join(" | ").slice(0, 800)}`,
+              output: startupOutput.slice(-2000),
+              detectedCommand: `${devCmd.cmd} ${devCmd.args.join(" ")}`,
+            }));
+          } else {
+            res.end(JSON.stringify({
+              port,
+              started: true,
+              ready: serverReady,
+              detectedCommand: `${devCmd.cmd} ${devCmd.args.join(" ")}`,
+              packageManager: pm,
+            }));
+          }
         } catch (err: any) {
           res.statusCode = 500;
           res.end(JSON.stringify({ error: err.message }));
@@ -440,22 +591,59 @@ function projectManagementPlugin(): Plugin {
           const projectDir = path.resolve(process.cwd(), "projects", name);
           const { spawn } = await import("child_process");
 
-          const child = spawn("npx", ["vite", "--host", "0.0.0.0", "--port", String(oldPort)], {
+          let pkg: any = {};
+          const pkgPath = path.join(projectDir, "package.json");
+          if (fs.existsSync(pkgPath)) {
+            try { pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")); } catch {}
+          }
+          const scripts = pkg.scripts || {};
+          const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+
+          const detectPMRestart = (): string => {
+            if (fs.existsSync(path.join(projectDir, "bun.lockb")) || fs.existsSync(path.join(projectDir, "bun.lock"))) return "bun";
+            if (fs.existsSync(path.join(projectDir, "pnpm-lock.yaml"))) return "pnpm";
+            if (fs.existsSync(path.join(projectDir, "yarn.lock"))) return "yarn";
+            return "npm";
+          };
+          const pmR = detectPMRestart();
+
+          let devCmd = "npx";
+          let devArgs = ["vite", "--host", "0.0.0.0", "--port", String(oldPort)];
+          if (scripts.dev) {
+            if (scripts.dev.includes("next")) { devCmd = "npx"; devArgs = ["next", "dev", "--port", String(oldPort)]; }
+            else if (scripts.dev.includes("react-scripts")) { devCmd = "npx"; devArgs = ["react-scripts", "start"]; }
+            else if (scripts.dev.includes("vite")) { devCmd = "npx"; devArgs = ["vite", "--host", "0.0.0.0", "--port", String(oldPort)]; }
+            else if (scripts.dev.includes("nuxt")) { devCmd = "npx"; devArgs = ["nuxt", "dev", "--port", String(oldPort)]; }
+            else if (scripts.dev.includes("astro")) { devCmd = "npx"; devArgs = ["astro", "dev", "--port", String(oldPort)]; }
+            else { devCmd = pmR === "npm" ? "npm" : `npx ${pmR}`; devArgs = pmR === "npm" ? ["run", "dev"] : ["run", "dev"]; }
+          } else if (scripts.start) {
+            if (scripts.start.includes("react-scripts")) { devCmd = "npx"; devArgs = ["react-scripts", "start"]; }
+            else if (scripts.start.includes("next")) { devCmd = "npx"; devArgs = ["next", "dev", "--port", String(oldPort)]; }
+            else { devCmd = pmR === "npm" ? "npm" : `npx ${pmR}`; devArgs = pmR === "npm" ? ["run", "start"] : ["run", "start"]; }
+          } else if (deps["next"]) { devCmd = "npx"; devArgs = ["next", "dev", "--port", String(oldPort)]; }
+          else if (deps["react-scripts"]) { devCmd = "npx"; devArgs = ["react-scripts", "start"]; }
+          else if (deps["nuxt"]) { devCmd = "npx"; devArgs = ["nuxt", "dev", "--port", String(oldPort)]; }
+          else if (deps["astro"]) { devCmd = "npx"; devArgs = ["astro", "dev", "--port", String(oldPort)]; }
+
+          const child = spawn(devCmd, devArgs, {
             cwd: projectDir,
             stdio: "pipe",
             shell: true,
             detached: false,
-            env: { ...process.env, BROWSER: "none" },
+            env: { ...process.env, BROWSER: "none", PORT: String(oldPort), HOST: "0.0.0.0", HOSTNAME: "0.0.0.0" },
           });
 
           previewProcesses.set(name, { process: child, port: oldPort });
 
+          child.stdout?.on("data", (d: Buffer) => console.log(`[Preview:${name}] ${d.toString().trim()}`));
+          child.stderr?.on("data", (d: Buffer) => console.log(`[Preview:${name}] ${d.toString().trim()}`));
+
           child.on("error", (err: any) => {
-            console.error(`Preview process error for ${name}:`, err.message);
+            console.error(`[Preview] Process error for ${name}:`, err.message);
           });
           child.on("exit", (code: number | null) => {
             if (code !== null && code !== 0) {
-              console.error(`Preview process for ${name} exited with code ${code}`);
+              console.error(`[Preview] Process for ${name} exited with code ${code}`);
             }
             previewProcesses.delete(name);
           });
@@ -864,6 +1052,10 @@ function projectManagementPlugin(): Plugin {
 
           const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/HEAD?recursive=1`;
           const headers: Record<string, string> = { "Accept": "application/vnd.github.v3+json", "User-Agent": "Guardian-AI" };
+          const ghToken = process.env.GITHUB_TOKEN || "";
+          if (ghToken) {
+            headers["Authorization"] = `token ${ghToken}`;
+          }
 
           const treeResp = await fetch(treeUrl, { headers });
           if (!treeResp.ok) {
@@ -908,64 +1100,131 @@ function projectManagementPlugin(): Plugin {
           let filesWritten = 0;
           const BATCH_SIZE = 10;
 
-          for (let i = 0; i < filesToDownload.length; i += BATCH_SIZE) {
-            const batch = filesToDownload.slice(i, i + BATCH_SIZE);
-            const results = await Promise.allSettled(
+          const priorityFiles = ["package.json", "tsconfig.json", "vite.config.ts", "vite.config.js", "next.config.js", "next.config.mjs", "next.config.ts"];
+          const prioritized = [
+            ...filesToDownload.filter((f: any) => priorityFiles.includes(f.path)),
+            ...filesToDownload.filter((f: any) => !priorityFiles.includes(f.path)),
+          ];
+
+          let rateLimited = false;
+          const failedFiles: string[] = [];
+          for (let i = 0; i < prioritized.length; i += BATCH_SIZE) {
+            const batch = prioritized.slice(i, i + BATCH_SIZE);
+            await Promise.allSettled(
               batch.map(async (item: any) => {
+                const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${item.path}`;
+                try {
+                  const rawResp = await fetch(rawUrl, { headers: ghToken ? { "Authorization": `token ${ghToken}` } : {} });
+                  if (rawResp.ok) {
+                    const content = await rawResp.text();
+                    const filePath = path.join(projectDir, item.path);
+                    const dir = path.dirname(filePath);
+                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                    fs.writeFileSync(filePath, content, "utf-8");
+                    filesWritten++;
+                    return;
+                  }
+                } catch {}
+
                 const blobUrl = `https://api.github.com/repos/${owner}/${repo}/git/blobs/${item.sha}`;
-                const blobResp = await fetch(blobUrl, { headers });
-                if (!blobResp.ok) return;
-                const blobData: any = await blobResp.json();
-                let content: string;
-                if (blobData.encoding === "base64") {
-                  content = Buffer.from(blobData.content, "base64").toString("utf-8");
-                } else {
-                  content = blobData.content || "";
+                try {
+                  const blobResp = await fetch(blobUrl, { headers });
+                  if (!blobResp.ok) {
+                    if (blobResp.status === 403 || blobResp.status === 429) rateLimited = true;
+                    failedFiles.push(item.path);
+                    return;
+                  }
+                  const blobData: any = await blobResp.json();
+                  let content: string;
+                  if (blobData.encoding === "base64") {
+                    content = Buffer.from(blobData.content, "base64").toString("utf-8");
+                  } else {
+                    content = blobData.content || "";
+                  }
+                  const filePath = path.join(projectDir, item.path);
+                  const dir = path.dirname(filePath);
+                  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                  fs.writeFileSync(filePath, content, "utf-8");
+                  filesWritten++;
+                } catch {
+                  failedFiles.push(item.path);
                 }
-                const filePath = path.join(projectDir, item.path);
-                const dir = path.dirname(filePath);
-                if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-                fs.writeFileSync(filePath, content, "utf-8");
-                filesWritten++;
               })
             );
+            if (rateLimited && !ghToken) {
+              console.warn(`[Import] Rate limited after ${filesWritten} files. Consider setting GITHUB_TOKEN.`);
+            }
+          }
+          if (failedFiles.length > 0) {
+            console.warn(`[Import] Failed to download ${failedFiles.length} files: ${failedFiles.slice(0, 10).join(", ")}`);
           }
 
-          let framework = "react";
+          let framework = "vanilla";
           const pkgPath = path.join(projectDir, "package.json");
           if (fs.existsSync(pkgPath)) {
             try {
               const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
               const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-              if (deps["react"]) framework = "react";
-              else if (deps["vue"]) framework = "vanilla";
-              else framework = "vanilla";
+              if (deps["next"]) framework = "nextjs";
+              else if (deps["nuxt"]) framework = "nuxt";
+              else if (deps["@angular/core"]) framework = "angular";
+              else if (deps["svelte"] || deps["@sveltejs/kit"]) framework = "svelte";
+              else if (deps["astro"]) framework = "astro";
+              else if (deps["vue"]) framework = "vue";
+              else if (deps["react"]) framework = "react";
             } catch {}
           }
 
           let npmInstalled = false;
           if (fs.existsSync(pkgPath)) {
+            const detectPM = (): string => {
+              if (fs.existsSync(path.join(projectDir, "bun.lockb")) || fs.existsSync(path.join(projectDir, "bun.lock"))) return "bun";
+              if (fs.existsSync(path.join(projectDir, "pnpm-lock.yaml"))) return "pnpm";
+              if (fs.existsSync(path.join(projectDir, "yarn.lock"))) return "yarn";
+              return "npm";
+            };
+            const detectedPM = detectPM();
+            const installCmd = detectedPM === "npm" ? "npm install --legacy-peer-deps --ignore-scripts"
+              : detectedPM === "pnpm" ? "npx pnpm install --no-frozen-lockfile --ignore-scripts"
+              : detectedPM === "yarn" ? "npx yarn install --ignore-engines --ignore-scripts"
+              : "npx bun install --ignore-scripts";
             try {
               const { execSync } = await import("child_process");
-              execSync("npm install --legacy-peer-deps", {
+              console.log(`[Import] Installing deps for ${projectName} with: ${installCmd}`);
+              execSync(installCmd, {
                 cwd: projectDir,
-                timeout: 60000,
+                timeout: 120000,
                 stdio: "pipe",
                 shell: true,
               });
               npmInstalled = true;
-            } catch {}
+              console.log(`[Import] Deps installed for ${projectName}`);
+            } catch (installErr: any) {
+              console.error(`[Import] Install failed for ${projectName}:`, installErr.message?.slice(0, 300));
+              if (detectedPM !== "npm") {
+                try {
+                  const { execSync } = await import("child_process");
+                  console.log(`[Import] Retrying with npm for ${projectName}`);
+                  execSync("npm install --legacy-peer-deps --ignore-scripts", { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true });
+                  npmInstalled = true;
+                } catch {}
+              }
+            }
           }
 
+          const importPartial = failedFiles.length > filesToDownload.length * 0.2;
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify({
-            success: true,
+            success: !importPartial,
+            partial: importPartial,
             projectName,
             framework,
             filesWritten,
             totalFiles: filesToDownload.length,
+            failedFiles: failedFiles.length,
             npmInstalled,
             sourceRepo: `https://github.com/${owner}/${repo}`,
+            ...(rateLimited && !ghToken ? { warning: "GitHub API rate limited. Set GITHUB_TOKEN for higher limits." } : {}),
           }));
         } catch (err: any) {
           res.statusCode = 500;

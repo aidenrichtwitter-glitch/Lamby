@@ -1607,10 +1607,20 @@ const GrokBridge: React.FC = () => {
       });
       if (res.ok) {
         const data = await res.json();
-        setPreviewPort(data.port);
-        setShowPreviewEmbed(true);
-        setPreviewKey(k => k + 1);
-        setStatusMessage(`Preview started on port ${data.port}`);
+        if (data.started === false && data.error) {
+          setStatusMessage(`Preview failed: ${data.error.slice(0, 200)}`);
+          setPreviewLogs(prev => [...prev, { level: 'error', args: [`[Server] ${data.detectedCommand || 'unknown command'}: ${data.error}`], timestamp: Date.now() }]);
+          if (data.output) {
+            setPreviewLogs(prev => [...prev, { level: 'warn', args: [`[Server Output] ${data.output.slice(0, 1000)}`], timestamp: Date.now() }]);
+          }
+        } else {
+          setPreviewPort(data.port);
+          setShowPreviewEmbed(true);
+          setPreviewKey(k => k + 1);
+          const extra = data.detectedCommand ? ` (${data.detectedCommand})` : '';
+          const pmInfo = data.packageManager && data.packageManager !== 'npm' ? ` [${data.packageManager}]` : '';
+          setStatusMessage(`Preview started on port ${data.port}${extra}${pmInfo}`);
+        }
       } else {
         const errData = await res.json().catch(() => ({} as any));
         setStatusMessage(`Failed to start preview: ${errData.error || res.statusText}`);

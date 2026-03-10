@@ -114,7 +114,13 @@ supabase/
   - Auto-detected in Grok responses: `detectAllGitHubUrls` finds all GitHub repo URLs in any AI response (browser or API mode)
   - **Browser mode**: Clone buttons appear in ClipboardExtractor toolbar for each detected repo
   - **API mode**: Banner appears at top with "Clone & Import" button; also auto-clones when auto-apply is ON and the active project is empty (no source files)
-  - Endpoint: `/api/projects/import-github` — recursive tree fetch + blob download, skips node_modules/dist/.env, 500KB file size limit
+  - Endpoint: `/api/projects/import-github` — recursive tree fetch + raw.githubusercontent.com download (blob API fallback), skips node_modules/dist/.env, 500KB file size limit
+  - Uses `GITHUB_TOKEN` env var for authenticated API access (higher rate limits); falls back to unauthenticated with raw URLs
+  - Priority download: `package.json`, `tsconfig.json`, config files downloaded first to ensure project integrity
+  - Smart PM detection: lockfile sniffing (bun.lockb/pnpm-lock.yaml/yarn.lock) → correct install command
+  - Framework detection: next/nuxt/angular/svelte/astro/vue/react from dependencies
+  - Install uses `--ignore-scripts` for security on untrusted repos; 120s timeout with npm fallback
+  - Returns `partial: true` + `failedFiles` count when >20% of files fail to download
   - Grok is the single decision-maker for repo selection — Ollama never suggests repos
 - **Empty project creation**: New projects start with only a `package.json` (name, version, description, framework metadata). No scaffold files — the idea is Grok suggests a repo to clone or generates the initial files
 
