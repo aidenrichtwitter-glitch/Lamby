@@ -182,7 +182,7 @@ function extractContextSections(fullText: string): string[] {
   return sections;
 }
 
-function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport, onReplaceRepo, toasterConfig, toasterAvailable }: { onApply: (filePath: string, code: string, editType?: string, searchCode?: string) => void; onApplyAll?: (blocks: { filePath: string; code: string; editType?: string; searchCode?: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void; onReplaceRepo?: (url: string) => void; toasterConfig?: OllamaToasterConfig; toasterAvailable?: boolean }) {
+function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport, onReplaceRepo, toasterConfig, toasterAvailable, userTask, setUserTask, onGenerateContext, onEditContext, contextLoading, projectContext }: { onApply: (filePath: string, code: string, editType?: string, searchCode?: string) => void; onApplyAll?: (blocks: { filePath: string; code: string; editType?: string; searchCode?: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void; onReplaceRepo?: (url: string) => void; toasterConfig?: OllamaToasterConfig; toasterAvailable?: boolean; userTask: string; setUserTask: (task: string) => void; onGenerateContext: (task?: string) => Promise<void>; onEditContext: () => void; contextLoading: boolean; projectContext: string }) {
   type ProjectExtractorState = {
     blocks: ExtractedBlock[];
     detectedDeps: { dependencies: string[]; devDependencies: string[] };
@@ -506,6 +506,41 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
             <Loader2 className="w-2.5 h-2.5 animate-spin" /> Toaster analyzing response...
           </span>
         )}
+        <div className="flex items-center gap-1.5 ml-auto">
+          <input
+            type="text"
+            value={userTask}
+            onChange={e => setUserTask(e.target.value)}
+            onKeyDown={async (e) => {
+              if (e.key === 'Enter' && userTask.trim()) {
+                e.preventDefault();
+                await onGenerateContext(userTask.trim());
+              }
+            }}
+            placeholder="Describe your request for Grok..."
+            className="w-[220px] bg-[hsl(220_20%_14%)] text-[10px] text-foreground rounded px-2 py-1 border border-border/20 focus:outline-none focus:border-primary/40 placeholder:text-muted-foreground/30"
+            data-testid="input-user-task"
+          />
+          <button
+            onClick={() => onGenerateContext(userTask.trim() || undefined)}
+            disabled={contextLoading}
+            data-testid="button-generate-context"
+            className="flex items-center gap-1 px-2 py-1 rounded text-[9px] bg-primary/15 text-primary hover:bg-primary/25 transition-colors border border-primary/20 disabled:opacity-40 shrink-0 whitespace-nowrap"
+            title={userTask.trim() ? 'Generate context with your task and copy to clipboard' : 'Generate context and copy to clipboard'}
+          >
+            {contextLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
+            {userTask.trim() ? 'Generate & Copy' : 'Copy Context'}
+          </button>
+          <button
+            onClick={onEditContext}
+            disabled={!projectContext}
+            data-testid="button-edit-context"
+            className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-secondary/30 text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors border border-border/20 disabled:opacity-30 shrink-0"
+            title="View and edit the generated context before copying"
+          >
+            <FileCode className="w-3 h-3" /> Edit
+          </button>
+        </div>
         {(detectedDeps.dependencies.length > 0 || detectedDeps.devDependencies.length > 0) && (
           depsError ? (
             <span className="text-[9px] text-red-400 ml-1 flex items-center gap-1 px-2 py-1 rounded bg-red-500/10 border border-red-500/30" data-testid="text-deps-error">
@@ -2649,6 +2684,10 @@ const GrokBridge: React.FC = () => {
   const [projectContext, setProjectContext] = useState<string>('');
   const [contextLoading, setContextLoading] = useState(false);
   const [lastErrors, setLastErrors] = useState<string>('');
+  const [userTask, setUserTask] = useState('');
+  const [showContextEditor, setShowContextEditor] = useState(false);
+  const [editableContext, setEditableContext] = useState('');
+  const contextEditorRef = useRef<HTMLTextAreaElement>(null);
 
   const estimateTokens = useCallback((text: string): number => {
     return Math.ceil(text.length / 4);
@@ -2668,7 +2707,7 @@ const GrokBridge: React.FC = () => {
     return summary;
   }, []);
 
-  const buildProjectContext = useCallback(async () => {
+  const buildProjectContext = useCallback(async (taskOverride?: string) => {
     setContextLoading(true);
     const CHARS_BUDGET = 64000;
 
@@ -2749,8 +2788,11 @@ const GrokBridge: React.FC = () => {
 
       if (changedFiles.length > 0) active += `Recently changed files: ${changedFiles.join(', ')}\n\n`;
 
+      const task = taskOverride || userTask;
       active += `Primary task right now: `;
-      if (isEmptyProject) {
+      if (task) {
+        active += `${task}\n\n`;
+      } else if (isEmptyProject) {
         active += `Select EXACTLY ONE public GitHub repo to clone as starter.\nCriteria:\n`;
         active += `- Must use one of: React + Vite (top priority), Vue 3 + Vite, SvelteKit, Next.js, Nuxt, Vanilla JS/TS + Vite, Three.js + Vite/Webpack.\n`;
         active += `- Prefer: TypeScript, Tailwind, high stars, active maintenance, MIT license.\n`;
@@ -2895,7 +2937,7 @@ const GrokBridge: React.FC = () => {
       setStatusMessage(`Context build failed: ${e.message}`);
       return '';
     }
-  }, [lastErrors, activeProject, toasterAvailability, toasterConfig, previewLogs, messages, summarizeChatHistory, knowledgeMatches]);
+  }, [lastErrors, activeProject, toasterAvailability, toasterConfig, previewLogs, messages, summarizeChatHistory, knowledgeMatches, userTask]);
 
   const refreshQuickActions = useCallback(async () => {
     if (!activeProject) { setQuickActions([]); return; }
@@ -2948,19 +2990,20 @@ const GrokBridge: React.FC = () => {
     refreshQuickActions();
   }, [activeProject]);
 
-  const copyContextToClipboard = useCallback(async () => {
-    if (!projectContext) return;
+  const copyContextToClipboard = useCallback(async (contextOverride?: string) => {
+    const ctx = contextOverride || projectContext;
+    if (!ctx) return;
     try {
       if (isElectron) {
         const { clipboard } = (window as any).require('electron');
-        clipboard.writeText(projectContext);
+        clipboard.writeText(ctx);
       } else {
-        await navigator.clipboard.writeText(projectContext);
+        await navigator.clipboard.writeText(ctx);
       }
       setStatusMessage('✓ Project context copied to clipboard — paste into Grok');
     } catch {
       try {
-        await navigator.clipboard.writeText(projectContext);
+        await navigator.clipboard.writeText(ctx);
         setStatusMessage('✓ Project context copied');
       } catch {
         setStatusMessage('⚠ Clipboard write failed');
@@ -4121,7 +4164,7 @@ const GrokBridge: React.FC = () => {
             )}
 
             {/* Code extractor — shared across both modes */}
-            <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} onReplaceRepo={handleReplaceRepo} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} />
+            <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} onReplaceRepo={handleReplaceRepo} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} userTask={userTask} setUserTask={setUserTask} onGenerateContext={async (task?: string) => { const ctx = await buildProjectContext(task); if (ctx) copyContextToClipboard(ctx); }} onEditContext={() => { setEditableContext(projectContext); setShowContextEditor(true); setTimeout(() => contextEditorRef.current?.focus(), 100); }} contextLoading={contextLoading} projectContext={projectContext} />
           </div>
 
           {/* Preview panel — shared across both modes */}
@@ -4215,6 +4258,77 @@ const GrokBridge: React.FC = () => {
           )}
         </div>
       </div>
+
+      {showContextEditor && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setShowContextEditor(false)}>
+          <div
+            className="flex flex-col rounded-lg shadow-2xl border border-border/40 overflow-hidden"
+            style={{ width: 'min(800px, 92vw)', height: 'min(600px, 80vh)', background: 'hsl(220, 25%, 10%)' }}
+            onClick={e => e.stopPropagation()}
+            data-testid="modal-context-editor"
+          >
+            <div className="flex items-center justify-between px-4 py-2 border-b border-border/30" style={{ background: 'hsl(220, 25%, 13%)' }}>
+              <span className="text-[11px] font-medium text-foreground/80 flex items-center gap-2">
+                <Code2 className="w-3.5 h-3.5 text-primary" />
+                Edit Context
+                <span className="text-[9px] text-muted-foreground/50">({Math.ceil(editableContext.length / 4)} tokens · {editableContext.length} chars)</span>
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={async () => {
+                    const ctx = await buildProjectContext(userTask.trim() || undefined);
+                    if (ctx) setEditableContext(ctx);
+                  }}
+                  disabled={contextLoading}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-[9px] bg-secondary/30 text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors border border-border/20"
+                  data-testid="button-regenerate-context"
+                >
+                  {contextLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Code2 className="w-3 h-3" />}
+                  Regenerate
+                </button>
+                <button
+                  onClick={() => {
+                    copyContextToClipboard(editableContext);
+                    setShowContextEditor(false);
+                  }}
+                  disabled={!editableContext}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] font-medium bg-primary/15 text-primary hover:bg-primary/25 transition-colors border border-primary/20 disabled:opacity-30"
+                  data-testid="button-copy-edited-context"
+                >
+                  <Copy className="w-3 h-3" />
+                  Copy to Clipboard
+                </button>
+                <button
+                  onClick={() => setShowContextEditor(false)}
+                  className="p-1 text-muted-foreground/60 hover:text-foreground transition-colors"
+                  data-testid="button-close-context-editor"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+            <textarea
+              ref={contextEditorRef}
+              value={editableContext}
+              onChange={e => setEditableContext(e.target.value)}
+              spellCheck={false}
+              className="flex-1 resize-none outline-none border-none p-4"
+              style={{
+                background: 'hsl(220, 20%, 11%)',
+                color: 'hsl(220, 10%, 82%)',
+                fontSize: '11px',
+                fontFamily: '"Fira Code", "Cascadia Code", "JetBrains Mono", "Consolas", monospace',
+                lineHeight: '1.5',
+                tabSize: 2,
+                caretColor: 'hsl(150, 60%, 55%)',
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word',
+              }}
+              data-testid="textarea-context-editor"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
