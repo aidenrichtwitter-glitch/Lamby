@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Editor from '@monaco-editor/react';
 import { Save, Send, X, AlertTriangle, Check, Loader2, FileCode } from 'lucide-react';
 import { validateChange } from '@/lib/safety-engine';
 import { SafetyCheck } from '@/lib/self-reference';
@@ -16,28 +15,16 @@ interface FileEditorProps {
 function detectLanguage(filePath: string): string {
   const ext = filePath.split('.').pop()?.toLowerCase() || '';
   const map: Record<string, string> = {
-    ts: 'typescript',
-    tsx: 'typescriptreact',
-    js: 'javascript',
-    jsx: 'javascriptreact',
-    css: 'css',
-    scss: 'scss',
-    less: 'less',
-    html: 'html',
-    json: 'json',
-    md: 'markdown',
-    yaml: 'yaml',
-    yml: 'yaml',
-    xml: 'xml',
-    svg: 'xml',
-    py: 'python',
-    sh: 'shell',
-    bash: 'shell',
-    sql: 'sql',
-    graphql: 'graphql',
-    toml: 'toml',
+    ts: 'typescript', tsx: 'typescriptreact', js: 'javascript', jsx: 'javascriptreact',
+    css: 'css', scss: 'scss', less: 'less', html: 'html', json: 'json',
+    md: 'markdown', yaml: 'yaml', yml: 'yaml', xml: 'xml', svg: 'xml',
+    py: 'python', sh: 'shell', bash: 'shell', sql: 'sql', toml: 'toml',
   };
   return map[ext] || 'plaintext';
+}
+
+function countLines(text: string): number {
+  return text.split('\n').length;
 }
 
 const FileEditor: React.FC<FileEditorProps> = ({ filePath, content, projectName, onSave, onClose, onSendToGrok }) => {
@@ -46,8 +33,9 @@ const FileEditor: React.FC<FileEditorProps> = ({ filePath, content, projectName,
   const [saving, setSaving] = useState(false);
   const [validationChecks, setValidationChecks] = useState<SafetyCheck[]>([]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saved' | 'error'>('idle');
-  const editorRef = useRef<any>(null);
-  const saveRef = useRef<() => void>(() => {});
+  const [cursorLine, setCursorLine] = useState(1);
+  const [cursorCol, setCursorCol] = useState(1);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     setEditorContent(content);
@@ -55,6 +43,12 @@ const FileEditor: React.FC<FileEditorProps> = ({ filePath, content, projectName,
     setValidationChecks([]);
     setSaveStatus('idle');
   }, [filePath, content]);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [filePath]);
 
   const handleSave = useCallback(async () => {
     if (saving) return;
@@ -69,7 +63,7 @@ const FileEditor: React.FC<FileEditorProps> = ({ filePath, content, projectName,
       setIsDirty(false);
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 3000);
-    } catch (e: any) {
+    } catch {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 5000);
     } finally {
@@ -77,9 +71,44 @@ const FileEditor: React.FC<FileEditorProps> = ({ filePath, content, projectName,
     }
   }, [editorContent, filePath, content, onSave, saving]);
 
-  useEffect(() => {
-    saveRef.current = handleSave;
-  }, [handleSave]);
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      handleSave();
+      return;
+    }
+
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const ta = e.currentTarget;
+      const start = ta.selectionStart;
+      const end = ta.selectionEnd;
+      const val = ta.value;
+      const newVal = val.substring(0, start) + '  ' + val.substring(end);
+      setEditorContent(newVal);
+      setIsDirty(newVal !== content);
+      requestAnimationFrame(() => {
+        ta.selectionStart = ta.selectionEnd = start + 2;
+      });
+    }
+  }, [handleSave, content]);
+
+  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newVal = e.target.value;
+    setEditorContent(newVal);
+    setIsDirty(newVal !== content);
+  }, [content]);
+
+  const handleCursorUpdate = useCallback((e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    const ta = e.currentTarget;
+    const pos = ta.selectionStart;
+    const text = ta.value.substring(0, pos);
+    const line = text.split('\n').length;
+    const lastNewline = text.lastIndexOf('\n');
+    const col = pos - (lastNewline === -1 ? 0 : lastNewline + 1) + 1;
+    setCursorLine(line);
+    setCursorCol(col);
+  }, []);
 
   const handleSendToGrok = useCallback(() => {
     if (!onSendToGrok) return;
@@ -87,14 +116,7 @@ const FileEditor: React.FC<FileEditorProps> = ({ filePath, content, projectName,
     onSendToGrok(prompt);
   }, [filePath, editorContent, onSendToGrok]);
 
-  const handleEditorMount = useCallback((editor: any) => {
-    editorRef.current = editor;
-    editor.addCommand(
-      2048 + 49,
-      () => { saveRef.current(); }
-    );
-  }, []);
-
+  const lineCount = countLines(editorContent);
   const language = detectLanguage(filePath);
 
   return (
@@ -149,29 +171,59 @@ const FileEditor: React.FC<FileEditorProps> = ({ filePath, content, projectName,
         </div>
       </div>
 
-      <div className="flex-1 min-h-0">
-        <Editor
-          height="100%"
-          language={language}
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        <div
+          className="shrink-0 py-2 pr-2 text-right select-none overflow-hidden"
+          style={{
+            width: `${Math.max(3, String(lineCount).length) + 1.5}ch`,
+            paddingLeft: '0.5ch',
+            background: 'hsl(220, 20%, 10%)',
+            color: 'hsl(220, 10%, 40%)',
+            fontSize: '12px',
+            fontFamily: '"Fira Code", "Cascadia Code", "JetBrains Mono", "Consolas", monospace',
+            lineHeight: '1.5',
+          }}
+          aria-hidden="true"
+        >
+          {Array.from({ length: lineCount }, (_, i) => (
+            <div
+              key={i}
+              style={{
+                color: i + 1 === cursorLine ? 'hsl(220, 10%, 65%)' : undefined,
+              }}
+            >
+              {i + 1}
+            </div>
+          ))}
+        </div>
+        <textarea
+          ref={textareaRef}
           value={editorContent}
-          theme="vs-dark"
-          onChange={(value) => {
-            const newVal = value || '';
-            setEditorContent(newVal);
-            setIsDirty(newVal !== content);
-          }}
-          onMount={handleEditorMount}
-          options={{
-            minimap: { enabled: false },
-            fontSize: 12,
-            lineNumbers: 'on',
-            scrollBeyondLastLine: false,
-            wordWrap: 'on',
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          onClick={handleCursorUpdate}
+          onKeyUp={handleCursorUpdate}
+          spellCheck={false}
+          className="flex-1 resize-none outline-none border-none p-2"
+          style={{
+            background: 'hsl(220, 20%, 11%)',
+            color: 'hsl(220, 10%, 85%)',
+            fontSize: '12px',
+            fontFamily: '"Fira Code", "Cascadia Code", "JetBrains Mono", "Consolas", monospace',
+            lineHeight: '1.5',
             tabSize: 2,
-            automaticLayout: true,
-            padding: { top: 8 },
+            caretColor: 'hsl(150, 60%, 55%)',
+            whiteSpace: 'pre',
+            overflowWrap: 'normal',
+            overflowX: 'auto',
           }}
+          data-testid="textarea-editor"
         />
+      </div>
+
+      <div className="shrink-0 flex items-center justify-between px-3 py-0.5 border-t border-border/30 bg-card/30 text-[9px] text-muted-foreground/50">
+        <span>Ln {cursorLine}, Col {cursorCol}</span>
+        <span>{language} · {lineCount} lines</span>
       </div>
 
       {validationChecks.length > 0 && validationChecks.some(c => c.severity !== 'info') && (
