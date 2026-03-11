@@ -822,6 +822,21 @@ function projectManagementPlugin(): Plugin {
     var stack = reason instanceof Error ? reason.stack : null;
     send('error', ['Unhandled Promise Rejection: ' + msg], stack);
   });
+  setTimeout(function() {
+    try {
+      var root = document.getElementById('root') || document.getElementById('app');
+      if (root && root.children.length === 0 && root.textContent.trim() === '') {
+        send('warn', ['[Guardian] Blank screen detected — root element exists but has no rendered content after 5s. This usually means React/Vue failed to mount.']);
+      }
+      if (!root) {
+        var body = document.body;
+        var visibleText = body ? body.innerText.trim() : '';
+        if (visibleText.length === 0) {
+          send('warn', ['[Guardian] Blank screen detected — no visible content on page after 5s. Check that index.html has the correct root element and entry script.']);
+        }
+      }
+    } catch(e) {}
+  }, 5000);
 })();
 </script>`;
 

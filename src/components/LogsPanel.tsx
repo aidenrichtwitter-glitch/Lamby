@@ -20,6 +20,7 @@ interface LogsPanelProps {
   onClearLogs: () => void;
   onSendLogsToGrok: (formattedPrompt: string) => void;
   activeProject?: string | null;
+  alwaysShowBar?: boolean;
 }
 
 const MAX_VISIBLE_STACK_LINES = 5;
@@ -63,7 +64,7 @@ function formatLogsForGrok(logs: LogEntry[], activeProject?: string | null): str
   return prompt;
 }
 
-const LogsPanel: React.FC<LogsPanelProps> = ({ logs, onClearLogs, onSendLogsToGrok, activeProject }) => {
+const LogsPanel: React.FC<LogsPanelProps> = ({ logs, onClearLogs, onSendLogsToGrok, activeProject, alwaysShowBar }) => {
   const [collapsed, setCollapsed] = useState(true);
   const [copied, setCopied] = useState(false);
   const [expandedStacks, setExpandedStacks] = useState<Set<string>>(new Set());
@@ -102,7 +103,7 @@ const LogsPanel: React.FC<LogsPanelProps> = ({ logs, onClearLogs, onSendLogsToGr
     });
   }, []);
 
-  if (logs.length === 0 && collapsed) return null;
+  if (logs.length === 0 && collapsed && !alwaysShowBar) return null;
 
   return (
     <div className="border-t border-border/30 bg-background/95 backdrop-blur-sm" data-testid="logs-panel">
