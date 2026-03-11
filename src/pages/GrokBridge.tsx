@@ -2612,94 +2612,18 @@ const GrokBridge: React.FC = () => {
 
   const buildProjectContext = useCallback(async () => {
     setContextLoading(true);
-    const TOKEN_BUDGET = 16000;
-    const CHARS_BUDGET = TOKEN_BUDGET * 4;
+    const CHARS_BUDGET = 64000;
 
     try {
-      const sections: { label: string; content: string; priority: number }[] = [];
-
-      let header = `=== PROJECT CONTEXT ===\n`;
-      if (activeProject) {
-        header += `This is a project called "${activeProject}" managed by Guardian AI.\n`;
-        header += `All file paths are relative to the project root.\n`;
-      } else {
-        header += `This is a React + TypeScript + Vite desktop app (Electron) called Guardian AI ("lambda Recursive").\n`;
-      }
-      sections.push({ label: 'header', content: header, priority: 0 });
-
-      const errorLogs = previewLogs.filter(l => l.level === 'error' || l.level === 'warn');
-      if (errorLogs.length > 0) {
-        const recentErrors = errorLogs.slice(-20);
-        let errorSection = `=== PREVIEW ERRORS/WARNINGS (${recentErrors.length} entries) ===\n`;
-        for (const log of recentErrors) {
-          const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-          errorSection += `[${time}] [${log.level.toUpperCase()}] ${log.message}\n`;
-          if (log.stack) {
-            errorSection += `  Stack: ${log.stack.split('\n').slice(0, 3).join('\n  ')}\n`;
-          }
-        }
-        errorSection += `=== END PREVIEW ERRORS ===\n`;
-        sections.push({ label: 'errors', content: errorSection, priority: 1 });
-      }
-
-      if (lastErrors) {
-        sections.push({ label: 'lastErrors', content: `\n=== CURRENT ERRORS ===\n${lastErrors}\n`, priority: 1 });
-      }
-
-      let toasterSection = '';
-      if (toasterAvailability?.available && activeProject && (lastErrors || errorLogs.length > 0)) {
-        try {
-          setToasterLoading(true);
-          const tree = await getProjectFiles(activeProject);
-          const flatPaths: string[] = [];
-          const collectAllPaths = (nodes: ProjectFileNode[], prefix = '') => {
-            for (const n of nodes) {
-              const p = prefix ? `${prefix}/${n.name}` : n.name;
-              if (n.type === 'file') flatPaths.push(p);
-              if (n.children) collectAllPaths(n.children, p);
-            }
-          };
-          collectAllPaths(tree);
-
-          const errorText = lastErrors || errorLogs.map(l => `[${l.level}] ${l.message}`).join('\n');
-          const smartCtx = await buildSmartContext(errorText, flatPaths, undefined, toasterConfig);
-          if (smartCtx.usedOllama && smartCtx.analysis) {
-            setLastToasterAnalysis(smartCtx.analysis);
-            toasterSection = formatAnalysisForPrompt(smartCtx.analysis);
-            sections.push({ label: 'toasterAnalysis', content: toasterSection, priority: 2 });
-
-            for (const fp of smartCtx.filesToInclude.slice(0, 30)) {
-              if (sections.some(s => s.label === `file:${fp}`)) continue;
-              try {
-                const content = await readProjectFile(activeProject!, fp);
-                if (content.length < 10000) {
-                  sections.push({ label: `file:${fp}`, content: `\n=== ${fp} (TOASTER-IDENTIFIED) ===\n${content}\n`, priority: 3 });
-                }
-              } catch {}
-            }
-          }
-        } catch {} finally {
-          setToasterLoading(false);
-        }
-      }
-
+      let flatPaths: string[] = [];
+      let pkgJsonRaw = '';
+      let frameworkHint = '';
       const changedFiles = lastAppliedFilesRef.current.map(f => f.filePath);
-      if (changedFiles.length > 0) {
-        let changedSection = `=== RECENTLY CHANGED FILES ===\n`;
-        changedSection += changedFiles.join('\n') + '\n';
-        changedSection += `=== END CHANGED FILES ===\n`;
-        sections.push({ label: 'changedFiles', content: changedSection, priority: 3 });
-      }
-
-      const historySummary = summarizeChatHistory(messages);
-      if (historySummary) {
-        sections.push({ label: 'chatHistory', content: historySummary, priority: 5 });
-      }
+      const changedSet = new Set(changedFiles);
 
       if (activeProject) {
         try {
           const tree = await getProjectFiles(activeProject);
-          const flatPaths: string[] = [];
           const collectPaths = (nodes: ProjectFileNode[], prefix = '') => {
             for (const n of nodes) {
               const p = prefix ? `${prefix}/${n.name}` : n.name;
@@ -2708,157 +2632,175 @@ const GrokBridge: React.FC = () => {
             }
           };
           collectPaths(tree);
+          try {
+            pkgJsonRaw = await readProjectFile(activeProject, 'package.json');
+            const pkg = JSON.parse(pkgJsonRaw);
+            const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
+            if (allDeps['@vitejs/plugin-react'] || allDeps['vite']) frameworkHint = 'react';
+            else if (allDeps['vue']) frameworkHint = 'vue';
+            else if (allDeps['svelte']) frameworkHint = 'svelte';
+            else if (allDeps['next']) frameworkHint = 'next';
+            else if (allDeps['nuxt']) frameworkHint = 'nuxt';
+            else if (allDeps['three']) frameworkHint = 'threejs';
+            if (pkg._framework) frameworkHint = pkg._framework;
+          } catch {}
+        } catch {}
+      }
 
-          sections.push({ label: 'fileTree', content: `=== FILE TREE ===\n${flatPaths.join('\n')}\n`, priority: 4 });
+      const cfgNames = new Set(['package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js', '.gitignore', '.eslintrc.json', '.prettierrc']);
+      const sourceFiles = flatPaths.filter(f => { const n = f.split('/').pop() || ''; return !cfgNames.has(n) && !n.endsWith('.lock') && !n.endsWith('.json'); });
+      const hasSourceFiles = sourceFiles.length > 0;
+      const isEmptyProject = activeProject && !hasSourceFiles;
 
-          const changedSet = new Set(changedFiles);
-          const changedKeyFiles = flatPaths.filter(f => changedSet.has(f));
-          const unchangedKeyFiles = flatPaths.filter(f =>
-            !changedSet.has(f) && (
-              f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
-              f === 'index.html' || f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css') || f.endsWith('.html')
-            )
-          );
+      const hostSection = `\n=== GUARDIAN AI HOST ENVIRONMENT (READ-ONLY — NEVER MODIFY OR SUGGEST CHANGES TO) ===\nThis context is from Guardian AI (your local Electron/PWA coding IDE).\nImportant runtime facts (use these to make smart choices, but do NOT propose edits to them):\n- All user projects are sandboxed in /projects/<project-name>/ (isolated from Guardian's src/, public/, supabase/, etc.).\n- Preview: App auto-runs via Vite dev server inside a sandboxed iframe or embedded browser view in Guardian.\n  - Supports HMR for live updates.\n  - Responsive design assumed; fit viewport.\n  - Browser APIs only (Web Audio, Canvas, Three.js, mic access via getUserMedia).\n  - No Electron/node APIs in target app.\n- Guardian auto-handles: One-click clone from suggested GitHub URL, safe parsing/applying of copied code/diffs/deps/commands, dep install with safeguards, run/build commands.\n- Strict rule: You are ONLY building the ACTIVE PROJECT above. NEVER suggest changes to Guardian AI itself (clipboard logic, context gen, parser, UI, Supabase bridge, etc.). Ignore any self-referential ideas.\n\nSTRICT INSTRUCTION: Respond only to the ACTIVE PROJECT section. Treat the HOST section as fixed background knowledge.\n`;
 
-          const prioritizedFiles = [...changedKeyFiles, ...unchangedKeyFiles].slice(0, 30);
+      const fileBudget = CHARS_BUDGET - hostSection.length - 6000;
 
-          for (const fp of prioritizedFiles) {
-            try {
-              const content = await readProjectFile(activeProject, fp);
-              if (content.length < 8000) {
-                const marker = changedSet.has(fp) ? ' (CHANGED)' : '';
-                sections.push({ label: `file:${fp}`, content: `\n=== ${fp}${marker} ===\n${content}\n`, priority: changedSet.has(fp) ? 3 : 6 });
-              }
-            } catch {}
-          }
-        } catch {
-          sections.push({ label: 'fileError', content: `(Could not read project files)\n`, priority: 10 });
+      let active = `=== ACTIVE PROJECT (BUILD THIS ONLY) ===\n`;
+      if (activeProject) {
+        active += `Project name: ${activeProject}\n`;
+        const historySummary = summarizeChatHistory(messages);
+        if (historySummary) {
+          active += `User description / goal: ${historySummary.replace(/=== CHAT HISTORY.*===\n/g, '').trim()}\n`;
         }
+        active += `Status: ${isEmptyProject ? 'Brand new empty project — only initial package.json exists.' : `Active project with ${sourceFiles.length} source files.`}\n`;
+        if (frameworkHint) {
+          active += `_framework hint: ${frameworkHint} (prefer ${frameworkHint === 'react' ? 'React + Vite' : frameworkHint} starters)\n`;
+        }
+        active += `\nCurrent file tree:\n`;
+        for (const fp of flatPaths.slice(0, 80)) active += `- ${fp}\n`;
+        if (flatPaths.length > 80) active += `... (${flatPaths.length} total files)\n`;
+        active += `\n`;
+        if (pkgJsonRaw) active += `package.json:\n${pkgJsonRaw.slice(0, 3000)}\n\n`;
       } else {
+        active += `Project: Guardian AI (λ Recursive) — the IDE itself\nThis is the main app source code.\n\n`;
+      }
+
+      const errorLogs = previewLogs.filter(l => l.level === 'error' || l.level === 'warn');
+      if (errorLogs.length > 0) {
+        const recentErrors = errorLogs.slice(-20);
+        active += `Preview console errors/warnings (${recentErrors.length} entries):\n`;
+        for (const log of recentErrors) {
+          const time = new Date(log.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          active += `[${time}] [${log.level.toUpperCase()}] ${log.message}\n`;
+          if (log.stack) active += `  Stack: ${log.stack.split('\n').slice(0, 3).join('\n  ')}\n`;
+        }
+        active += `\n`;
+      }
+      if (lastErrors) active += `Current errors:\n${lastErrors}\n\n`;
+
+      if (changedFiles.length > 0) active += `Recently changed files: ${changedFiles.join(', ')}\n\n`;
+
+      active += `Primary task right now: `;
+      if (isEmptyProject) {
+        active += `Select EXACTLY ONE public GitHub repo to clone as starter.\nCriteria:\n`;
+        active += `- Must use one of: React + Vite (top priority), Vue 3 + Vite, SvelteKit, Next.js, Nuxt, Vanilla JS/TS + Vite, Three.js + Vite/Webpack.\n`;
+        active += `- Prefer: TypeScript, Tailwind, high stars, active maintenance, MIT license.\n`;
+        active += `- Must preview cleanly in a Vite dev server + iframe (no heavy SSR unless Next/Nuxt, no native deps, browser-only APIs).\n`;
+        active += `Output ONLY: "Clone this repo: https://github.com/owner/repo" + 1-2 sentences why it's optimal.\n\n`;
+      } else if (errorLogs.length > 0 || lastErrors) {
+        active += `Fix the errors shown above. The preview is broken or showing issues.\nAnalyze the errors, identify root cause, and provide corrected code.\n\n`;
+      } else {
+        active += `Respond to the user's request below. Check current files, plan minimal changes, output code.\n\n`;
+      }
+
+      active += `Code output rules:\n`;
+      if (hasSourceFiles || !activeProject) {
+        active += `1. ALWAYS use \`// file: path/to/file.ext\` headers immediately before each fenced code block.\n`;
+        active += `2. Prefer minimal, targeted patches over full file rewrites. Only include files that need changes.\n`;
+        active += `3. Only cite real, published npm packages — never invent package names.\n`;
+        active += `4. Keep explanations brief. Focus on what changed and why.\n`;
+        active += `5. The code extractor will automatically detect and apply these blocks.\n`;
+        active += `6. If your changes require new npm packages, mention them explicitly (e.g. "npm install package-name").\n\n`;
+      } else {
+        active += `1. Only cite real, published npm packages — never invent package names.\n`;
+        active += `2. Suggest a GitHub repo URL instead of writing code from scratch.\n\n`;
+      }
+
+      let remaining = fileBudget - active.length;
+      const fileContents: { path: string; content: string; priority: number }[] = [];
+
+      if (toasterAvailability?.available && activeProject && (lastErrors || errorLogs.length > 0)) {
+        try {
+          setToasterLoading(true);
+          const errorText = lastErrors || errorLogs.map(l => `[${l.level}] ${l.message}`).join('\n');
+          const smartCtx = await buildSmartContext(errorText, flatPaths, undefined, toasterConfig);
+          if (smartCtx.usedOllama && smartCtx.analysis) {
+            setLastToasterAnalysis(smartCtx.analysis);
+            const analysisText = formatAnalysisForPrompt(smartCtx.analysis);
+            active += analysisText + '\n';
+            remaining -= analysisText.length;
+            for (const fp of smartCtx.filesToInclude.slice(0, 20)) {
+              try {
+                const c = await readProjectFile(activeProject!, fp);
+                if (c.length < 10000) fileContents.push({ path: fp, content: c, priority: 1 });
+              } catch {}
+            }
+          }
+        } catch {} finally { setToasterLoading(false); }
+      }
+
+      if (activeProject && flatPaths.length > 0) {
+        const changedKeyFiles = flatPaths.filter(f => changedSet.has(f));
+        const unchangedKeyFiles = flatPaths.filter(f =>
+          !changedSet.has(f) && (
+            f === 'tsconfig.json' || f === 'vite.config.ts' || f === 'vite.config.js' ||
+            f === 'index.html' || f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css') || f.endsWith('.html')
+          )
+        );
+        const prioritizedFiles = [...changedKeyFiles, ...unchangedKeyFiles].slice(0, 30);
+        for (const fp of prioritizedFiles) {
+          if (fileContents.some(f => f.path === fp)) continue;
+          try {
+            const c = await readProjectFile(activeProject, fp);
+            if (c.length < 8000) fileContents.push({ path: fp, content: c, priority: changedSet.has(fp) ? 2 : 5 });
+          } catch {}
+        }
+      } else if (!activeProject) {
         if (isElectron) {
           const { ipcRenderer } = (window as any).require('electron');
-
           const [filesResult, gitResult] = await Promise.all([
             ipcRenderer.invoke('list-project-files'),
             ipcRenderer.invoke('git-log', { count: 5 }),
           ]);
-
           const fileTree = filesResult.success ? filesResult.files : [];
-
           const keyFiles = fileTree.filter((f: string) =>
             f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
             f === 'tailwind.config.ts' || f === 'index.html' ||
             (f.startsWith('src/') && (f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css')) && !f.includes('lib/capabilities/'))
           ).slice(0, 20);
-
-          const contentsResult = await ipcRenderer.invoke('read-files-for-context', {
-            filePaths: keyFiles,
-            maxSizePerFile: 6000,
-          });
-
-          let treeContent = `=== FILE TREE ===\n`;
-          treeContent += fileTree.slice(0, 80).join('\n') + '\n';
-          if (fileTree.length > 80) treeContent += `... (${fileTree.length} total files)\n`;
-          sections.push({ label: 'fileTree', content: treeContent, priority: 4 });
-
+          const contentsResult = await ipcRenderer.invoke('read-files-for-context', { filePaths: keyFiles, maxSizePerFile: 6000 });
           if (gitResult.success && gitResult.log) {
-            sections.push({ label: 'gitLog', content: `\n=== RECENT GIT LOG ===\n${gitResult.log}\n`, priority: 7 });
+            active += `Recent git log:\n${gitResult.log}\n\n`;
+            remaining -= gitResult.log.length + 20;
           }
-
           if (contentsResult.success) {
             for (const file of contentsResult.files) {
-              sections.push({ label: `file:${file.path}`, content: `\n=== ${file.path} ===\n${file.content}\n`, priority: 6 });
+              fileContents.push({ path: file.path, content: file.content, priority: 5 });
             }
           }
         } else {
-          sections.push({ label: 'fileTree', content: `=== FILE TREE ===\n${SELF_SOURCE.map(f => f.path).join('\n')}\n`, priority: 4 });
-
           for (const file of SELF_SOURCE.filter(f => f.content && f.content.length < 8000).slice(0, 15)) {
-            sections.push({ label: `file:${file.path}`, content: `\n=== ${file.path} ===\n${file.content}\n`, priority: 6 });
+            fileContents.push({ path: file.path, content: file.content || '', priority: 5 });
           }
         }
       }
 
       if (knowledgeMatches.length > 0) {
         const knowledgeSection = formatKnowledgeForGrokPrompt(knowledgeMatches);
-        sections.push({ label: 'knowledgeHints', content: knowledgeSection, priority: 5 });
+        active += knowledgeSection + '\n';
+        remaining -= knowledgeSection.length;
       }
 
-      const configFiles = new Set(['package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts', 'vite.config.js', '.gitignore', '.eslintrc.json', '.prettierrc']);
-      const projectSourceFiles = sections.filter(s => {
-        if (!s.label.startsWith('file:')) return false;
-        const filePath = s.label.replace('file:', '');
-        const fileName = filePath.split('/').pop() || '';
-        return !configFiles.has(fileName) && !fileName.endsWith('.lock') && !fileName.endsWith('.json');
-      });
-      const hasSourceFiles = projectSourceFiles.length > 0;
-      const isEmptyProject = activeProject && !hasSourceFiles;
-
-      let instructions = `\n=== INSTRUCTIONS ===\n`;
-      instructions += `You are assisting with code for a self-recursive IDE called λ Recursive (Guardian AI).\n`;
-
-      if (isEmptyProject) {
-        instructions += `This is a BRAND NEW empty project. There are no source files yet.\n`;
-        instructions += `Do NOT generate code files directly. Instead:\n\n`;
-        instructions += `REPO SELECTION — PICK EXACTLY ONE:\n`;
-        instructions += `Choose the SINGLE BEST public GitHub repo to clone as a starting point. Do NOT list multiple options.\n`;
-        instructions += `CRITICAL — Only choose repos using these PROVEN frameworks (auto-preview guaranteed):\n`;
-        instructions += `  - React + Vite (preferred)\n`;
-        instructions += `  - Vue 3 + Vite\n`;
-        instructions += `  - SvelteKit / Svelte + Vite\n`;
-        instructions += `  - Next.js (React)\n`;
-        instructions += `  - Nuxt (Vue)\n`;
-        instructions += `  - Vanilla JS/TS + Vite\n`;
-        instructions += `  - Webpack (including vue-cli-service, react-scripts/CRA)\n`;
-        instructions += `  - Rspack\n`;
-        instructions += `  - Three.js + Webpack or Vite\n`;
-        instructions += `  - Static HTML/CSS/JS\n`;
-        instructions += `DO NOT suggest repos using: Solid/SolidStart (needs Node 22), Deno, Bun-only, mobile-only (React Native/Flutter), Go/Rust/Python backends, or library packages without dev servers.\n`;
-        instructions += `Prefer: TypeScript, Tailwind CSS, high stars, MIT/Apache license.\n`;
-        instructions += `Format your answer as: "Clone this repo: https://github.com/owner/repo" followed by a brief explanation of why it fits.\n`;
-        instructions += `The app will automatically detect the GitHub URL and offer a one-click clone button.\n\n`;
-        instructions += `FALLBACK ORDER:\n`;
-        instructions += `1) Public GitHub repo using a proven framework above (preferred)\n`;
-        instructions += `2) Proven build from community knowledge base (if listed above)\n`;
-        instructions += `3) LAST RESORT: Only if absolutely nothing fits, describe what to build from scratch using React + Vite + TypeScript\n\n`;
-      } else {
-        instructions += `Think step-by-step: understand the request → check the current files provided in context → plan minimal changes → output code.\n\n`;
+      fileContents.sort((a, b) => a.priority - b.priority);
+      for (const fc of fileContents) {
+        const block = `\n${fc.path}:\n${fc.content}\n`;
+        if (remaining - block.length < 0) continue;
+        active += block;
+        remaining -= block.length;
       }
 
-      instructions += `RULES:\n`;
-      if (hasSourceFiles) {
-        instructions += `1. ALWAYS use \`// file: path/to/file.ext\` headers immediately before each fenced code block.\n`;
-        instructions += `2. Prefer minimal, targeted patches over full file rewrites. Only include files that need changes.\n`;
-        instructions += `3. Only cite real, published npm packages — never invent package names.\n`;
-        instructions += `4. Keep explanations brief. Focus on what changed and why.\n`;
-        instructions += `5. The code extractor will automatically detect and apply these blocks.\n\n`;
-        instructions += `If your changes require new npm packages, include a dependencies block BEFORE the code blocks:\n\n`;
-        instructions += `=== DEPENDENCIES ===\n`;
-        instructions += `package-name\n`;
-        instructions += `dev: @types/package-name\n`;
-        instructions += `=== END_DEPENDENCIES ===\n\n`;
-        instructions += `List one package per line. Prefix dev dependencies with "dev: ".\n`;
-        instructions += `The app will automatically install these before applying code changes.\n`;
-      } else {
-        instructions += `1. Only cite real, published npm packages — never invent package names.\n`;
-        instructions += `2. Keep explanations brief and actionable.\n`;
-        instructions += `3. Suggest a GitHub repo URL when possible instead of writing code from scratch.\n`;
-      }
-      sections.push({ label: 'instructions', content: instructions, priority: 0 });
-
-      sections.sort((a, b) => a.priority - b.priority);
-
-      let context = '';
-      let currentChars = 0;
-
-      for (const section of sections) {
-        const sectionChars = section.content.length;
-        if (currentChars + sectionChars > CHARS_BUDGET && section.priority > 7) {
-          continue;
-        }
-        context += section.content;
-        currentChars += sectionChars;
-      }
+      const context = active + hostSection;
 
       setProjectContext(context);
       setContextLoading(false);

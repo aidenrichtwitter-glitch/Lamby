@@ -1,0 +1,49 @@
+- the current copy and paste context confuses grok and sometimes it just gives GitHub to templates to build our our recursive ide instead of the specified app, it also doesn't immediately understand that we are running in a electron based preview embedded, which can cause friction starting out. 
+
+
+
+here is the format grok suggests. 
+
+
+=== ACTIVE PROJECT (BUILD THIS ONLY) ===
+Project name: music-visualizer
+User description / goal: Build a web app that visualizes microphone audio in real-time with colorful 3D particles or waveform bars (Web Audio API + canvas/Three.js preferred).
+Status: Brand new empty project – only initial package.json exists.
+_framework hint: react (prefer React + Vite starters)
+
+Current file tree:
+- package.json
+- package-lock.json
+
+package.json:
+{
+  "name": "music-visualizer",
+  "version": "0.0.1",
+  "private": true,
+  "description": "",
+  "_framework": "react"
+}
+
+Primary task right now: Select EXACTLY ONE public GitHub repo to clone as starter.
+Criteria:
+- Must use one of: React + Vite (top priority), Vue 3 + Vite, SvelteKit, Next.js, Nuxt, Vanilla JS/TS + Vite, Three.js + Vite/Webpack.
+- Prefer: TypeScript, Tailwind, high stars, active maintenance, MIT license.
+- Must preview cleanly in a Vite dev server + iframe (no heavy SSR unless Next/Nuxt, no native deps, browser-only APIs).
+- Bonus: Audio/visualizer relevance (Web Audio, Three.js, p5.js, etc.).
+Output ONLY: "Clone this repo: https://github.com/owner/repo" + 1-2 sentences why it's optimal (fit with preview, features, ease of extension).
+
+=== GUARDIAN AI HOST ENVIRONMENT (READ-ONLY – NEVER MODIFY OR SUGGEST CHANGES TO) ===
+This context is from Guardian AI (your local Electron/PWA coding IDE).
+Important runtime facts (use these to make smart choices, but do NOT propose edits to them):
+- All user projects are sandboxed in /projects/<project-name>/ (isolated from Guardian's src/, public/, supabase/, etc.).
+- Preview: App auto-runs via Vite dev server inside a sandboxed iframe or embedded browser view in Guardian.
+  - Supports HMR for live updates.
+  - Responsive design assumed; fit viewport.
+  - Browser APIs only (Web Audio, Canvas, Three.js, mic access via getUserMedia).
+  - No Electron/node APIs in target app.
+- Guardian auto-handles: One-click clone from suggested GitHub URL, safe parsing/applying of copied code/diffs/deps/commands, dep install with safeguards, run/build commands.
+- Strict rule: You are ONLY building the ACTIVE PROJECT above. NEVER suggest changes to Guardian AI itself (clipboard logic, context gen, parser, UI, Supabase bridge, etc.). Ignore any self-referential ideas.
+
+STRICT INSTRUCTION: Respond only to the ACTIVE PROJECT section. Treat the HOST section as fixed background knowledge.
+
+
