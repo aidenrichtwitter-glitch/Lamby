@@ -180,7 +180,7 @@ function extractContextSections(fullText: string): string[] {
   return sections;
 }
 
-function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport, toasterConfig, toasterAvailable }: { onApply: (filePath: string, code: string) => void; onApplyAll?: (blocks: { filePath: string; code: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void; toasterConfig?: OllamaToasterConfig; toasterAvailable?: boolean }) {
+function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport, onReplaceRepo, toasterConfig, toasterAvailable }: { onApply: (filePath: string, code: string) => void; onApplyAll?: (blocks: { filePath: string; code: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void; onReplaceRepo?: (url: string) => void; toasterConfig?: OllamaToasterConfig; toasterAvailable?: boolean }) {
   type ProjectExtractorState = {
     blocks: ExtractedBlock[];
     detectedDeps: { dependencies: string[]; devDependencies: string[] };
@@ -417,7 +417,10 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
   };
 
   const handleGithubClone = (url: string) => {
-    if (onGithubImport) {
+    if (activeProject && onReplaceRepo) {
+      onReplaceRepo(url);
+      setDetectedGithubUrls([]);
+    } else if (onGithubImport) {
       onGithubImport(url);
       setDetectedGithubUrls([]);
     }
@@ -534,15 +537,29 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           </span>
         )}
         {detectedGithubUrls.length > 0 && onGithubImport && detectedGithubUrls.slice(0, 3).map((gh, i) => (
-          <button
-            key={gh.fullUrl}
-            onClick={() => handleGithubClone(gh.fullUrl)}
-            data-testid={`button-clone-repo-${i}`}
-            className="text-[9px] text-[hsl(200_70%_60%)] ml-1 flex items-center gap-1 px-2 py-1.5 rounded bg-[hsl(200_70%_60%/0.1)] hover:bg-[hsl(200_70%_60%/0.25)] border border-[hsl(200_70%_60%/0.3)] cursor-pointer transition-colors font-bold"
-          >
-            <GitBranch className="w-2.5 h-2.5" />
-            {gh.owner}/{gh.repo} → Clone
-          </button>
+          <div key={gh.fullUrl} className="flex items-center gap-1 ml-1">
+            <button
+              onClick={() => handleGithubClone(gh.fullUrl)}
+              data-testid={`button-clone-repo-${i}`}
+              className={`text-[9px] flex items-center gap-1 px-2 py-1.5 rounded cursor-pointer transition-colors font-bold border ${
+                activeProject
+                  ? 'text-amber-300 bg-amber-500/15 hover:bg-amber-500/30 border-amber-500/30'
+                  : 'text-[hsl(200_70%_60%)] bg-[hsl(200_70%_60%/0.1)] hover:bg-[hsl(200_70%_60%/0.25)] border-[hsl(200_70%_60%/0.3)]'
+              }`}
+            >
+              <ArrowRightLeft className="w-2.5 h-2.5" />
+              {gh.owner}/{gh.repo} → {activeProject ? 'Replace' : 'Clone'}
+            </button>
+            {activeProject && (
+              <button
+                onClick={() => { if (onGithubImport) { onGithubImport(gh.fullUrl); setDetectedGithubUrls([]); } }}
+                data-testid={`button-clone-alongside-${i}`}
+                className="text-[8px] text-[hsl(200_70%_60%)] flex items-center gap-1 px-1.5 py-1 rounded bg-[hsl(200_70%_60%/0.08)] hover:bg-[hsl(200_70%_60%/0.2)] border border-[hsl(200_70%_60%/0.2)] cursor-pointer transition-colors"
+              >
+                <GitBranch className="w-2 h-2" /> Alongside
+              </button>
+            )}
+          </div>
         ))}
         <div className="ml-auto flex items-center gap-2">
           {blocks.length > 0 && (
@@ -1608,6 +1625,26 @@ const GrokBridge: React.FC = () => {
     }
   }, [handleSelectProject, activeProject]);
 
+  const handleReplaceRepo = useCallback(async (repoUrl: string) => {
+    if (activeProject) {
+      if (previewPort) {
+        try { await fetch('/api/projects/stop-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: activeProject }) }); } catch {}
+      }
+      try {
+        await deleteProject(activeProject);
+      } catch (e: any) {
+        setStatusMessage(`⚠ Failed to remove old repo: ${e.message || 'Unknown error'}`);
+        return;
+      }
+      setPreviewPort(null);
+      setShowPreviewEmbed(false);
+      setAppliedChanges([]);
+      setPreviewLogs([]);
+      setEditorFile(null);
+    }
+    handleGitHubImport(repoUrl);
+  }, [activeProject, previewPort, handleGitHubImport]);
+
   const handlePublish = useCallback(async () => {
     if (!activeProject || !publishDescription.trim()) return;
     const cfg = getGuardianConfig();
@@ -2161,19 +2198,18 @@ const GrokBridge: React.FC = () => {
     if (appliedChanges.length === 0) return;
     setUndoAllInProgress(true);
     let restored = 0;
-    let failed = 0;
+    const failedChanges: AppliedChange[] = [];
     const changesToUndo = [...appliedChanges].reverse();
     for (const change of changesToUndo) {
       try {
         if (activeProject) {
-          const projName = change.filePath.startsWith(activeProject + '/') ? activeProject : activeProject;
           const filePath = change.filePath.startsWith(activeProject + '/') ? change.filePath.slice(activeProject.length + 1) : change.filePath;
-          await writeProjectFile(projName, filePath, change.previousContent);
+          await writeProjectFile(activeProject, filePath, change.previousContent);
           restored++;
         } else if (isElectron && change.backupPath) {
           const { ipcRenderer } = (window as any).require('electron');
           const result = await ipcRenderer.invoke('rollback-file', { filePath: change.filePath, backupPath: change.backupPath });
-          if (result.success) restored++; else failed++;
+          if (result.success) { restored++; } else { failedChanges.push(change); }
         } else if (isElectron) {
           const { ipcRenderer } = (window as any).require('electron');
           await ipcRenderer.invoke('write-file', { filePath: change.filePath, content: change.previousContent });
@@ -2185,12 +2221,12 @@ const GrokBridge: React.FC = () => {
         const file = SELF_SOURCE.find(f => f.path === change.filePath);
         if (file) { file.content = change.previousContent; file.isModified = true; file.lastModified = Date.now(); }
       } catch {
-        failed++;
+        failedChanges.push(change);
       }
     }
-    setAppliedChanges([]);
+    setAppliedChanges(failedChanges);
     setUndoAllInProgress(false);
-    setStatusMessage(`↩ Undid all — ${restored} file${restored !== 1 ? 's' : ''} restored${failed > 0 ? `, ${failed} failed` : ''}`);
+    setStatusMessage(`↩ Undid all — ${restored} file${restored !== 1 ? 's' : ''} restored${failedChanges.length > 0 ? `, ${failedChanges.length} failed (retry available)` : ''}`);
     if (previewPort) setTimeout(() => setPreviewKey(k => k + 1), 1000);
   }, [appliedChanges, activeProject, previewPort]);
 
@@ -3079,19 +3115,13 @@ const GrokBridge: React.FC = () => {
           <span className="text-[11px] font-mono text-primary">{detectedRepoUrl}</span>
           <button
             data-testid="button-clone-detected-repo"
-            onClick={async () => {
+            onClick={() => {
               if (activeProject) {
-                if (previewPort) {
-                  try { await fetch('/api/projects/stop-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: activeProject }) }); } catch {}
-                }
-                try { await deleteProject(activeProject); } catch {}
-                setPreviewPort(null);
-                setShowPreviewEmbed(false);
-                setAppliedChanges([]);
-                setPreviewLogs([]);
-                setEditorFile(null);
+                handleReplaceRepo(detectedRepoUrl);
+              } else {
+                handleGitHubImport(detectedRepoUrl);
               }
-              handleGitHubImport(detectedRepoUrl);
+              setDetectedRepoUrl(null);
             }}
             className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] text-primary-foreground hover:opacity-90 transition-colors font-medium ${
               activeProject ? 'bg-amber-500 hover:bg-amber-600' : 'bg-primary hover:bg-primary/90'
@@ -3832,7 +3862,7 @@ const GrokBridge: React.FC = () => {
             )}
 
             {/* Code extractor — shared across both modes */}
-            <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} />
+            <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} onReplaceRepo={handleReplaceRepo} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} />
           </div>
 
           {/* Preview panel — shared across both modes */}
