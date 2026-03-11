@@ -1802,60 +1802,82 @@ function projectManagementPlugin(): Plugin {
           const headers: Record<string, string> = { "User-Agent": "Guardian-AI" };
           if (ghToken) headers["Authorization"] = `token ${ghToken}`;
 
-          const infoResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: { ...headers, "Accept": "application/vnd.github.v3+json" } });
-          if (!infoResp.ok) {
-            const status = infoResp.status;
-            if (status === 404) { res.statusCode = 404; res.end(JSON.stringify({ error: `Repository ${owner}/${repo} not found or is private` })); }
-            else if (status === 403) { res.statusCode = 429; res.end(JSON.stringify({ error: "GitHub API rate limit exceeded. Try again later." })); }
-            else { res.statusCode = 502; res.end(JSON.stringify({ error: `GitHub API error: ${status}` })); }
-            return;
+          let defaultBranch = "main";
+          let apiAvailable = false;
+          try {
+            const infoResp = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: { ...headers, "Accept": "application/vnd.github.v3+json" } });
+            if (infoResp.ok) {
+              const repoInfo: any = await infoResp.json();
+              defaultBranch = repoInfo.default_branch || "main";
+              apiAvailable = true;
+            } else {
+              console.log(`[Import] GitHub API returned ${infoResp.status} for ${owner}/${repo}, will try git clone directly`);
+            }
+          } catch (apiErr: any) {
+            console.log(`[Import] GitHub API request failed for ${owner}/${repo}: ${apiErr.message?.slice(0, 100)}, will try git clone directly`);
           }
-          const repoInfo: any = await infoResp.json();
-          const defaultBranch = repoInfo.default_branch || "main";
 
           const MAX_TARBALL_SIZE = 200 * 1024 * 1024;
-          console.log(`[Import] Downloading tarball for ${owner}/${repo} (branch: ${defaultBranch})...`);
-          const tarballUrl = `https://api.github.com/repos/${owner}/${repo}/tarball/${encodeURIComponent(defaultBranch)}`;
-          const tarResp = await fetch(tarballUrl, { headers: { ...headers, "Accept": "application/vnd.github.v3+json" }, redirect: "follow" });
-          if (!tarResp.ok) {
-            res.statusCode = 502;
-            res.end(JSON.stringify({ error: `Failed to download tarball: ${tarResp.status}` }));
-            return;
-          }
-
-          const contentLength = parseInt(tarResp.headers.get("content-length") || "0", 10);
-          if (contentLength > MAX_TARBALL_SIZE) {
-            res.statusCode = 413;
-            res.end(JSON.stringify({ error: `Repository too large (${(contentLength / 1024 / 1024).toFixed(0)}MB). Max is ${MAX_TARBALL_SIZE / 1024 / 1024}MB.` }));
-            return;
-          }
-
           const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "guardian-import-"));
+          let cloneMethod = "tarball";
           try {
-          const tarPath = path.join(tmpDir, "repo.tar.gz");
 
-          const arrayBuf = await tarResp.arrayBuffer();
-          if (arrayBuf.byteLength > MAX_TARBALL_SIZE) {
-            res.statusCode = 413;
-            res.end(JSON.stringify({ error: `Repository too large (${(arrayBuf.byteLength / 1024 / 1024).toFixed(0)}MB). Max is ${MAX_TARBALL_SIZE / 1024 / 1024}MB.` }));
-            return;
-          }
-          fs.writeFileSync(tarPath, Buffer.from(arrayBuf));
-          const tarSize = fs.statSync(tarPath).size;
-          console.log(`[Import] Tarball downloaded: ${(tarSize / 1024 / 1024).toFixed(1)}MB`);
+          let tarballSuccess = false;
+          if (apiAvailable) try {
+            console.log(`[Import] Downloading tarball for ${owner}/${repo} (branch: ${defaultBranch})...`);
+            const tarballUrl = `https://api.github.com/repos/${owner}/${repo}/tarball/${encodeURIComponent(defaultBranch)}`;
+            const tarResp = await fetch(tarballUrl, { headers: { ...headers, "Accept": "application/vnd.github.v3+json" }, redirect: "follow" });
+            if (!tarResp.ok) throw new Error(`Tarball download failed: HTTP ${tarResp.status}`);
 
-          fs.mkdirSync(projectDir, { recursive: true });
-          try {
+            const contentLength = parseInt(tarResp.headers.get("content-length") || "0", 10);
+            if (contentLength > MAX_TARBALL_SIZE) throw new Error(`Repository too large for tarball (${(contentLength / 1024 / 1024).toFixed(0)}MB)`);
+
+            const tarPath = path.join(tmpDir, "repo.tar.gz");
+            const arrayBuf = await tarResp.arrayBuffer();
+            if (arrayBuf.byteLength > MAX_TARBALL_SIZE) throw new Error(`Repository too large (${(arrayBuf.byteLength / 1024 / 1024).toFixed(0)}MB)`);
+
+            fs.writeFileSync(tarPath, Buffer.from(arrayBuf));
+            const tarSize = fs.statSync(tarPath).size;
+            console.log(`[Import] Tarball downloaded: ${(tarSize / 1024 / 1024).toFixed(1)}MB`);
+
+            fs.mkdirSync(projectDir, { recursive: true });
             if (process.platform === "win32") {
               execSync(`tar xzf "${tarPath.replace(/\\/g, '/')}" --strip-components=1 -C "${projectDir.replace(/\\/g, '/')}"`, { timeout: 60000, stdio: "pipe", windowsHide: true });
             } else {
               execSync(`tar xzf "${tarPath}" --strip-components=1 -C "${projectDir}"`, { timeout: 60000, stdio: "pipe", windowsHide: true });
             }
+            console.log(`[Import] Extracted tarball to ${projectDir}`);
+            tarballSuccess = true;
           } catch (tarErr: any) {
+            console.log(`[Import] Tarball method failed for ${owner}/${repo}: ${tarErr.message?.slice(0, 200)}`);
             try { fs.rmSync(projectDir, { recursive: true, force: true }); } catch {}
-            throw new Error(`Failed to extract tarball: ${tarErr.message?.slice(0, 200)}`);
           }
-          console.log(`[Import] Extracted tarball to ${projectDir}`);
+
+          if (!tarballSuccess) {
+            cloneMethod = "git-clone";
+            console.log(`[Import] Falling back to git clone --depth 1 for ${owner}/${repo}...`);
+            const cloneUrl = ghToken
+              ? `https://x-access-token:${ghToken}@github.com/${owner}/${repo}.git`
+              : `https://github.com/${owner}/${repo}.git`;
+            const cloneTmp = path.join(tmpDir, "clone");
+            try {
+              execSync(`git clone --depth 1 --single-branch --branch "${defaultBranch}" "${cloneUrl}" "${cloneTmp}"`, { timeout: 120000, stdio: "pipe", windowsHide: true });
+            } catch (branchErr: any) {
+              try {
+                execSync(`git clone --depth 1 "${cloneUrl}" "${cloneTmp}"`, { timeout: 120000, stdio: "pipe", windowsHide: true });
+              } catch (cloneErr: any) {
+                throw new Error(`Failed to clone repository: ${cloneErr.message?.slice(0, 200)}`);
+              }
+            }
+            fs.mkdirSync(projectDir, { recursive: true });
+            const cloneEntries = fs.readdirSync(cloneTmp);
+            for (const entry of cloneEntries) {
+              const src = path.join(cloneTmp, entry);
+              const dest = path.join(projectDir, entry);
+              try { fs.cpSync(src, dest, { recursive: true, force: true }); } catch {}
+            }
+            console.log(`[Import] Git clone completed for ${owner}/${repo}`);
+          }
 
           const CLEANUP_PATTERNS = ["node_modules", ".git", ".next", ".nuxt", "dist", ".cache", ".turbo", ".vercel", ".output"];
           for (const pattern of CLEANUP_PATTERNS) {
@@ -1970,6 +1992,7 @@ function projectManagementPlugin(): Plugin {
             framework,
             filesWritten,
             npmInstalled,
+            cloneMethod,
             sourceRepo: `https://github.com/${owner}/${repo}`,
             defaultBranch,
             ...(installError ? { installError: installError.slice(0, 500) } : {}),
