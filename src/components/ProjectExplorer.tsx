@@ -140,7 +140,7 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({ activeProject, onSele
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newFramework, setNewFramework] = useState<'react' | 'vanilla' | 'html'>('react');
+  const newFramework = 'react' as const;
   const [newDescription, setNewDescription] = useState('');
   const [creating, setCreating] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -348,22 +348,6 @@ const ProjectExplorer: React.FC<ProjectExplorerProps> = ({ activeProject, onSele
             onChange={e => setNewDescription(e.target.value)}
             className="w-full px-2 py-1 text-[10px] bg-background border border-border/50 rounded focus:outline-none focus:ring-1 focus:ring-primary/50"
           />
-          <div className="flex gap-1">
-            {(['react', 'vanilla', 'html'] as const).map(fw => (
-              <button
-                key={fw}
-                data-testid={`button-framework-${fw}`}
-                onClick={() => setNewFramework(fw)}
-                className={`px-2 py-0.5 rounded text-[9px] transition-colors ${
-                  newFramework === fw
-                    ? 'bg-primary/20 text-primary border border-primary/30'
-                    : 'bg-muted/30 text-muted-foreground border border-border/30 hover:bg-muted/50'
-                }`}
-              >
-                {fw === 'react' ? 'React' : fw === 'vanilla' ? 'Vanilla TS' : 'HTML'}
-              </button>
-            ))}
-          </div>
           <button
             data-testid="button-create-project"
             onClick={handleCreate}

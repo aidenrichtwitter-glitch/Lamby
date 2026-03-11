@@ -3657,7 +3657,7 @@ const GrokBridge: React.FC = () => {
 
           <div className="flex items-center gap-1 shrink-0">
             <button
-              onClick={copyContextToClipboard}
+              onClick={() => copyContextToClipboard()}
               disabled={contextLoading || !projectContext}
               data-testid="button-copy-context"
               className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-40"
