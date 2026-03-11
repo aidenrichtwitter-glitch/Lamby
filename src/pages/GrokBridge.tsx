@@ -4,7 +4,7 @@ import {
   User, Loader2, Code2, Trash2, ChevronDown, Globe, MessageSquare,
   Clipboard, ClipboardCheck, Zap, X, ChevronUp, ChevronDown as ChevronDownIcon,
   Dna, FolderOpen, PanelLeftClose, PanelLeft, Play, ExternalLink, Download, Terminal, AlertCircle, Key, ArrowRightLeft, FolderPlus, RefreshCw, Monitor, GitBranch, Upload, Settings,
-  Moon, Lock, Smartphone, TestTube2, Gauge, Palette, Wand2
+  Moon, Lock, Smartphone, TestTube2, Gauge, Palette, Wand2, Copy, FileText
 } from 'lucide-react';
 import { validateChange, type ValidationContext } from '@/lib/safety-engine';
 import { SELF_SOURCE } from '@/lib/self-source';
@@ -491,6 +491,11 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
               : `All (${blocks.filter(b => b.filePath && !b.applied).length})`}
           </button>
         )}
+        {blocks.filter(b => !b.filePath && !b.applied).length > 0 && (
+          <span className="text-[8px] text-amber-400/70 ml-1" data-testid="text-snippet-hint">
+            {blocks.filter(b => !b.filePath && !b.applied).length} snippet{blocks.filter(b => !b.filePath && !b.applied).length > 1 ? 's' : ''} — assign path to apply
+          </span>
+        )}
         {!blocks.length && ollamaProcessing && (
           <span className="text-[9px] text-[hsl(200_70%_60%)] ml-1 flex items-center gap-1" data-testid="text-ollama-processing-solo">
             <Loader2 className="w-2.5 h-2.5 animate-spin" /> Toaster analyzing response...
@@ -740,19 +745,49 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
             </div>
           )}
 
-          {blocks.map(block => (
-            <div key={block.id} className={`rounded-lg border overflow-hidden transition-all duration-500 ${block.applied ? 'border-primary/40 bg-primary/5 opacity-50 scale-[0.98]' : 'border-border/50 bg-card/50'}`}>
+          {blocks.map(block => {
+            const isSnippet = !block.filePath;
+            return (
+            <div key={block.id} className={`rounded-lg border overflow-hidden transition-all duration-500 ${block.applied ? 'border-primary/40 bg-primary/5 opacity-50 scale-[0.98]' : isSnippet ? 'border-amber-500/40 bg-amber-500/5' : 'border-border/50 bg-card/50'}`}>
               <div className="px-3 py-1.5 flex items-center justify-between gap-2 border-b border-border/20">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Code2 className="w-3 h-3 text-muted-foreground shrink-0" />
-                  <span className="text-[10px] text-foreground/80 font-mono truncate">
-                    {block.filePath || `${block.language} block`}
-                  </span>
+                  {isSnippet ? <FileText className="w-3 h-3 text-amber-400 shrink-0" /> : <Code2 className="w-3 h-3 text-muted-foreground shrink-0" />}
+                  {isSnippet ? (
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-[9px] text-amber-400 font-medium shrink-0">Snippet</span>
+                      <input
+                        type="text"
+                        placeholder="Set file path to apply (e.g. src/App.tsx)"
+                        data-testid={`input-snippet-path-${block.id}`}
+                        className="text-[10px] font-mono bg-background/60 border border-amber-500/30 rounded px-1.5 py-0.5 text-foreground/80 placeholder:text-muted-foreground/30 w-48 focus:outline-none focus:border-primary/50"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const val = (e.target as HTMLInputElement).value.trim();
+                            if (val) setBlocks(prev => prev.map(b => b.id === block.id ? { ...b, filePath: val } : b));
+                          }
+                        }}
+                        onBlur={(e) => {
+                          const val = e.target.value.trim();
+                          if (val) setBlocks(prev => prev.map(b => b.id === block.id ? { ...b, filePath: val } : b));
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-foreground/80 font-mono truncate">{block.filePath}</span>
+                  )}
                   <span className="text-[8px] text-muted-foreground/50 shrink-0">{block.code.split('\n').length} lines</span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {!block.applied && (
                     <>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(block.code); }}
+                        data-testid={`button-copy-${block.id}`}
+                        className="flex items-center gap-1 px-2 py-0.5 rounded bg-secondary/50 text-muted-foreground hover:bg-secondary/80 text-[9px] transition-colors"
+                        title="Copy code to clipboard"
+                      >
+                        <Copy className="w-2.5 h-2.5" /> Copy
+                      </button>
                       <button onClick={() => validate(block)} data-testid={`button-check-${block.id}`} className="flex items-center gap-1 px-2 py-0.5 rounded bg-secondary text-secondary-foreground hover:bg-secondary/80 text-[9px] transition-colors">
                         <Shield className="w-2.5 h-2.5" /> Check
                       </button>
@@ -784,7 +819,8 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
