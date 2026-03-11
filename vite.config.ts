@@ -583,24 +583,42 @@ function projectManagementPlugin(): Plugin {
               return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", portStr] };
             }
 
-            if (!hasPkg && fs.existsSync(path.join(projectDir, "index.html"))) {
-              return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", portStr] };
+            if (!hasPkg) {
+              const hasAnyHtml = fs.existsSync(path.join(projectDir, "index.html")) || 
+                (fs.readdirSync(projectDir).some((f: string) => f.endsWith(".html")));
+              if (hasAnyHtml) return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", portStr] };
             }
 
             return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", portStr] };
           };
 
-          if (!hasPkg && fs.existsSync(path.join(projectDir, "index.html"))) {
-            console.log(`[Preview] Static HTML project detected for ${name}, bootstrapping with vite`);
-            const minPkg = { name, private: true, devDependencies: { vite: "^5" } };
-            fs.writeFileSync(path.join(projectDir, "package.json"), JSON.stringify(minPkg, null, 2));
-            try {
-              const { execSync: es } = await import("child_process");
-              es("npm install", { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true });
-            } catch (e: any) {
-              console.log(`[Preview] Static HTML bootstrap install warning: ${e.message?.slice(0, 200)}`);
+          if (!hasPkg) {
+            let hasRootIndex = fs.existsSync(path.join(projectDir, "index.html"));
+            if (!hasRootIndex) {
+              try {
+                const dirFiles = fs.readdirSync(projectDir);
+                const htmlFiles = dirFiles.filter((f: string) => f.endsWith(".html") && f !== "index.html");
+                if (htmlFiles.length > 0) {
+                  const primaryHtml = htmlFiles[0];
+                  const redirectContent = `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=/${primaryHtml}"><title>Redirect</title></head><body><a href="/${primaryHtml}">Open</a></body></html>`;
+                  fs.writeFileSync(path.join(projectDir, "index.html"), redirectContent);
+                  hasRootIndex = true;
+                  console.log(`[Preview] Created index.html redirect to ${primaryHtml} for ${name}`);
+                }
+              } catch {}
             }
-            pkg = JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf-8"));
+            if (hasRootIndex) {
+              console.log(`[Preview] Static HTML project detected for ${name}, bootstrapping with vite`);
+              const minPkg = { name, private: true, devDependencies: { vite: "^5" } };
+              fs.writeFileSync(path.join(projectDir, "package.json"), JSON.stringify(minPkg, null, 2));
+              try {
+                const { execSync: es } = await import("child_process");
+                es("npm install", { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true });
+              } catch (e: any) {
+                console.log(`[Preview] Static HTML bootstrap install warning: ${e.message?.slice(0, 200)}`);
+              }
+              pkg = JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf-8"));
+            }
           }
 
           const patchPortInEnvFiles = () => {
