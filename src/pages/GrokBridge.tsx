@@ -36,7 +36,9 @@ import {
   cleanedResponseToBlocks,
   suggestQuickActions,
   clearAvailabilityCache,
+  clearResolvedModelCache,
   toasterReadyTest,
+  toasterChat,
   resolveModel,
   type OllamaToasterConfig,
   type ToasterAnalysis,
@@ -1337,6 +1339,12 @@ const GrokBridge: React.FC = () => {
   const [resolvedModelName, setResolvedModelName] = useState<string | null>(null);
   const [testedModelName, setTestedModelName] = useState<string | null>(null);
   const [toasterTestPending, setToasterTestPending] = useState(false);
+  const [toasterChatOpen, setToasterChatOpen] = useState(false);
+  const [toasterChatInput, setToasterChatInput] = useState('');
+  const [toasterChatMessages, setToasterChatMessages] = useState<{ role: 'user' | 'assistant'; text: string }[]>([]);
+  const [toasterChatPending, setToasterChatPending] = useState(false);
+  const toasterChatInputRef = useRef<HTMLInputElement>(null);
+  const toasterChatScrollRef = useRef<HTMLDivElement>(null);
   const [previewLogs, setPreviewLogs] = useState<LogEntry[]>([]);
   const [githubImportProgress, setGithubImportProgress] = useState<GitHubImportProgress | null>(null);
   const [detectedRepoUrl, setDetectedRepoUrl] = useState<string | null>(null);
@@ -3481,6 +3489,7 @@ const GrokBridge: React.FC = () => {
                   saveToasterConfig(newConfig);
                   setToasterConfig(newConfig);
                   clearAvailabilityCache();
+                  clearResolvedModelCache();
                   checkToasterAvailability(newConfig).then(setToasterAvailability);
                   setShowSettings(false);
                   setStatusMessage('Settings saved');
@@ -3637,8 +3646,11 @@ const GrokBridge: React.FC = () => {
           {toasterAvailability !== null && (
             <div className="relative shrink-0">
               <button
-                onClick={async () => {
+                onClick={() => setToasterChatOpen(prev => !prev)}
+                onContextMenu={async (e) => {
+                  e.preventDefault();
                   clearAvailabilityCache();
+                  clearResolvedModelCache();
                   const result = await checkToasterAvailability(toasterConfig);
                   setToasterAvailability(result);
                   if (result.available) {
@@ -3660,8 +3672,8 @@ const GrokBridge: React.FC = () => {
                 }`}
                 data-testid="button-ollama-toaster"
                 title={toasterAvailability.available
-                  ? `Connected — ${toasterAvailability.models.slice(0, 3).join(', ')}${toasterAvailability.version ? ` (v${toasterAvailability.version})` : ''}${resolvedModelName ? `\nUsing: ${resolvedModelName}` : ''}\nClick to ping toaster`
-                  : `${toasterAvailability.error || 'Not connected'}\nClick to retry connection`
+                  ? `Connected — ${toasterAvailability.models.slice(0, 3).join(', ')}${toasterAvailability.version ? ` (v${toasterAvailability.version})` : ''}${resolvedModelName ? `\nUsing: ${resolvedModelName}` : ''}\nClick to open chat · Right-click to re-ping`
+                  : `${toasterAvailability.error || 'Not connected'}\nClick to open chat · Right-click to retry`
                 }
               >
                 {toasterTestPending ? (
@@ -3680,37 +3692,156 @@ const GrokBridge: React.FC = () => {
             </div>
           )}
 
-          {toasterReadyMsg && (
+          {toasterChatOpen && (
             <div
-              className="fixed z-[9999] px-4 py-2.5 rounded-lg shadow-xl border text-[11px] font-medium max-w-[90vw]"
+              className="fixed z-[9999] flex flex-col rounded-lg shadow-2xl border overflow-hidden"
               style={{
                 bottom: '52px',
                 left: '50%',
                 transform: 'translateX(-50%)',
-                background: toasterReadyMsg.startsWith('Test failed')
-                  ? 'hsl(0, 60%, 15%)'
-                  : toasterReadyMsg.includes('...')
-                    ? 'hsl(220, 40%, 15%)'
-                    : 'hsl(150, 60%, 12%)',
-                color: toasterReadyMsg.startsWith('Test failed')
-                  ? 'hsl(0, 80%, 75%)'
-                  : toasterReadyMsg.includes('...')
-                    ? 'hsl(220, 60%, 75%)'
-                    : 'hsl(150, 70%, 75%)',
-                borderColor: toasterReadyMsg.startsWith('Test failed')
-                  ? 'hsla(0, 60%, 40%, 0.5)'
-                  : toasterReadyMsg.includes('...')
-                    ? 'hsla(220, 40%, 40%, 0.5)'
-                    : 'hsla(150, 60%, 35%, 0.5)',
-                animation: 'toasterBubbleIn 0.3s ease-out',
+                width: 'min(400px, 90vw)',
+                maxHeight: 'min(360px, 50vh)',
+                background: 'hsl(220, 25%, 10%)',
+                borderColor: toasterAvailability?.available ? 'hsla(150, 60%, 35%, 0.4)' : 'hsla(0, 0%, 40%, 0.3)',
+                animation: 'toasterBubbleIn 0.2s ease-out',
               }}
-              data-testid="bubble-toaster-ready"
+              data-testid="panel-toaster-chat"
             >
-              {toasterReadyMsg.includes('...') && (
-                <Loader2 className="w-3 h-3 animate-spin inline mr-1.5 -mt-0.5" />
-              )}
-              {toasterReadyMsg.startsWith('Test failed') ? '⚠ ' : !toasterReadyMsg.includes('...') ? '🍞 ' : ''}
-              {toasterReadyMsg}
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/30" style={{ background: 'hsl(220, 25%, 13%)' }}>
+                <span className="text-[10px] font-medium text-muted-foreground flex items-center gap-1.5">
+                  <Bot className="w-3 h-3" />
+                  Toaster Chat
+                  {resolvedModelName && <span className="text-[9px] opacity-60">({resolvedModelName})</span>}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={async () => {
+                      clearAvailabilityCache();
+                      clearResolvedModelCache();
+                      const result = await checkToasterAvailability(toasterConfig);
+                      setToasterAvailability(result);
+                      if (result.available) {
+                        fireToasterReadyTest(toasterConfig);
+                        setStatusMessage(`Toaster connected — ${result.models.length} model${result.models.length !== 1 ? 's' : ''}`);
+                      } else {
+                        setStatusMessage(`Toaster: ${result.error || 'Connection failed'}`);
+                      }
+                    }}
+                    className={`text-[9px] px-1.5 py-0.5 rounded border ${
+                      toasterAvailability?.available
+                        ? 'bg-[hsl(150_60%_40%/0.1)] text-[hsl(150_60%_55%)] border-[hsl(150_60%_40%/0.2)] hover:bg-[hsl(150_60%_40%/0.2)]'
+                        : 'bg-[hsl(45_80%_40%/0.15)] text-[hsl(45_80%_60%)] border-[hsl(45_80%_40%/0.2)] hover:bg-[hsl(45_80%_40%/0.25)]'
+                    }`}
+                    data-testid="button-toaster-ping"
+                  >
+                    {toasterTestPending ? 'Pinging...' : toasterAvailability?.available ? 'Ping' : 'Retry'}
+                  </button>
+                  <button
+                    onClick={() => setToasterChatOpen(false)}
+                    className="text-muted-foreground/60 hover:text-muted-foreground px-1"
+                    data-testid="button-toaster-chat-close"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              <div ref={toasterChatScrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-[60px]" style={{ maxHeight: 'min(240px, 35vh)' }}>
+                {toasterChatMessages.length === 0 && !toasterChatPending && (
+                  <div className="text-[10px] text-muted-foreground/50 text-center py-4">
+                    {toasterAvailability?.available
+                      ? `Type a message to test Ollama (${resolvedModelName || 'auto-detect'})`
+                      : `Ollama not detected at ${toasterConfig.endpoint}\nMake sure Ollama is running and has at least one model installed.`
+                    }
+                  </div>
+                )}
+                {toasterReadyMsg && toasterChatMessages.length === 0 && (
+                  <div className={`text-[10px] px-2 py-1.5 rounded ${
+                    toasterReadyMsg.startsWith('Test failed')
+                      ? 'bg-[hsl(0_60%_15%)] text-[hsl(0_80%_75%)] border border-[hsl(0_60%_40%/0.3)]'
+                      : toasterReadyMsg.includes('...')
+                        ? 'bg-[hsl(220_40%_15%)] text-[hsl(220_60%_75%)] border border-[hsl(220_40%_40%/0.3)]'
+                        : 'bg-[hsl(150_60%_12%)] text-[hsl(150_70%_75%)] border border-[hsl(150_60%_35%/0.3)]'
+                  }`}>
+                    {toasterReadyMsg.includes('...') && <Loader2 className="w-3 h-3 animate-spin inline mr-1.5 -mt-0.5" />}
+                    {toasterReadyMsg.startsWith('Test failed') ? '⚠ ' : !toasterReadyMsg.includes('...') ? '🍞 ' : ''}
+                    {toasterReadyMsg}
+                  </div>
+                )}
+                {toasterChatMessages.map((msg, i) => (
+                  <div key={i} className={`text-[10px] px-2 py-1.5 rounded whitespace-pre-wrap break-words ${
+                    msg.role === 'user'
+                      ? 'bg-[hsl(220_40%_18%)] text-[hsl(220_60%_80%)] ml-6'
+                      : 'bg-[hsl(150_30%_14%)] text-[hsl(150_40%_80%)] mr-6'
+                  }`} data-testid={`text-toaster-msg-${i}`}>
+                    {msg.text}
+                  </div>
+                ))}
+                {toasterChatPending && (
+                  <div className="text-[10px] text-muted-foreground/50 flex items-center gap-1.5 px-2">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Thinking...
+                  </div>
+                )}
+              </div>
+
+              <form
+                className="flex items-center gap-1.5 px-2 py-1.5 border-t border-border/30"
+                style={{ background: 'hsl(220, 25%, 12%)' }}
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const msg = toasterChatInput.trim();
+                  if (!msg || toasterChatPending) return;
+                  setToasterChatInput('');
+                  setToasterChatMessages(prev => [...prev, { role: 'user', text: msg }]);
+                  setToasterChatPending(true);
+                  setTimeout(() => toasterChatScrollRef.current?.scrollTo({ top: 999999 }), 50);
+                  try {
+                    if (!toasterAvailability?.available) {
+                      clearAvailabilityCache();
+                      clearResolvedModelCache();
+                      const result = await checkToasterAvailability(toasterConfig);
+                      setToasterAvailability(result);
+                      if (!result.available) {
+                        setToasterChatMessages(prev => [...prev, { role: 'assistant', text: `Cannot connect to Ollama at ${toasterConfig.endpoint}. Is it running?` }]);
+                        return;
+                      }
+                      fireToasterReadyTest(toasterConfig);
+                    }
+                    const result = await toasterChat(msg, toasterConfig);
+                    if (!resolvedModelName) setResolvedModelName(result.model);
+                    setToasterChatMessages(prev => [...prev, { role: 'assistant', text: result.reply || '(empty response)' }]);
+                  } catch (err: any) {
+                    setToasterChatMessages(prev => [...prev, { role: 'assistant', text: `Error: ${err.message || 'Unknown error'}` }]);
+                  } finally {
+                    setToasterChatPending(false);
+                    setTimeout(() => {
+                      toasterChatScrollRef.current?.scrollTo({ top: 999999 });
+                      toasterChatInputRef.current?.focus();
+                    }, 50);
+                  }
+                }}
+                data-testid="form-toaster-chat"
+              >
+                <input
+                  ref={toasterChatInputRef}
+                  type="text"
+                  value={toasterChatInput}
+                  onChange={e => setToasterChatInput(e.target.value)}
+                  placeholder={toasterAvailability?.available ? 'Say something to test Ollama...' : 'Ollama offline — type to retry...'}
+                  className="flex-1 bg-[hsl(220_20%_16%)] text-[11px] text-foreground rounded px-2 py-1.5 border border-border/20 focus:outline-none focus:border-[hsl(150_60%_40%/0.4)] placeholder:text-muted-foreground/30"
+                  disabled={toasterChatPending}
+                  autoFocus
+                  data-testid="input-toaster-chat"
+                />
+                <button
+                  type="submit"
+                  disabled={toasterChatPending || !toasterChatInput.trim()}
+                  className="px-2 py-1.5 rounded text-[10px] font-medium bg-[hsl(150_60%_40%/0.2)] text-[hsl(150_60%_55%)] border border-[hsl(150_60%_40%/0.3)] hover:bg-[hsl(150_60%_40%/0.3)] disabled:opacity-30 disabled:cursor-not-allowed"
+                  data-testid="button-toaster-send"
+                >
+                  Send
+                </button>
+              </form>
             </div>
           )}
 

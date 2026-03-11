@@ -9,7 +9,7 @@ const TOASTER_CONFIG_KEY = 'ollama-toaster-config';
 
 const DEFAULT_TOASTER_CONFIG: OllamaToasterConfig = {
   endpoint: 'http://localhost:11434',
-  model: 'qwen2.5-coder:7b',
+  model: 'auto',
 };
 
 export function loadToasterConfig(): OllamaToasterConfig {
@@ -90,42 +90,86 @@ export async function toasterReadyTest(config?: OllamaToasterConfig, preResolved
 export async function resolveModel(config: OllamaToasterConfig): Promise<string> {
   const availability = await checkToasterAvailability(config);
   if (!availability.available || availability.models.length === 0) {
-    return config.model;
+    return config.model === 'auto' ? 'qwen2.5-coder:1.5b' : config.model;
   }
-  const installed = availability.models.map(m => m.toLowerCase());
-  if (installed.some(m => m.startsWith(config.model.toLowerCase().split(':')[0]))) {
-    const match = availability.models.find(m =>
-      m.toLowerCase().startsWith(config.model.toLowerCase().split(':')[0])
-    );
-    return match || config.model;
+  if (config.model !== 'auto') {
+    const installed = availability.models.map(m => m.toLowerCase());
+    if (installed.some(m => m.startsWith(config.model.toLowerCase().split(':')[0]))) {
+      const match = availability.models.find(m =>
+        m.toLowerCase().startsWith(config.model.toLowerCase().split(':')[0])
+      );
+      return match || config.model;
+    }
   }
-  const preferred = ['qwen2.5-coder', 'qwen2.5', 'llama3', 'codellama', 'deepseek-coder', 'mistral', 'phi'];
+  const preferred = [
+    'qwen2.5-coder:1.5b', 'qwen2.5-coder:3b', 'qwen2.5-coder:0.5b',
+    'gemma2:2b', 'phi3:mini', 'phi3:3.8b', 'phi',
+    'qwen2.5-coder:7b', 'qwen2.5-coder',
+    'deepseek-coder:1.3b', 'deepseek-coder:6.7b', 'deepseek-coder',
+    'codellama:7b', 'codellama',
+    'qwen2.5:0.5b', 'qwen2.5:1.5b', 'qwen2.5:3b', 'qwen2.5',
+    'llama3.2:1b', 'llama3.2:3b', 'llama3.1:8b', 'llama3',
+    'mistral',
+  ];
   for (const pref of preferred) {
-    const match = availability.models.find(m => m.toLowerCase().includes(pref));
+    const match = availability.models.find(m => m.toLowerCase().startsWith(pref));
+    if (match) return match;
+  }
+  for (const pref of preferred) {
+    const base = pref.split(':')[0];
+    const match = availability.models.find(m => m.toLowerCase().includes(base));
     if (match) return match;
   }
   return availability.models[0];
 }
 
+let _resolvedModel: string | null = null;
+let _resolvedModelTs = 0;
+let _resolvedModelKey = '';
+const RESOLVED_MODEL_TTL = 120_000;
+
+function configCacheKey(config: OllamaToasterConfig): string {
+  return `${config.endpoint}||${config.model}`;
+}
+
+export async function getResolvedModel(config: OllamaToasterConfig): Promise<string> {
+  const now = Date.now();
+  const key = configCacheKey(config);
+  if (_resolvedModel && now - _resolvedModelTs < RESOLVED_MODEL_TTL && _resolvedModelKey === key) return _resolvedModel;
+  _resolvedModel = await resolveModel(config);
+  _resolvedModelTs = now;
+  _resolvedModelKey = key;
+  return _resolvedModel;
+}
+
+export function clearResolvedModelCache(): void {
+  _resolvedModel = null;
+  _resolvedModelTs = 0;
+  _resolvedModelKey = '';
+}
+
 async function ollamaGenerate(prompt: string, config?: OllamaToasterConfig): Promise<string> {
   const cfg = config || loadToasterConfig();
-  const model = await resolveModel(cfg);
+  const model = await getResolvedModel(cfg);
+  const promptLen = prompt.length;
+  const maxTokens = promptLen > 8000 ? 1024 : promptLen > 4000 ? 768 : 512;
   const resp = await fetch(`${cfg.endpoint}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: 'You are a code analysis assistant. Output ONLY what is requested, no extra commentary.' },
+        { role: 'system', content: 'You are a code analysis assistant. Output ONLY valid JSON, no commentary.' },
         { role: 'user', content: prompt },
       ],
       stream: false,
       options: {
         temperature: 0.0,
-        num_predict: 2048,
+        num_predict: maxTokens,
       },
+      keep_alive: '5m',
     }),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(45_000),
   });
 
   if (!resp.ok) {
@@ -164,26 +208,14 @@ export async function analyzeLogsForContext(
         .join('\n\n')
     : '';
 
-  const prompt = `You are a log analyzer and file selector. Do NOT invent code, fixes, explanations, or suggestions. Only analyze and output JSON.
+  const prompt = `Analyze errors. Output ONLY valid JSON.
 
-Given the following console/build logs and project file tree, identify which files are affected by the errors and what the errors are about.
+LOGS: ${logs.slice(0, 3000)}
 
-=== LOGS ===
-${logs.slice(0, 4000)}
+FILES: ${filesSection}
+${contentsSection ? `\nCONTENTS:\n${contentsSection}` : ''}
 
-=== FILE TREE ===
-${filesSection}
-
-${contentsSection ? `=== FILE CONTENTS ===\n${contentsSection}` : ''}
-
-Output ONLY valid JSON in this exact format, nothing else:
-{
-  "error_summary": "brief one-line summary of what went wrong",
-  "affected_files": ["path/to/file1.ts", "path/to/file2.tsx"],
-  "missing_files": ["path/to/missing-import.ts"],
-  "priority": "critical|high|medium|low",
-  "suggested_context_to_include": ["path/to/related-file.ts"]
-}`;
+JSON: {"error_summary":"one-line","affected_files":["path"],"missing_files":["path"],"priority":"critical|high|medium|low","suggested_context_to_include":["path"]}`;
 
   try {
     const response = await ollamaGenerate(prompt, config);
@@ -277,38 +309,14 @@ export async function cleanGrokResponse(
   const availability = await checkToasterAvailability(config);
   if (!availability.available) return null;
 
-  const truncated = rawResponse.slice(0, 12000);
+  const truncated = rawResponse.slice(0, 8000);
 
-  const prompt = `You are a response parser. Do NOT interpret, fix, or add anything. Only extract and reformat exactly what is present in the following AI assistant response.
+  const prompt = `Extract code blocks from this AI response. Output ONLY valid JSON.
 
-Extract all code blocks with their file paths and the reasoning/explanation text.
-
-=== RAW RESPONSE ===
 ${truncated}
-=== END RAW RESPONSE ===
 
-Output ONLY valid JSON in this exact format, nothing else:
-{
-  "reasoning": "the explanation text from the response (non-code parts summarized)",
-  "files": [
-    {
-      "path": "src/example.ts",
-      "action": "create|update|delete|replace",
-      "content": "the full file content from the code block",
-      "diff": "",
-      "original_block": "the raw code block as it appeared"
-    }
-  ],
-  "unparsed_text": "any text that could not be categorized"
-}
-
-Rules:
-- Extract EVERY code block that has a file path
-- The "path" must be the file path referenced in or above the code block (e.g. from "// file: path" comments or markdown headings)
-- The "content" must be the EXACT code from the block, do not modify it
-- The "action" should be "create" for new files, "update" for modifications, "replace" for full rewrites, "delete" for deletions
-- If a code block has no identifiable file path, still include it with path as empty string
-- Do NOT invent or modify any code content`;
+JSON format: {"reasoning":"brief summary","files":[{"path":"src/file.ts","action":"update","content":"exact code","diff":"","original_block":""}],"unparsed_text":""}
+Rules: path from "// file:" or heading. content = exact code. action: create/update/replace/delete. No path = empty string.`;
 
   try {
     const response = await ollamaGenerate(prompt, config);
@@ -475,38 +483,13 @@ export async function suggestQuickActions(
   const tsxFiles = fileTree.filter(f => f.endsWith('.tsx') || f.endsWith('.jsx'));
   const depsStr = packageJson ? Object.keys({ ...(packageJson.dependencies || {}), ...(packageJson.devDependencies || {}) }).join(', ') : 'unknown';
 
-  const prompt = `You are a project analyzer. Given a project's file tree and dependencies, suggest 3-5 high-impact quick actions the developer should take next.
+  const prompt = `Suggest 3-5 quick actions for this project. Output ONLY valid JSON array.
 
-=== FILE TREE (${fileTree.length} files) ===
-${fileTree.slice(0, 60).join('\n')}
-${fileTree.length > 60 ? `... (${fileTree.length} total)` : ''}
+Files(${fileTree.length}): ${fileTree.slice(0, 40).join(', ')}
+Deps: ${depsStr.slice(0, 500)}
+Errors: ${errorCount}
 
-=== DEPENDENCIES ===
-${depsStr}
-
-=== CSS CONTENT SNIPPET ===
-${cssContent.slice(0, 1000)}
-
-=== ERROR COUNT ===
-${errorCount}
-
-Output ONLY valid JSON array of objects with this exact format, nothing else:
-[
-  {
-    "id": "unique-id",
-    "label": "Short button label (3-5 words)",
-    "icon": "LucideIconName",
-    "prompt": "Detailed prompt the developer should send to an AI assistant. Reference specific files from the tree. Be specific about what to change.",
-    "category": "fix|enhance|add|optimize"
-  }
-]
-
-Rules:
-- Suggest 3-5 actions only
-- Prioritize fixes if errors exist
-- Reference actual file paths from the tree
-- Each prompt should be detailed and actionable
-- Categories: "fix" for bugs/errors, "enhance" for improvements, "add" for new features, "optimize" for performance`;
+JSON: [{"id":"x","label":"3-5 words","icon":"LucideIcon","prompt":"detailed action referencing file paths","category":"fix|enhance|add|optimize"}]`;
 
   try {
     const response = await ollamaGenerate(prompt, config);
@@ -531,6 +514,28 @@ Rules:
   } catch {
     return { usedOllama: true, actions: heuristic };
   }
+}
+
+export async function toasterChat(
+  message: string,
+  config?: OllamaToasterConfig
+): Promise<{ model: string; reply: string }> {
+  const cfg = config || loadToasterConfig();
+  const model = await getResolvedModel(cfg);
+  const resp = await fetch(`${cfg.endpoint}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: 'user', content: message }],
+      stream: false,
+      options: { temperature: 0.7, num_predict: 256 },
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!resp.ok) throw new Error(`Ollama ${resp.status}`);
+  const data = await resp.json();
+  return { model, reply: (data.message?.content || '').trim() };
 }
 
 export function formatAnalysisForPrompt(analysis: ToasterAnalysis): string {

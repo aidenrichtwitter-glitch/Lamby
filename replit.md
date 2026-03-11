@@ -168,11 +168,13 @@ supabase/
 - **Post-Grok (Response Cleaner)**: Takes raw Grok response → extracts code blocks into structured `{ reasoning, files: [{ path, action, content }], unparsed_text }` → falls back to regex parser if Ollama unavailable
 - **Quick Actions Analyzer** (`suggestQuickActions`): Analyzes project state to generate smart context-aware action buttons. Ollama-first with heuristic fallback. Suggests actions like "Fix N errors", "Add dark mode", "Add authentication", "Improve styling".
 - **Graceful degradation**: If Ollama not running (`localhost:11434`), falls back to existing behavior (raw file concat + regex parsing + heuristic quick actions)
-- **Config**: Endpoint URL + model name stored in localStorage, configurable in settings
-- **Recommended models**: `qwen2.5-coder:7b`, `llama3.2:3b`, `phi-3.5-mini`
-- UI shows "Toaster" status badge in top bar (green=connected, muted=off). **Clickable** — click to test connection with clear success/failure feedback
+- **Config**: Endpoint URL + model name stored in localStorage, configurable in settings. Default model is `auto` (picks fastest available model).
+- **Auto-detect**: Default model is `auto`. Prefers smallest/fastest models: `qwen2.5-coder:1.5b` > `qwen2.5-coder:3b` > `gemma2:2b` > `phi3:mini` > any installed model. Resolved model is cached for 2 minutes (config-scoped: cache invalidates when endpoint/model changes).
+- **Mini Chat Popup**: Click the Toaster button → opens chat popup with text input. Send any message to test Ollama is loaded and working. Shows resolved model name, message history. "Ping" button in popup header for connectivity testing. Auto-retries connection on first message if Ollama was offline.
+- **Performance optimizations**: (1) Resolved model cached to avoid repeated `/api/tags` round-trips, (2) `num_predict` scaled by prompt size (512–1024 vs previous 2048), (3) `keep_alive: '5m'` keeps model loaded in memory between requests, (4) prompts shortened/condensed to reduce input token count.
 - **Periodic health polling**: Checks connection every 60 seconds. Shows status message when connection state changes (connected/disconnected)
 - **Diagnostic errors**: Connection check now returns specific reasons: "Connection refused", "Timeout", "No models found — run ollama pull", etc.
+- **GPU acceleration**: Ollama automatically uses GPU when available — no hidden terminal needed. The HTTP API at `localhost:11434` is the standard interface. The main slowness factors were: (1) 7B default model (now prefers 1.5B), (2) `num_predict: 2048` (now 512–1024), (3) model re-resolution on every call (now cached), (4) verbose prompts (now condensed).
 
 ## Auto-Apply & Safety Validation
 - **Auto-Apply Toggle**: Zap icon button in toolbar, persisted in localStorage
