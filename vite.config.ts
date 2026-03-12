@@ -761,24 +761,61 @@ function projectManagementPlugin(): Plugin {
           const launchExecutable = (exePath: string, label: string) => {
             const safeExe = normPath(path.resolve(exePath));
             const exeDir = normPath(path.dirname(safeExe));
+            const ext = path.extname(safeExe).toLowerCase();
+            console.log(`[Preview] Attempting to launch: ${safeExe} (ext: ${ext}, cwd: ${exeDir})`);
             try {
               if (isWin) {
-                try {
-                  execSync(`start "" "${safeExe}"`, { cwd: exeDir, shell: true, windowsHide: false, stdio: "ignore", timeout: 10000 });
-                } catch {
+                if (ext === ".msi") {
+                  const batPath = path.join(exeDir, "__guardian_launch.bat");
+                  fs.writeFileSync(batPath, `@echo off\r\ncd /d "${exeDir}"\r\nmsiexec /i "${safeExe}"\r\n`);
+                  const child = spawn("cmd.exe", ["/c", batPath], { cwd: exeDir, detached: true, stdio: "ignore", windowsHide: false });
+                  child.unref();
+                  console.log(`[Preview] Launched MSI installer via msiexec`);
+                } else {
+                  const batPath = path.join(exeDir, "__guardian_launch.bat");
+                  fs.writeFileSync(batPath, `@echo off\r\ncd /d "${exeDir}"\r\necho [Guardian AI] Launching ${path.basename(safeExe)}...\r\n"${safeExe}"\r\n`);
+                  console.log(`[Preview] Wrote launch batch file: ${batPath}`);
+                  let launched = false;
                   try {
-                    spawn(safeExe, [], { cwd: exeDir, detached: true, stdio: "ignore", shell: false });
-                  } catch {
-                    const batPath = path.join(exeDir, "__guardian_launch.bat");
-                    fs.writeFileSync(batPath, `@echo off\r\ncd /d "${exeDir}"\r\nstart "" "${safeExe}"\r\n`);
-                    spawn("cmd.exe", ["/c", batPath], { cwd: exeDir, detached: true, stdio: "ignore" });
+                    const child = spawn("cmd.exe", ["/c", "start", '""', batPath], { cwd: exeDir, detached: true, stdio: "ignore", windowsHide: false, shell: true });
+                    child.unref();
+                    launched = true;
+                    console.log(`[Preview] Method 1 (start bat): spawned`);
+                  } catch (e1: any) {
+                    console.log(`[Preview] Method 1 failed: ${e1.message?.slice(0, 100)}`);
+                  }
+                  if (!launched) {
+                    try {
+                      const child = spawn(safeExe, [], { cwd: exeDir, detached: true, stdio: "ignore" });
+                      child.unref();
+                      launched = true;
+                      console.log(`[Preview] Method 2 (direct spawn): spawned`);
+                    } catch (e2: any) {
+                      console.log(`[Preview] Method 2 failed: ${e2.message?.slice(0, 100)}`);
+                    }
+                  }
+                  if (!launched) {
+                    try {
+                      const child = spawn("cmd.exe", ["/c", batPath], { cwd: exeDir, detached: true, stdio: "ignore", windowsHide: false });
+                      child.unref();
+                      launched = true;
+                      console.log(`[Preview] Method 3 (cmd /c bat): spawned`);
+                    } catch (e3: any) {
+                      console.log(`[Preview] Method 3 failed: ${e3.message?.slice(0, 100)}`);
+                    }
+                  }
+                  if (!launched) {
+                    console.error(`[Preview] All launch methods failed for ${safeExe}`);
+                    return false;
                   }
                 }
               } else if (isMac) {
-                spawn("open", [safeExe], { detached: true, stdio: "ignore" });
+                const child = spawn("open", [safeExe], { detached: true, stdio: "ignore" });
+                child.unref();
               } else {
                 try { fs.chmodSync(safeExe, 0o755); } catch {}
-                spawn(safeExe, [], { cwd: exeDir, detached: true, stdio: "ignore" });
+                const child = spawn(safeExe, [], { cwd: exeDir, detached: true, stdio: "ignore" });
+                child.unref();
               }
               console.log(`[Preview] Launched executable for ${label}: ${safeExe}`);
               return true;
@@ -807,19 +844,27 @@ function projectManagementPlugin(): Plugin {
               return { ...e, score };
             }).sort((a, b) => b.score - a.score);
             const best = scored[0];
+            const bestLower = best.name.toLowerCase();
+            const isInstaller = INSTALLER_HINTS.some(h => bestLower.includes(h)) || best.ext === ".msi";
             const launched = launchExecutable(best.fullPath, name);
-            const allExeNames = executables.map(e => e.name).slice(0, 10).join(", ");
+            const allExeNames = scored.map(e => `${e.name} (score:${e.score})`).slice(0, 10).join(", ");
             console.log(`[Preview] Precompiled binaries found for ${name}: ${allExeNames}`);
+            console.log(`[Preview] Selected: ${best.name} (installer: ${isInstaller})`);
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({
               started: false,
-              projectType: "precompiled",
+              projectType: isInstaller ? "installer" : "precompiled",
               openTerminal: true,
               launched,
+              isInstaller,
               runCommand: `"${best.fullPath}"`,
               projectDir: projectDir,
-              executables: executables.map(e => ({ name: e.name, path: e.fullPath, ext: e.ext })).slice(0, 20),
-              message: launched ? `Launched ${best.name}` : `Found precompiled app: ${best.name} — could not auto-launch`,
+              executables: scored.map(e => ({ name: e.name, path: e.fullPath, ext: e.ext, score: e.score })).slice(0, 20),
+              message: launched
+                ? isInstaller
+                  ? `Launching installer: ${best.name} — follow the setup wizard to install`
+                  : `Launched ${best.name}`
+                : `Found: ${best.name} — could not auto-launch`,
             }));
             return;
           }
@@ -1026,16 +1071,25 @@ function projectManagementPlugin(): Plugin {
                   const relData: any = await relResp.json();
                   const BINARY_EXTS = [".exe", ".msi", ".appimage", ".dmg", ".deb", ".rpm", ".zip", ".tar.gz", ".7z"];
                   const osPlatform = os.platform();
-                  const platformHints = osPlatform === "win32" ? ["win", "windows", "x64", "x86_64", "amd64"]
-                    : osPlatform === "darwin" ? ["mac", "macos", "darwin", "arm64", "x64", "universal"]
-                    : ["linux", "x64", "x86_64", "amd64"];
+                  const osArch = os.arch();
+                  const platformHints = osPlatform === "win32" ? ["win", "windows"] : osPlatform === "darwin" ? ["mac", "macos", "darwin"] : ["linux"];
+                  const goodArchHints = osArch === "arm64" ? ["arm64", "aarch64"] : ["x64", "x86_64", "amd64", "win64"];
+                  const badArchHints = osArch === "arm64" ? ["x64", "x86_64", "amd64", "win64"] : ["arm64", "aarch64"];
+                  const INSTALLER_KW = ["installer", "setup", "install"];
                   const assets = (relData.assets || [])
                     .filter((a: any) => BINARY_EXTS.some(ext => a.name.toLowerCase().endsWith(ext)))
-                    .sort((a: any, b: any) => {
-                      const aMatch = platformHints.some(h => a.name.toLowerCase().includes(h));
-                      const bMatch = platformHints.some(h => b.name.toLowerCase().includes(h));
-                      return aMatch === bMatch ? 0 : aMatch ? -1 : 1;
-                    });
+                    .map((a: any) => {
+                      const ln = a.name.toLowerCase();
+                      let score = 0;
+                      if (platformHints.some(h => ln.includes(h))) score += 20;
+                      if (goodArchHints.some(h => ln.includes(h))) score += 10;
+                      if (badArchHints.some(h => ln.includes(h))) score -= 15;
+                      if (ln.includes("portable")) score += 25;
+                      if (INSTALLER_KW.some(h => ln.includes(h))) score -= 5;
+                      if (ln.endsWith(".zip")) score += 3;
+                      return { ...a, _score: score };
+                    })
+                    .sort((a: any, b: any) => b._score - a._score);
                   if (assets.length > 0) {
                     const relDir = path.join(projectDir, "_releases");
                     fs.mkdirSync(relDir, { recursive: true });
@@ -2635,18 +2689,24 @@ function projectManagementPlugin(): Plugin {
                 const BINARY_EXTS = [".exe", ".msi", ".appimage", ".dmg", ".deb", ".rpm", ".zip", ".tar.gz", ".7z", ".snap", ".flatpak"];
                 const osPlatform = os.platform();
                 const osArch = os.arch();
-                const platformHints = osPlatform === "win32" ? ["win", "windows", "x64", "x86_64", "amd64"]
-                  : osPlatform === "darwin" ? ["mac", "macos", "darwin", "arm64", "x64", "universal"]
-                  : ["linux", "x64", "x86_64", "amd64", osArch];
+                const platformHints = osPlatform === "win32" ? ["win", "windows"] : osPlatform === "darwin" ? ["mac", "macos", "darwin"] : ["linux"];
+                const goodArchHints = osArch === "arm64" ? ["arm64", "aarch64"] : ["x64", "x86_64", "amd64", "win64"];
+                const badArchHints = osArch === "arm64" ? ["x64", "x86_64", "amd64", "win64"] : ["arm64", "aarch64"];
+                const INSTALLER_KW = ["installer", "setup", "install"];
                 const assets = (relData.assets || [])
                   .filter((a: any) => BINARY_EXTS.some(ext => a.name.toLowerCase().endsWith(ext)))
-                  .sort((a: any, b: any) => {
-                    const aMatch = platformHints.some(h => a.name.toLowerCase().includes(h));
-                    const bMatch = platformHints.some(h => b.name.toLowerCase().includes(h));
-                    if (aMatch && !bMatch) return -1;
-                    if (!aMatch && bMatch) return 1;
-                    return 0;
-                  });
+                  .map((a: any) => {
+                    const ln = a.name.toLowerCase();
+                    let score = 0;
+                    if (platformHints.some(h => ln.includes(h))) score += 20;
+                    if (goodArchHints.some(h => ln.includes(h))) score += 10;
+                    if (badArchHints.some(h => ln.includes(h))) score -= 15;
+                    if (ln.includes("portable")) score += 25;
+                    if (INSTALLER_KW.some(h => ln.includes(h))) score -= 5;
+                    if (ln.endsWith(".zip")) score += 3;
+                    return { ...a, _score: score };
+                  })
+                  .sort((a: any, b: any) => b._score - a._score);
                 if (assets.length > 0) {
                   const releasesDir = path.join(projectDir, "_releases");
                   fs.mkdirSync(releasesDir, { recursive: true });
