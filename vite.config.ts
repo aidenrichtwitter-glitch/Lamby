@@ -759,9 +759,17 @@ function projectManagementPlugin(): Plugin {
             const exeDir = normPath(path.dirname(safeExe));
             try {
               if (isWin) {
-                spawn("cmd.exe", ["/c", "start", `"${label}"`, `"${safeExe}"`], {
-                  cwd: exeDir, detached: true, stdio: "ignore", windowsHide: false,
-                });
+                try {
+                  execSync(`start "" "${safeExe}"`, { cwd: exeDir, shell: true, windowsHide: false, stdio: "ignore", timeout: 10000 });
+                } catch {
+                  try {
+                    spawn(safeExe, [], { cwd: exeDir, detached: true, stdio: "ignore", shell: false });
+                  } catch {
+                    const batPath = path.join(exeDir, "__guardian_launch.bat");
+                    fs.writeFileSync(batPath, `@echo off\r\ncd /d "${exeDir}"\r\nstart "" "${safeExe}"\r\n`);
+                    spawn("cmd.exe", ["/c", batPath], { cwd: exeDir, detached: true, stdio: "ignore" });
+                  }
+                }
               } else if (isMac) {
                 spawn("open", [safeExe], { detached: true, stdio: "ignore" });
               } else {
