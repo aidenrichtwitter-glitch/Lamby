@@ -411,39 +411,56 @@ function projectManagementPlugin(): Plugin {
             await new Promise(r => setTimeout(r, 800));
           }
 
-          const hasPkg = fs.existsSync(path.join(projectDir, "package.json"));
+          let hasPkg = fs.existsSync(path.join(projectDir, "package.json"));
           const hasNodeModules = fs.existsSync(path.join(projectDir, "node_modules"));
 
           let pkg: any = {};
+          let effectiveProjectDir = projectDir;
           if (hasPkg) {
             try { pkg = JSON.parse(fs.readFileSync(path.join(projectDir, "package.json"), "utf-8")); } catch {}
+          } else {
+            const SUB_CANDIDATES = ["frontend", "client", "web", "app"];
+            for (const sub of SUB_CANDIDATES) {
+              const subPkgPath = path.join(projectDir, sub, "package.json");
+              if (fs.existsSync(subPkgPath)) {
+                try {
+                  pkg = JSON.parse(fs.readFileSync(subPkgPath, "utf-8"));
+                  effectiveProjectDir = path.join(projectDir, sub);
+                  hasPkg = true;
+                  console.log(`[Preview] No root package.json — using ${sub}/package.json for ${name}`);
+                } catch {}
+                break;
+              }
+            }
           }
 
           const detectPackageManager = (): string => {
-            if (fs.existsSync(path.join(projectDir, "bun.lockb")) || fs.existsSync(path.join(projectDir, "bun.lock"))) return "bun";
-            if (fs.existsSync(path.join(projectDir, "pnpm-lock.yaml"))) return "pnpm";
-            if (fs.existsSync(path.join(projectDir, "yarn.lock"))) return "yarn";
+            for (const dir of [effectiveProjectDir, projectDir]) {
+              if (fs.existsSync(path.join(dir, "bun.lockb")) || fs.existsSync(path.join(dir, "bun.lock"))) return "bun";
+              if (fs.existsSync(path.join(dir, "pnpm-lock.yaml"))) return "pnpm";
+              if (fs.existsSync(path.join(dir, "yarn.lock"))) return "yarn";
+            }
             return "npm";
           };
 
           const pm = detectPackageManager();
 
-          if (hasPkg && !hasNodeModules) {
+          if (hasPkg && !fs.existsSync(path.join(effectiveProjectDir, "node_modules"))) {
             try {
               const { execSync } = await import("child_process");
               const installCmd = pm === "npm" ? "npm install --legacy-peer-deps"
                 : pm === "pnpm" ? "npx pnpm install --no-frozen-lockfile"
                 : pm === "yarn" ? "npx yarn install --ignore-engines"
                 : "npx bun install";
-              console.log(`[Preview] Installing deps for ${name} with: ${installCmd}`);
-              execSync(installCmd, { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true, windowsHide: true });
+              console.log(`[Preview] Installing deps for ${name} in ${effectiveProjectDir === projectDir ? 'root' : path.basename(effectiveProjectDir)} with: ${installCmd}`);
+              execSync(installCmd, { cwd: effectiveProjectDir, timeout: 120000, stdio: "pipe", shell: true, windowsHide: true });
               console.log(`[Preview] Deps installed for ${name}`);
             } catch (installErr: any) {
               console.error(`[Preview] Install failed for ${name}:`, installErr.message?.slice(0, 300));
               try {
                 const { execSync } = await import("child_process");
                 console.log(`[Preview] Retrying with npm for ${name}`);
-                execSync("npm install --legacy-peer-deps", { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true, windowsHide: true });
+                execSync("npm install --legacy-peer-deps", { cwd: effectiveProjectDir, timeout: 120000, stdio: "pipe", shell: true, windowsHide: true });
               } catch (retryErr: any) {
                 console.error(`[Preview] Retry also failed for ${name}:`, retryErr.message?.slice(0, 300));
               }
@@ -652,8 +669,10 @@ function projectManagementPlugin(): Plugin {
 
           const patchPortInEnvFiles = () => {
             const envFiles = [".env", ".env.local", ".env.development", ".env.development.local"];
+            const envDirs = effectiveProjectDir !== projectDir ? [effectiveProjectDir, projectDir] : [projectDir];
+            for (const envDir of envDirs) {
             for (const envFile of envFiles) {
-              const envPath = path.join(projectDir, envFile);
+              const envPath = path.join(envDir, envFile);
               if (!fs.existsSync(envPath)) continue;
               try {
                 let content = fs.readFileSync(envPath, "utf-8");
@@ -672,13 +691,16 @@ function projectManagementPlugin(): Plugin {
                 }
               } catch {}
             }
+            }
           };
           patchPortInEnvFiles();
 
           const patchViteConfig = async () => {
             const viteConfigNames = ["vite.config.ts", "vite.config.js", "vite.config.mjs"];
+            const vcDirs = effectiveProjectDir !== projectDir ? [effectiveProjectDir, projectDir] : [projectDir];
+            for (const vcDir of vcDirs) {
             for (const vcName of viteConfigNames) {
-              const vcPath = path.join(projectDir, vcName);
+              const vcPath = path.join(vcDir, vcName);
               if (!fs.existsSync(vcPath)) continue;
               try {
                 let content = fs.readFileSync(vcPath, "utf-8");
@@ -698,13 +720,13 @@ function projectManagementPlugin(): Plugin {
                     try {
                       const { execSync: es } = await import("child_process");
                       const missingLibPkgs: string[] = [];
-                      if (!fs.existsSync(path.join(projectDir, "node_modules", "@vitejs/plugin-react"))) missingLibPkgs.push(pluginPkg);
-                      if (!fs.existsSync(path.join(projectDir, "node_modules", "react-dom"))) missingLibPkgs.push("react-dom");
-                      if (!fs.existsSync(path.join(projectDir, "node_modules", "react"))) missingLibPkgs.push("react");
+                      if (!fs.existsSync(path.join(vcDir, "node_modules", "@vitejs/plugin-react")) && !fs.existsSync(path.join(effectiveProjectDir, "node_modules", "@vitejs/plugin-react"))) missingLibPkgs.push(pluginPkg);
+                      if (!fs.existsSync(path.join(vcDir, "node_modules", "react-dom")) && !fs.existsSync(path.join(effectiveProjectDir, "node_modules", "react-dom"))) missingLibPkgs.push("react-dom");
+                      if (!fs.existsSync(path.join(vcDir, "node_modules", "react")) && !fs.existsSync(path.join(effectiveProjectDir, "node_modules", "react"))) missingLibPkgs.push("react");
                       if (missingLibPkgs.length > 0) {
                         console.log(`[Preview] Library-mode config for ${name}, installing: ${missingLibPkgs.join(", ")}`);
                         const installCmd = pm === "pnpm" ? `pnpm add -D ${missingLibPkgs.join(" ")}` : pm === "yarn" ? `yarn add -D ${missingLibPkgs.join(" ")}` : pm === "bun" ? `bun add -D ${missingLibPkgs.join(" ")}` : `npm install --save-dev --legacy-peer-deps ${missingLibPkgs.join(" ")}`;
-                        es(installCmd, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true });
+                        es(installCmd, { cwd: effectiveProjectDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true });
                       }
                     } catch (e: any) {
                       console.log(`[Preview] Failed to install lib-mode deps: ${e.message?.slice(0, 150)}`);
@@ -745,59 +767,66 @@ function projectManagementPlugin(): Plugin {
                 }
               } catch {}
             }
+            }
           };
           await patchViteConfig();
 
           const fixPostCSSAndTailwind = async () => {
             const isESM = pkg.type === "module";
+            const dirsToCheck = [effectiveProjectDir];
+            if (effectiveProjectDir !== projectDir) dirsToCheck.push(projectDir);
             const postcssConfigs = ["postcss.config.js", "postcss.config.mjs", "postcss.config.cjs"];
-            for (const pcName of postcssConfigs) {
-              const pcPath = path.join(projectDir, pcName);
-              if (!fs.existsSync(pcPath)) continue;
-              try {
-                const content = fs.readFileSync(pcPath, "utf-8");
-                if (isESM && content.includes("module.exports") && !pcName.endsWith(".cjs")) {
-                  const newName = pcName.replace(/\.(js|ts|mjs)$/, ".cjs");
-                  const newPath = path.join(projectDir, newName);
-                  fs.renameSync(pcPath, newPath);
-                  console.log(`[Preview] Renamed ${pcName} -> ${newName} (ESM project uses module.exports)`);
-                }
-                if (!isESM && content.includes("export default") && !pcName.endsWith(".mjs")) {
-                  const newName = pcName.replace(/\.(js|ts|cjs)$/, ".mjs");
-                  const newPath = path.join(projectDir, newName);
-                  fs.renameSync(pcPath, newPath);
-                  console.log(`[Preview] Renamed ${pcName} -> ${newName} (CJS project uses export default)`);
-                }
-                const refsTailwind = content.includes("tailwindcss");
-                const refsAutoprefixer = content.includes("autoprefixer");
-                const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-                const missingPkgs: string[] = [];
-                if (refsTailwind && !allDeps["tailwindcss"]) missingPkgs.push("tailwindcss");
-                if (refsAutoprefixer && !allDeps["autoprefixer"]) missingPkgs.push("autoprefixer");
-                if (missingPkgs.length > 0) {
-                  try {
-                    const { execSync: es } = await import("child_process");
-                    const installCmd = pm === "npm" ? `npm install --save-dev --legacy-peer-deps ${missingPkgs.join(" ")}` : `npx ${pm} add -D ${missingPkgs.join(" ")}`;
-                    console.log(`[Preview] Installing missing PostCSS deps: ${missingPkgs.join(", ")}`);
-                    es(installCmd, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true });
-                  } catch (e: any) {
-                    console.log(`[Preview] PostCSS dep install warning: ${e.message?.slice(0, 200)}`);
+            for (const baseDir of dirsToCheck) {
+              for (const pcName of postcssConfigs) {
+                const pcPath = path.join(baseDir, pcName);
+                if (!fs.existsSync(pcPath)) continue;
+                try {
+                  const content = fs.readFileSync(pcPath, "utf-8");
+                  if (isESM && content.includes("module.exports") && !pcName.endsWith(".cjs")) {
+                    const newName = pcName.replace(/\.(js|ts|mjs)$/, ".cjs");
+                    const newPath = path.join(baseDir, newName);
+                    fs.renameSync(pcPath, newPath);
+                    console.log(`[Preview] Renamed ${pcName} -> ${newName} (ESM project uses module.exports)`);
                   }
-                }
-              } catch {}
+                  if (!isESM && content.includes("export default") && !pcName.endsWith(".mjs")) {
+                    const newName = pcName.replace(/\.(js|ts|cjs)$/, ".mjs");
+                    const newPath = path.join(baseDir, newName);
+                    fs.renameSync(pcPath, newPath);
+                    console.log(`[Preview] Renamed ${pcName} -> ${newName} (CJS project uses export default)`);
+                  }
+                  const refsTailwind = content.includes("tailwindcss");
+                  const refsAutoprefixer = content.includes("autoprefixer");
+                  const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+                  const missingPkgs: string[] = [];
+                  if (refsTailwind && !allDeps["tailwindcss"]) missingPkgs.push("tailwindcss");
+                  if (refsAutoprefixer && !allDeps["autoprefixer"]) missingPkgs.push("autoprefixer");
+                  if (missingPkgs.length > 0) {
+                    try {
+                      const { execSync: es } = await import("child_process");
+                      const installCmd = pm === "npm" ? `npm install --save-dev --legacy-peer-deps ${missingPkgs.join(" ")}` : `npx ${pm} add -D ${missingPkgs.join(" ")}`;
+                      console.log(`[Preview] Installing missing PostCSS deps: ${missingPkgs.join(", ")}`);
+                      es(installCmd, { cwd: effectiveProjectDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true });
+                    } catch (e: any) {
+                      console.log(`[Preview] PostCSS dep install warning: ${e.message?.slice(0, 200)}`);
+                    }
+                  }
+                } catch {}
+              }
             }
             const tailwindConfigs = ["tailwind.config.js", "tailwind.config.cjs", "tailwind.config.mjs"];
-            for (const twName of tailwindConfigs) {
-              const twPath = path.join(projectDir, twName);
-              if (!fs.existsSync(twPath)) continue;
-              try {
-                const content = fs.readFileSync(twPath, "utf-8");
-                if (isESM && content.includes("module.exports") && !twName.endsWith(".cjs")) {
-                  const newName = twName.replace(/\.(js|ts|mjs)$/, ".cjs");
-                  fs.renameSync(twPath, path.join(projectDir, newName));
-                  console.log(`[Preview] Renamed ${twName} -> ${newName} (ESM compat)`);
-                }
-              } catch {}
+            for (const baseDir of dirsToCheck) {
+              for (const twName of tailwindConfigs) {
+                const twPath = path.join(baseDir, twName);
+                if (!fs.existsSync(twPath)) continue;
+                try {
+                  const content = fs.readFileSync(twPath, "utf-8");
+                  if (isESM && content.includes("module.exports") && !twName.endsWith(".cjs")) {
+                    const newName = twName.replace(/\.(js|ts|mjs)$/, ".cjs");
+                    fs.renameSync(twPath, path.join(baseDir, newName));
+                    console.log(`[Preview] Renamed ${twName} -> ${newName} (ESM compat)`);
+                  }
+                } catch {}
+              }
             }
           };
           await fixPostCSSAndTailwind();
@@ -915,8 +944,10 @@ function projectManagementPlugin(): Plugin {
           }
 
           let hasTsconfigPaths = false;
+          const tscfgDirs = effectiveProjectDir !== projectDir ? [effectiveProjectDir, projectDir] : [projectDir];
+          for (const tscfgDir of tscfgDirs) {
           for (const tscfg of ["tsconfig.json", "tsconfig.app.json"]) {
-            const tscfgPath = path.join(projectDir, tscfg);
+            const tscfgPath = path.join(tscfgDir, tscfg);
             if (fs.existsSync(tscfgPath)) {
               try {
                 const raw = fs.readFileSync(tscfgPath, "utf-8").replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/,\s*([\]}])/g, "$1");
@@ -926,6 +957,7 @@ function projectManagementPlugin(): Plugin {
               } catch {}
               break;
             }
+          }
           }
 
           const viteConfigDirs = [projectDir, ...SUBDIR_CANDIDATES.map(d => path.join(projectDir, d))];
@@ -937,10 +969,18 @@ function projectManagementPlugin(): Plugin {
                 const viteConfigContent = fs.readFileSync(viteConfigPath, "utf-8");
                 let content = viteConfigContent;
                 if (!content.includes("usePolling")) {
-                  content = content.replace(
-                    /defineConfig\(\{/,
-                    `defineConfig({\n  server: {\n    watch: {\n      usePolling: true,\n      interval: 500,\n    },\n  },`
-                  );
+                  const hasServerBlock = /server\s*:\s*\{/.test(content);
+                  if (hasServerBlock) {
+                    content = content.replace(
+                      /server\s*:\s*\{/,
+                      `server: {\n    watch: {\n      usePolling: true,\n      interval: 500,\n    },`
+                    );
+                  } else {
+                    content = content.replace(
+                      /defineConfig\(\{/,
+                      `defineConfig({\n  server: {\n    watch: {\n      usePolling: true,\n      interval: 500,\n    },\n  },`
+                    );
+                  }
                   if (content !== viteConfigContent) {
                     console.log(`[Preview] Patched ${name}/${path.relative(projectDir, viteConfigPath)} with usePolling`);
                   }
@@ -1092,7 +1132,7 @@ function projectManagementPlugin(): Plugin {
 
           const isWin = process.platform === "win32";
           const child = spawn(devCmd.cmd, devCmd.args, {
-            cwd: projectDir,
+            cwd: effectiveProjectDir,
             stdio: "pipe",
             shell: true,
             detached: !isWin,
@@ -1194,7 +1234,7 @@ function projectManagementPlugin(): Plugin {
                 console.log(`[Preview] Installed ${missingPkgs.join(", ")} — retrying startup`);
 
                 const child2 = spawn(devCmd.cmd, devCmd.args, {
-                  cwd: projectDir, stdio: "pipe", shell: true,
+                  cwd: effectiveProjectDir, stdio: "pipe", shell: true,
                   detached: !isWin, windowsHide: true, env: portEnv,
                 });
                 if (!isWin) child2.unref();
@@ -1298,17 +1338,28 @@ function projectManagementPlugin(): Plugin {
           const { spawn } = await import("child_process");
 
           let pkg: any = {};
+          let restartDir = projectDir;
           const pkgPath = path.join(projectDir, "package.json");
           if (fs.existsSync(pkgPath)) {
             try { pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8")); } catch {}
+          } else {
+            for (const sub of ["frontend", "client", "web", "app"]) {
+              const subPkg = path.join(projectDir, sub, "package.json");
+              if (fs.existsSync(subPkg)) {
+                try { pkg = JSON.parse(fs.readFileSync(subPkg, "utf-8")); restartDir = path.join(projectDir, sub); } catch {}
+                break;
+              }
+            }
           }
           const scripts = pkg.scripts || {};
           const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 
           const detectPMRestart = (): string => {
-            if (fs.existsSync(path.join(projectDir, "bun.lockb")) || fs.existsSync(path.join(projectDir, "bun.lock"))) return "bun";
-            if (fs.existsSync(path.join(projectDir, "pnpm-lock.yaml"))) return "pnpm";
-            if (fs.existsSync(path.join(projectDir, "yarn.lock"))) return "yarn";
+            for (const dir of [restartDir, projectDir]) {
+              if (fs.existsSync(path.join(dir, "bun.lockb")) || fs.existsSync(path.join(dir, "bun.lock"))) return "bun";
+              if (fs.existsSync(path.join(dir, "pnpm-lock.yaml"))) return "pnpm";
+              if (fs.existsSync(path.join(dir, "yarn.lock"))) return "yarn";
+            }
             return "npm";
           };
           const pmR = detectPMRestart();
@@ -1368,7 +1419,7 @@ function projectManagementPlugin(): Plugin {
 
           const isWinR = process.platform === "win32";
           const child = spawn(restartCmd.cmd, restartCmd.args, {
-            cwd: projectDir,
+            cwd: restartDir,
             stdio: "pipe",
             shell: true,
             detached: !isWinR,
