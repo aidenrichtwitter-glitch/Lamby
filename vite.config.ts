@@ -708,12 +708,25 @@ function projectManagementPlugin(): Plugin {
           const isMac = os.platform() === "darwin";
           const isLinux = os.platform() === "linux";
 
+          const normPath = (p: string) => isWin ? path.normalize(p).replace(/\//g, "\\") : p;
+
           const spawnTerminalWithCommand = (cwd: string, cmd: string, label: string) => {
+            const safeCwd = normPath(path.resolve(cwd));
             try {
               if (isWin) {
-                spawn("cmd.exe", ["/c", "start", "cmd.exe", "/k", `cd /d "${cwd}" && ${cmd}`], { detached: true, stdio: "ignore", windowsHide: false });
+                const batchContent = `@echo off\r\ncd /d "${safeCwd}"\r\n${cmd}\r\npause\r\n`;
+                const batchPath = path.join(safeCwd, "__guardian_run.bat");
+                try { fs.writeFileSync(batchPath, batchContent); } catch {}
+                try {
+                  spawn("cmd.exe", ["/c", "start", `"${label}"`, "cmd.exe", "/k", `cd /d "${safeCwd}" && ${cmd}`], {
+                    cwd: safeCwd, detached: true, stdio: "ignore", windowsHide: false,
+                  });
+                } catch {
+                  spawn("cmd.exe", ["/c", batchPath], { cwd: safeCwd, detached: true, stdio: "ignore", windowsHide: false });
+                }
               } else if (isMac) {
-                const script = `tell application "Terminal" to do script "cd '${cwd}' && ${cmd.replace(/'/g, "'\\''")}"`;
+                const escaped = cmd.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/'/g, "'\\''");
+                const script = `tell application "Terminal" to do script "cd '${safeCwd}' && ${escaped}"`;
                 spawn("osascript", ["-e", script], { detached: true, stdio: "ignore" });
               } else {
                 const terminals = ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "xterm"];
@@ -721,19 +734,19 @@ function projectManagementPlugin(): Plugin {
                 for (const term of terminals) {
                   try {
                     if (term === "gnome-terminal") {
-                      spawn(term, ["--", "bash", "-c", `cd '${cwd}' && ${cmd}; exec bash`], { detached: true, stdio: "ignore" });
+                      spawn(term, ["--", "bash", "-c", `cd '${safeCwd}' && ${cmd}; exec bash`], { detached: true, stdio: "ignore" });
                     } else {
-                      spawn(term, ["-e", `bash -c "cd '${cwd}' && ${cmd}; exec bash"`], { detached: true, stdio: "ignore" });
+                      spawn(term, ["-e", `bash -c "cd '${safeCwd}' && ${cmd}; exec bash"`], { detached: true, stdio: "ignore" });
                     }
                     launched = true;
                     break;
                   } catch {}
                 }
                 if (!launched) {
-                  spawn("bash", ["-c", cmd], { cwd, detached: true, stdio: "ignore" });
+                  spawn("bash", ["-c", cmd], { cwd: safeCwd, detached: true, stdio: "ignore" });
                 }
               }
-              console.log(`[Preview] Spawned terminal for ${label}: ${cmd}`);
+              console.log(`[Preview] Spawned terminal for ${label} in ${safeCwd}: ${cmd}`);
               return true;
             } catch (e: any) {
               console.error(`[Preview] Failed to spawn terminal for ${label}:`, e.message?.slice(0, 200));
@@ -742,16 +755,20 @@ function projectManagementPlugin(): Plugin {
           };
 
           const launchExecutable = (exePath: string, label: string) => {
+            const safeExe = normPath(path.resolve(exePath));
+            const exeDir = normPath(path.dirname(safeExe));
             try {
               if (isWin) {
-                spawn("cmd.exe", ["/c", "start", "", exePath], { detached: true, stdio: "ignore", windowsHide: false });
+                spawn("cmd.exe", ["/c", "start", `"${label}"`, `"${safeExe}"`], {
+                  cwd: exeDir, detached: true, stdio: "ignore", windowsHide: false,
+                });
               } else if (isMac) {
-                spawn("open", [exePath], { detached: true, stdio: "ignore" });
+                spawn("open", [safeExe], { detached: true, stdio: "ignore" });
               } else {
-                try { fs.chmodSync(exePath, 0o755); } catch {}
-                spawn(exePath, [], { cwd: path.dirname(exePath), detached: true, stdio: "ignore" });
+                try { fs.chmodSync(safeExe, 0o755); } catch {}
+                spawn(safeExe, [], { cwd: exeDir, detached: true, stdio: "ignore" });
               }
-              console.log(`[Preview] Launched executable for ${label}: ${exePath}`);
+              console.log(`[Preview] Launched executable for ${label}: ${safeExe}`);
               return true;
             } catch (e: any) {
               console.error(`[Preview] Failed to launch executable for ${label}:`, e.message?.slice(0, 200));
@@ -801,13 +818,15 @@ function projectManagementPlugin(): Plugin {
             let buildCmd = "";
             if (isPythonProject) {
               const mainPy = fs.existsSync(path.join(projectDir, "main.py")) ? "main.py" : fs.existsSync(path.join(projectDir, "app.py")) ? "app.py" : fs.readdirSync(projectDir).find((f: string) => f.endsWith(".py")) || "main.py";
-              runCmd = `python3 ${mainPy}`;
+              runCmd = isWin ? `python ${mainPy}` : `python3 ${mainPy}`;
             } else if (isGoProject) {
-              buildCmd = "go build -o app .";
-              runCmd = "./app";
+              const goExeName = isWin ? `${name || "app"}.exe` : "app";
+              buildCmd = `go build -o ${goExeName} .`;
+              runCmd = isWin ? goExeName : `./${goExeName}`;
             } else if (isRustProject) {
               buildCmd = "cargo build --release";
-              runCmd = "./target/release/" + (name || "app");
+              const rustBin = name || "app";
+              runCmd = isWin ? `target\\release\\${rustBin}.exe` : `./target/release/${rustBin}`;
             } else if (isCLI && pkg.bin) {
               const binName = typeof pkg.bin === "string" ? pkg.name : Object.keys(pkg.bin)[0];
               runCmd = `node ${typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName]}`;
@@ -823,7 +842,7 @@ function projectManagementPlugin(): Plugin {
                 if (jsEntry) { runCmd = `node ${jsEntry}`; projectType = "node"; }
                 else {
                   const pyFile = files.find((f: string) => f.endsWith(".py"));
-                  if (pyFile) { runCmd = `python3 ${pyFile}`; projectType = "python"; }
+                  if (pyFile) { runCmd = isWin ? `python ${pyFile}` : `python3 ${pyFile}`; projectType = "python"; }
                   else {
                     const shFile = files.find((f: string) => f.endsWith(".sh"));
                     if (shFile) { runCmd = `bash ${shFile}`; projectType = "shell"; }
@@ -831,7 +850,9 @@ function projectManagementPlugin(): Plugin {
                       const makefile = files.find((f: string) => /^Makefile$/i.test(f));
                       if (makefile) { buildCmd = "make"; projectType = "make"; }
                       else if (fs.existsSync(path.join(projectDir, "CMakeLists.txt"))) {
-                        buildCmd = "mkdir -p build && cd build && cmake .. && cmake --build . --parallel";
+                        buildCmd = isWin
+                          ? `if not exist build mkdir build && cd build && cmake .. && cmake --build . --config Release --parallel`
+                          : `mkdir -p build && cd build && cmake .. && cmake --build . --parallel`;
                         projectType = "cmake";
                       }
                       else if (fs.existsSync(path.join(projectDir, "Dockerfile"))) { buildCmd = "docker build -t " + name + " ."; runCmd = "docker run " + name; projectType = "docker"; }
@@ -884,8 +905,9 @@ function projectManagementPlugin(): Plugin {
             if (buildCmd) {
               console.log(`[Preview] Auto-building ${projectType} project ${name}: ${buildCmd}`);
               try {
+                const buildCwd = normPath(path.resolve(projectDir));
                 const result = execSync(buildCmd, {
-                  cwd: projectDir,
+                  cwd: buildCwd,
                   timeout: 300000,
                   stdio: "pipe",
                   shell: true,
