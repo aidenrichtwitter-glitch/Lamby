@@ -450,6 +450,7 @@ function projectManagementPlugin(): Plugin {
             }
           }
 
+          const SUBDIR_CANDIDATES = ["frontend", "client", "web", "app"];
           const detectDevCommand = (): { cmd: string; args: string[] } => {
             const scripts = pkg.scripts || {};
             const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
@@ -581,6 +582,34 @@ function projectManagementPlugin(): Plugin {
 
             if (fs.existsSync(path.join(projectDir, "vite.config.ts")) || fs.existsSync(path.join(projectDir, "vite.config.js")) || fs.existsSync(path.join(projectDir, "vite.config.mjs"))) {
               return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", portStr] };
+            }
+
+            for (const subDir of SUBDIR_CANDIDATES) {
+              const subPath = path.join(projectDir, subDir);
+              const subPkgPath = path.join(subPath, "package.json");
+              if (fs.existsSync(subPkgPath)) {
+                try {
+                  const subPkg = JSON.parse(fs.readFileSync(subPkgPath, "utf-8"));
+                  const subScripts = subPkg.scripts || {};
+                  const subDeps = { ...(subPkg.dependencies || {}), ...(subPkg.devDependencies || {}) };
+                  for (const key of ["dev", "start", "serve"]) {
+                    if (subScripts[key]) {
+                      const extracted = extractDevServerCmd(subScripts[key]);
+                      const matched = matchScript(extracted);
+                      if (matched) {
+                        console.log(`[Preview] Found dev command in ${subDir}/package.json script "${key}"`);
+                        return matched;
+                      }
+                      console.log(`[Preview] Using ${subDir}/package.json script "${key}": ${subScripts[key]}`);
+                      return { cmd: pm === "npm" ? "npm" : `npx ${pm}`, args: ["run", key, "--prefix", subDir] };
+                    }
+                  }
+                  if (subDeps["vite"] || fs.existsSync(path.join(subPath, "vite.config.ts")) || fs.existsSync(path.join(subPath, "vite.config.js"))) {
+                    console.log(`[Preview] Found vite in ${subDir}/, running from there`);
+                    return { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", portStr, "--root", subDir] };
+                  }
+                } catch {}
+              }
             }
 
             if (!hasPkg) {
@@ -844,6 +873,9 @@ function projectManagementPlugin(): Plugin {
             path.join(projectDir, "index.html"),
             path.join(projectDir, "public", "index.html"),
             path.join(projectDir, "src", "index.html"),
+            ...SUBDIR_CANDIDATES.map(d => path.join(projectDir, d, "index.html")),
+            ...SUBDIR_CANDIDATES.map(d => path.join(projectDir, d, "public", "index.html")),
+            ...SUBDIR_CANDIDATES.map(d => path.join(projectDir, d, "src", "index.html")),
           ];
           for (const indexHtmlPath of indexHtmlPaths) {
             if (fs.existsSync(indexHtmlPath)) {
@@ -896,54 +928,57 @@ function projectManagementPlugin(): Plugin {
             }
           }
 
-          for (const cfgName of ["vite.config.ts", "vite.config.js", "vite.config.mjs"]) {
-            const viteConfigPath = path.join(projectDir, cfgName);
-            if (fs.existsSync(viteConfigPath)) {
-              const viteConfigContent = fs.readFileSync(viteConfigPath, "utf-8");
-              let content = viteConfigContent;
-              if (!content.includes("usePolling")) {
-                content = content.replace(
-                  /defineConfig\(\{/,
-                  `defineConfig({\n  server: {\n    watch: {\n      usePolling: true,\n      interval: 500,\n    },\n  },`
-                );
+          const viteConfigDirs = [projectDir, ...SUBDIR_CANDIDATES.map(d => path.join(projectDir, d))];
+          for (const viteDir of viteConfigDirs) {
+            if (!fs.existsSync(viteDir)) continue;
+            for (const cfgName of ["vite.config.ts", "vite.config.js", "vite.config.mjs"]) {
+              const viteConfigPath = path.join(viteDir, cfgName);
+              if (fs.existsSync(viteConfigPath)) {
+                const viteConfigContent = fs.readFileSync(viteConfigPath, "utf-8");
+                let content = viteConfigContent;
+                if (!content.includes("usePolling")) {
+                  content = content.replace(
+                    /defineConfig\(\{/,
+                    `defineConfig({\n  server: {\n    watch: {\n      usePolling: true,\n      interval: 500,\n    },\n  },`
+                  );
+                  if (content !== viteConfigContent) {
+                    console.log(`[Preview] Patched ${name}/${path.relative(projectDir, viteConfigPath)} with usePolling`);
+                  }
+                }
+                if (/base:\s*["']\/(__preview|__dev)[^"']*["']/.test(content)) {
+                  content = content.replace(/\s*base:\s*["']\/(__preview|__dev)[^"']*["'],?\n?/g, "\n");
+                  console.log(`[Preview] Removed stale base path from ${name}/${path.relative(projectDir, viteConfigPath)}`);
+                }
+
+                if (hasTsconfigPaths && !content.includes("tsconfigPaths") && !content.includes("tsconfig-paths")) {
+                  const tspPkgInstalled = fs.existsSync(path.join(viteDir, "node_modules", "vite-tsconfig-paths")) || fs.existsSync(path.join(projectDir, "node_modules", "vite-tsconfig-paths"));
+                  if (!tspPkgInstalled) {
+                    try {
+                      let installCmd = "npm install --legacy-peer-deps --save-dev vite-tsconfig-paths";
+                      if (fs.existsSync(path.join(projectDir, "pnpm-lock.yaml"))) installCmd = "npx pnpm add -D vite-tsconfig-paths";
+                      else if (fs.existsSync(path.join(projectDir, "yarn.lock"))) installCmd = "yarn add -D vite-tsconfig-paths";
+                      else if (fs.existsSync(path.join(projectDir, "bun.lockb")) || fs.existsSync(path.join(projectDir, "bun.lock"))) installCmd = "bun add -D vite-tsconfig-paths";
+                      execSync(installCmd, { cwd: viteDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true });
+                      console.log(`[Preview] Installed vite-tsconfig-paths for ${name}`);
+                    } catch (installErr: any) {
+                      console.log(`[Preview] Could not install vite-tsconfig-paths for ${name}: ${installErr.message?.slice(0, 100)}`);
+                    }
+                  }
+                  if (fs.existsSync(path.join(viteDir, "node_modules", "vite-tsconfig-paths")) || fs.existsSync(path.join(projectDir, "node_modules", "vite-tsconfig-paths"))) {
+                    const importLine = `import tsconfigPaths from 'vite-tsconfig-paths'\n`;
+                    const pluginsMatch = content.match(/plugins\s*:\s*\[/);
+                    if (pluginsMatch) {
+                      content = importLine + content;
+                      content = content.replace(/plugins\s*:\s*\[/, `plugins: [tsconfigPaths(), `);
+                      console.log(`[Preview] Added tsconfigPaths plugin to ${name}/${path.relative(projectDir, viteConfigPath)}`);
+                    }
+                  }
+                }
+
                 if (content !== viteConfigContent) {
-                  console.log(`[Preview] Patched ${name}/${cfgName} with usePolling`);
+                  fs.writeFileSync(viteConfigPath, content, "utf-8");
                 }
               }
-              if (/base:\s*["']\/(__preview|__dev)[^"']*["']/.test(content)) {
-                content = content.replace(/\s*base:\s*["']\/(__preview|__dev)[^"']*["'],?\n?/g, "\n");
-                console.log(`[Preview] Removed stale base path from ${name}/${cfgName}`);
-              }
-
-              if (hasTsconfigPaths && !content.includes("tsconfigPaths") && !content.includes("tsconfig-paths")) {
-                const tspPkgInstalled = fs.existsSync(path.join(projectDir, "node_modules", "vite-tsconfig-paths"));
-                if (!tspPkgInstalled) {
-                  try {
-                    let installCmd = "npm install --legacy-peer-deps --save-dev vite-tsconfig-paths";
-                    if (fs.existsSync(path.join(projectDir, "pnpm-lock.yaml"))) installCmd = "npx pnpm add -D vite-tsconfig-paths";
-                    else if (fs.existsSync(path.join(projectDir, "yarn.lock"))) installCmd = "yarn add -D vite-tsconfig-paths";
-                    else if (fs.existsSync(path.join(projectDir, "bun.lockb")) || fs.existsSync(path.join(projectDir, "bun.lock"))) installCmd = "bun add -D vite-tsconfig-paths";
-                    execSync(installCmd, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true });
-                    console.log(`[Preview] Installed vite-tsconfig-paths for ${name}`);
-                  } catch (installErr: any) {
-                    console.log(`[Preview] Could not install vite-tsconfig-paths for ${name}: ${installErr.message?.slice(0, 100)}`);
-                  }
-                }
-                if (fs.existsSync(path.join(projectDir, "node_modules", "vite-tsconfig-paths"))) {
-                  const importLine = `import tsconfigPaths from 'vite-tsconfig-paths'\n`;
-                  const pluginsMatch = content.match(/plugins\s*:\s*\[/);
-                  if (pluginsMatch) {
-                    content = importLine + content;
-                    content = content.replace(/plugins\s*:\s*\[/, `plugins: [tsconfigPaths(), `);
-                    console.log(`[Preview] Added tsconfigPaths plugin to ${name}/${cfgName}`);
-                  }
-                }
-              }
-
-              if (content !== viteConfigContent) {
-                fs.writeFileSync(viteConfigPath, content, "utf-8");
-              }
-              break;
             }
           }
 
