@@ -2483,6 +2483,12 @@ function projectManagementPlugin(): Plugin {
             }
           }
 
+          const metaPath = path.join(projectDir, ".guardian-meta.json");
+          try {
+            fs.writeFileSync(metaPath, JSON.stringify({ owner, repo, sourceUrl: `https://github.com/${owner}/${repo}`, clonedAt: new Date().toISOString(), projectName }, null, 2));
+            console.log(`[Import] Saved source metadata to .guardian-meta.json`);
+          } catch {}
+
           let releaseAssets: { name: string; size: number; downloadUrl: string; downloaded: boolean }[] = [];
           const hasPkgJson = fs.existsSync(pkgPath);
           if (!hasPkgJson && apiAvailable) {
