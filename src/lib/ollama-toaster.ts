@@ -309,36 +309,74 @@ export async function cleanGrokResponse(
   const availability = await checkToasterAvailability(config);
   if (!availability.available) return null;
 
-  const truncated = rawResponse.slice(0, 8000);
+  const { parseCodeBlocks } = await import('./code-parser');
+  const regexBlocks = parseCodeBlocks(rawResponse);
 
-  const prompt = `Extract code blocks from this AI response. Output ONLY valid JSON.
+  if (regexBlocks.length === 0) return null;
 
-${truncated}
+  const unpathedBlocks = regexBlocks.filter(b => !b.filePath);
+  let pathMap: Record<number, string> = {};
 
-JSON format: {"reasoning":"brief summary","files":[{"path":"src/file.ts","action":"update","content":"exact code","diff":"","original_block":""}],"unparsed_text":""}
-Rules: path from "// file:" or heading. content = exact code. action: create/update/replace/delete. No path = empty string.`;
+  if (unpathedBlocks.length > 0) {
+    const snippetSummaries = unpathedBlocks.map((b, i) => {
+      const idx = regexBlocks.indexOf(b);
+      const preview = b.code.slice(0, 200).replace(/\n/g, '\\n');
+      return `Block ${idx}: [${b.language || 'unknown'}] ${preview}`;
+    }).join('\n');
 
-  try {
-    const response = await ollamaGenerate(prompt, config);
-    const parsed = extractJSON<CleanedResponse>(response);
-    if (!parsed || !Array.isArray(parsed.files)) return null;
+    const prompt = `Given these code snippets, guess the file path for each. Reply ONLY with JSON like {"0":"src/App.tsx","2":"styles.css"} where keys are block numbers.
 
-    return {
-      reasoning: String(parsed.reasoning || ''),
-      files: parsed.files
-        .filter((f: any) => f && typeof f.content === 'string' && f.content.length > 0)
-        .map((f: any) => ({
-          path: String(f.path || ''),
-          action: ['create', 'update', 'delete', 'replace'].includes(f.action) ? f.action : 'update',
-          content: String(f.content),
-          diff: String(f.diff || ''),
-          original_block: String(f.original_block || ''),
-        })),
-      unparsed_text: String(parsed.unparsed_text || ''),
-    };
-  } catch {
-    return null;
+${snippetSummaries}`;
+
+    try {
+      const cfg = config || loadToasterConfig();
+      const model = await getResolvedModel(cfg);
+      const resp = await fetch(`${cfg.endpoint}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          stream: false,
+          options: { temperature: 0.0, num_predict: 256 },
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const reply = (data.message?.content || '').trim();
+        const parsed = extractJSON<Record<string, string>>(reply);
+        if (parsed) {
+          for (const [key, val] of Object.entries(parsed)) {
+            const idx = parseInt(key, 10);
+            if (!isNaN(idx) && typeof val === 'string' && val.length > 0) {
+              pathMap[idx] = val;
+            }
+          }
+        }
+      }
+    } catch {}
   }
+
+  const files: CleanedFile[] = regexBlocks
+    .filter(b => b.code.length > 0)
+    .map((b, _i) => {
+      const origIdx = regexBlocks.indexOf(b);
+      const resolvedPath = b.filePath || pathMap[origIdx] || '';
+      return {
+        path: resolvedPath,
+        action: 'update' as const,
+        content: b.code,
+        diff: '',
+        original_block: '',
+      };
+    });
+
+  return {
+    reasoning: `Regex found ${regexBlocks.length} blocks, Ollama resolved ${Object.keys(pathMap).length} paths`,
+    files,
+    unparsed_text: '',
+  };
 }
 
 export function cleanedResponseToBlocks(cleaned: CleanedResponse): import('./code-parser').ParsedBlock[] {
