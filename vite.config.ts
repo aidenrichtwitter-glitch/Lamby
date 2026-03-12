@@ -790,7 +790,23 @@ function projectManagementPlugin(): Plugin {
 
           const executables = findExecutables(projectDir);
           if (executables.length > 0 && !hasPkg) {
-            const best = executables.find(e => e.ext === ".exe") || executables.find(e => e.ext === ".appimage") || executables.find(e => e.ext === ".app") || executables[0];
+            const INSTALLER_HINTS = ["installer", "setup", "install", "uninstall", "-web-", "update"];
+            const archHints = os.arch() === "arm64" ? ["arm64", "aarch64"] : ["x64", "x86_64", "amd64", "win64"];
+            const wrongArchHints = os.arch() === "arm64" ? ["x64", "x86_64", "amd64", "win64"] : ["arm64", "aarch64"];
+            const scored = executables.map(e => {
+              let score = 0;
+              const lname = e.name.toLowerCase();
+              if (INSTALLER_HINTS.some(h => lname.includes(h))) score -= 100;
+              if (e.ext === ".msi") score -= 50;
+              if (archHints.some(h => lname.includes(h))) score += 10;
+              if (wrongArchHints.some(h => lname.includes(h))) score -= 20;
+              if (e.ext === ".exe") score += 5;
+              else if (e.ext === ".appimage") score += 4;
+              else if (e.ext === ".app") score += 3;
+              if (lname.includes("portable")) score += 15;
+              return { ...e, score };
+            }).sort((a, b) => b.score - a.score);
+            const best = scored[0];
             const launched = launchExecutable(best.fullPath, name);
             const allExeNames = executables.map(e => e.name).slice(0, 10).join(", ");
             console.log(`[Preview] Precompiled binaries found for ${name}: ${allExeNames}`);
