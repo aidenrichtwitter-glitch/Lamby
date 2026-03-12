@@ -833,40 +833,48 @@ function projectManagementPlugin(): Plugin {
             const scored = executables.map(e => {
               let score = 0;
               const lname = e.name.toLowerCase();
+              if (wrongArchHints.some(h => lname.includes(h))) score -= 1000;
               if (INSTALLER_HINTS.some(h => lname.includes(h))) score -= 100;
               if (e.ext === ".msi") score -= 50;
               if (archHints.some(h => lname.includes(h))) score += 10;
-              if (wrongArchHints.some(h => lname.includes(h))) score -= 20;
               if (e.ext === ".exe") score += 5;
               else if (e.ext === ".appimage") score += 4;
               else if (e.ext === ".app") score += 3;
               if (lname.includes("portable")) score += 15;
               return { ...e, score };
             }).sort((a, b) => b.score - a.score);
-            const best = scored[0];
-            const bestLower = best.name.toLowerCase();
-            const isInstaller = INSTALLER_HINTS.some(h => bestLower.includes(h)) || best.ext === ".msi";
-            const launched = launchExecutable(best.fullPath, name);
-            const allExeNames = scored.map(e => `${e.name} (score:${e.score})`).slice(0, 10).join(", ");
-            console.log(`[Preview] Precompiled binaries found for ${name}: ${allExeNames}`);
-            console.log(`[Preview] Selected: ${best.name} (installer: ${isInstaller})`);
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({
-              started: false,
-              projectType: isInstaller ? "installer" : "precompiled",
-              openTerminal: true,
-              launched,
-              isInstaller,
-              runCommand: `"${best.fullPath}"`,
-              projectDir: projectDir,
-              executables: scored.map(e => ({ name: e.name, path: e.fullPath, ext: e.ext, score: e.score })).slice(0, 20),
-              message: launched
-                ? isInstaller
-                  ? `Launching installer: ${best.name} — follow the setup wizard to install`
-                  : `Launched ${best.name}`
-                : `Found: ${best.name} — could not auto-launch`,
-            }));
-            return;
+            const compatible = scored.filter(e => e.score > -1000);
+            if (compatible.length === 0 && scored.length > 0) {
+              console.log(`[Preview] All ${scored.length} executables are wrong architecture — deleting and re-downloading`);
+              try { fs.rmSync(path.join(projectDir, "_releases"), { recursive: true, force: true }); } catch {}
+            }
+            const best = compatible.length > 0 ? compatible[0] : null;
+            if (best) {
+              const bestLower = best.name.toLowerCase();
+              const isInstaller = INSTALLER_HINTS.some(h => bestLower.includes(h)) || best.ext === ".msi";
+              const launched = launchExecutable(best.fullPath, name);
+              const allExeNames = scored.map(e => `${e.name} (score:${e.score})`).slice(0, 10).join(", ");
+              console.log(`[Preview] Precompiled binaries found for ${name}: ${allExeNames}`);
+              console.log(`[Preview] Selected: ${best.name} (installer: ${isInstaller})`);
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({
+                started: false,
+                projectType: isInstaller ? "installer" : "precompiled",
+                openTerminal: true,
+                launched,
+                isInstaller,
+                runCommand: `"${best.fullPath}"`,
+                projectDir: projectDir,
+                executables: scored.map(e => ({ name: e.name, path: e.fullPath, ext: e.ext, score: e.score })).slice(0, 20),
+                message: launched
+                  ? isInstaller
+                    ? `Launching installer: ${best.name} — follow the setup wizard to install`
+                    : `Launched ${best.name}`
+                  : `Found: ${best.name} — could not auto-launch`,
+              }));
+              return;
+            }
+            console.log(`[Preview] No compatible executables found for ${name} (${scored.length} wrong-arch skipped) — falling through to build/download`);
           }
 
           const WEB_FRAMEWORKS = ["react", "react-dom", "vue", "svelte", "@sveltejs/kit", "next", "nuxt", "@angular/core", "preact", "solid-js", "astro", "gatsby", "remix", "@remix-run/react", "lit", "ember-source", "qwik", "@builder.io/qwik", "vite", "webpack-dev-server", "parcel", "@rspack/core", "react-scripts"];
