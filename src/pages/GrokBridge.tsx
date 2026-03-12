@@ -1835,7 +1835,24 @@ const GrokBridge: React.FC = () => {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.started === false && data.error) {
+        if (data.openTerminal) {
+          if (isElectron) {
+            try {
+              const { ipcRenderer } = (window as any).require('electron');
+              await ipcRenderer.invoke('open-terminal', { cwd: data.projectDir, command: data.runCommand });
+              setStatusMessage(`Opened terminal for ${data.projectType} project${data.runCommand ? ` — run: ${data.runCommand}` : ''}`);
+            } catch {
+              setStatusMessage(`${data.projectType} project — open a terminal in the project folder and run: ${data.runCommand || 'the appropriate command'}`);
+            }
+          } else {
+            setStatusMessage(`This is a ${data.projectType} project — run in terminal: ${data.runCommand || 'see project README'}`);
+          }
+          setPreviewLogs(prev => [...prev, {
+            level: 'info',
+            args: [`[Project] ${data.message || 'Non-web project detected'} — Command: ${data.runCommand || 'N/A'}`],
+            timestamp: Date.now(),
+          }]);
+        } else if (data.started === false && data.error) {
           setStatusMessage(`Preview failed: ${data.error.slice(0, 200)}`);
           setPreviewLogs(prev => [...prev, { level: 'error', args: [`[Server] ${data.detectedCommand || 'unknown command'}: ${data.error}`], timestamp: Date.now() }]);
           if (data.output) {

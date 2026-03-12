@@ -667,6 +667,53 @@ function projectManagementPlugin(): Plugin {
             }
           }
 
+          const WEB_FRAMEWORKS = ["react", "react-dom", "vue", "svelte", "@sveltejs/kit", "next", "nuxt", "@angular/core", "preact", "solid-js", "astro", "gatsby", "remix", "@remix-run/react", "lit", "ember-source", "qwik", "@builder.io/qwik", "vite", "webpack-dev-server", "parcel", "@rspack/core", "react-scripts"];
+          const hasIndexHtml = (() => {
+            const dirs = [projectDir, effectiveProjectDir, path.join(projectDir, "public"), path.join(projectDir, "src"), ...["frontend", "client", "web", "app"].flatMap(d => [path.join(projectDir, d), path.join(projectDir, d, "public"), path.join(projectDir, d, "src")])];
+            return dirs.some(d => { try { return fs.existsSync(path.join(d, "index.html")); } catch { return false; } });
+          })();
+          const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+          const hasWebFramework = WEB_FRAMEWORKS.some(fw => fw in allDeps);
+          const isCLI = !!(pkg.bin);
+          const scripts = pkg.scripts || {};
+          const hasOnlyBackend = !hasWebFramework && !hasIndexHtml && (allDeps["express"] || allDeps["fastify"] || allDeps["koa"] || allDeps["hapi"] || allDeps["@hapi/hapi"] || allDeps["nest"] || allDeps["@nestjs/core"]);
+          const isPythonProject = !hasPkg && (fs.existsSync(path.join(projectDir, "requirements.txt")) || fs.existsSync(path.join(projectDir, "setup.py")) || fs.existsSync(path.join(projectDir, "pyproject.toml")));
+          const isGoProject = !hasPkg && (fs.existsSync(path.join(projectDir, "go.mod")) || fs.existsSync(path.join(projectDir, "main.go")));
+          const isRustProject = !hasPkg && fs.existsSync(path.join(projectDir, "Cargo.toml"));
+          const hasStartScript = scripts.dev || scripts.start || scripts.serve;
+          const isNonWebProject = !hasIndexHtml && !hasWebFramework && (isCLI || isPythonProject || isGoProject || isRustProject || (!hasStartScript && !hasOnlyBackend));
+
+          if (isNonWebProject) {
+            const projectType = isPythonProject ? "python" : isGoProject ? "go" : isRustProject ? "rust" : isCLI ? "cli" : "terminal";
+            let runCmd = "";
+            if (isPythonProject) {
+              const mainPy = fs.existsSync(path.join(projectDir, "main.py")) ? "main.py" : fs.existsSync(path.join(projectDir, "app.py")) ? "app.py" : fs.readdirSync(projectDir).find((f: string) => f.endsWith(".py")) || "main.py";
+              runCmd = `python3 ${mainPy}`;
+            } else if (isGoProject) {
+              runCmd = "go run .";
+            } else if (isRustProject) {
+              runCmd = "cargo run";
+            } else if (isCLI && pkg.bin) {
+              const binName = typeof pkg.bin === "string" ? pkg.name : Object.keys(pkg.bin)[0];
+              runCmd = `node ${typeof pkg.bin === "string" ? pkg.bin : pkg.bin[binName]}`;
+            } else if (pkg.main) {
+              runCmd = `node ${pkg.main}`;
+            } else if (scripts.start) {
+              runCmd = `npm run start`;
+            }
+            console.log(`[Preview] Non-web project detected (${projectType}) for ${name} — suggesting terminal`);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({
+              started: false,
+              projectType,
+              openTerminal: true,
+              runCommand: runCmd,
+              projectDir: projectDir,
+              message: `This is a ${projectType} project — opening in terminal instead of preview.`,
+            }));
+            return;
+          }
+
           const patchPortInEnvFiles = () => {
             const envFiles = [".env", ".env.local", ".env.development", ".env.development.local"];
             const envDirs = effectiveProjectDir !== projectDir ? [effectiveProjectDir, projectDir] : [projectDir];
