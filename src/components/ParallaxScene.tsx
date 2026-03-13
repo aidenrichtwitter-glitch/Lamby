@@ -107,6 +107,8 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
     renderer.domElement.style.zIndex = '0';
+    const cameraEl = renderer.domElement.children[0] as HTMLElement | undefined;
+    if (cameraEl) cameraEl.style.pointerEvents = 'auto';
     rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
@@ -136,6 +138,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       const obj = new CSS3DObject(wallEl);
       obj.position.set(...spec.position);
       obj.rotation.set(...spec.rotation);
+      obj.element.style.pointerEvents = 'auto';
       scene.add(obj);
     });
 
@@ -198,10 +201,11 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
 
       if (cameraRef.current && rendererRef.current && sceneRef.current) {
         const cam = cameraRef.current;
-        cam.position.x = -lerp.headX * 80;
+        const invertX = trackingMode === 'head' ? -1 : 1;
+        cam.position.x = invertX * lerp.headX * 80;
         cam.position.y = -lerp.headY * 60;
         cam.lookAt(
-          -lerp.headX * CUBE_SIZE * 0.4,
+          invertX * lerp.headX * CUBE_SIZE * 0.4,
           -lerp.headY * CUBE_SIZE * 0.3,
           -HALF
         );
@@ -209,9 +213,10 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       }
 
       if (contentRef.current) {
-        const rotY = -lerp.headX * 3;
+        const cInvertX = trackingMode === 'head' ? -1 : 1;
+        const rotY = cInvertX * lerp.headX * 3;
         const rotX = lerp.headY * 2;
-        const tX = -lerp.headX * 15;
+        const tX = cInvertX * lerp.headX * 15;
         const tY = -lerp.headY * 10;
         const scale = 1 + Math.abs(lerp.headX * 0.008) + Math.abs(lerp.headY * 0.006);
         contentRef.current.style.transform =
@@ -226,7 +231,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       cancelAnimationFrame(animFrameRef.current);
       if (cleanup) cleanup();
     };
-  }, [enabled, lerpRef, targetRef, fpsRef, initScene, destroyScene]);
+  }, [enabled, trackingMode, lerpRef, targetRef, fpsRef, initScene, destroyScene]);
 
   useEffect(() => {
     if (!enabled || !rendererRef.current || !cameraRef.current) return;
