@@ -172,12 +172,16 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.setAttribute('data-wall', spec.wall);
 
       let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+      const wall = spec.wall as CubeWall;
       wallEl.addEventListener('mouseenter', () => {
-        const wall = spec.wall as CubeWall;
-        if (focusedWallRef.current === wall) return;
-        hoverTimer = setTimeout(() => {
-          setFocusedWall(wall);
-        }, 1500);
+        if (wall === 'back') {
+          if (focusedWallRef.current !== 'center') {
+            hoverTimer = setTimeout(() => { setFocusedWall('center'); }, 1500);
+          }
+        } else {
+          if (focusedWallRef.current === wall) return;
+          hoverTimer = setTimeout(() => { setFocusedWall(wall); }, 1500);
+        }
       });
       wallEl.addEventListener('mouseleave', () => {
         if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
