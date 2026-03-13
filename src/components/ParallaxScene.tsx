@@ -126,9 +126,6 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         flex-direction: row !important;
         justify-content: flex-start !important;
       }
-      [data-wall="top"] > *, [data-wall="bottom"] > * {
-        pointer-events: auto !important;
-      }
     `;
     document.head.appendChild(styleEl);
 
@@ -145,11 +142,6 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.style.contain = 'layout style paint';
       wallEl.style.position = 'relative';
       wallEl.setAttribute('data-wall', spec.wall);
-      if (spec.wall === 'top' || spec.wall === 'bottom') {
-        wallEl.style.pointerEvents = 'none';
-        wallEl.style.background = 'transparent';
-        wallEl.style.border = 'none';
-      }
 
       const wall = spec.wall as CubeWall;
       wallEl.addEventListener('click', (e) => {
