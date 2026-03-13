@@ -29,6 +29,14 @@ const WALL_COLORS: Record<CubeWall, { bg: string; border: string }> = {
   bottom: { bg: 'rgba(148, 0, 211, 0.04)',  border: 'rgba(148, 0, 211, 0.1)' },
 };
 
+const WALL_ALIGNMENT: Record<CubeWall, Record<string, string>> = {
+  back: {},
+  left: { justifyContent: 'center', alignItems: 'flex-end' },
+  right: { justifyContent: 'center', alignItems: 'flex-start' },
+  top: { justifyContent: 'flex-end', alignItems: 'center' },
+  bottom: { justifyContent: 'flex-start', alignItems: 'center' },
+};
+
 export default function ParallaxScene({ children }: { children: React.ReactNode }) {
   const {
     enabled, trackingMode,
@@ -86,6 +94,11 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.style.display = 'flex';
       wallEl.style.flexDirection = 'column';
       wallEl.setAttribute('data-wall', spec.wall);
+
+      const alignment = WALL_ALIGNMENT[spec.wall];
+      Object.entries(alignment).forEach(([prop, val]) => {
+        (wallEl.style as Record<string, string>)[prop] = val;
+      });
 
       const obj = new CSS3DObject(wallEl);
       obj.position.set(...spec.position);
