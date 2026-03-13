@@ -3563,6 +3563,7 @@ const GrokBridge: React.FC = () => {
       )}
 
       {/* ── Top bar ── */}
+      <ParallaxPortal wall="top">
       <div className="shrink-0 border-b border-border/40 bg-card/60">
         <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 shrink-0">
@@ -3961,13 +3962,16 @@ const GrokBridge: React.FC = () => {
           )}
         </div>
       </div>
+      </ParallaxPortal>
 
       {/* ── Unified Layout — Browser/API toggle only swaps main content area ── */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {showProjectPanel && (
-          <div className="w-52 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
-            <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} onFileEdit={handleFileEdit} />
-          </div>
+          <ParallaxPortal wall="left">
+            <div className="w-52 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
+              <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} onFileEdit={handleFileEdit} />
+            </div>
+          </ParallaxPortal>
         )}
         {editorFile && (
           <div className="border-r border-border/30 flex flex-col" style={{ flex: '1 1 40%', minWidth: 0 }}>
