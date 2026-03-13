@@ -74,6 +74,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
   const registerWallMountRef = useRef(registerWallMount);
   registerWallMountRef.current = registerWallMount;
 
+  const lerpLookRef = useRef({ x: 0, y: 0, z: -(DEPTH / 2) });
   const [sceneReady, setSceneReady] = useState(false);
 
   const initScene = useCallback(() => {
@@ -227,17 +228,20 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         const cam = cameraRef.current;
         const fo = FOCUS_OFFSETS[focusedWallRef.current];
         const baseZ = DEPTH * 0.65;
+        const smooth = 0.04;
         const targetPosX = invertX * lerp.headX * 120 + fo.x;
         const targetPosY = invertY * lerp.headY * 90 + fo.y;
         const targetPosZ = baseZ + fo.z;
-        cam.position.x += (targetPosX - cam.position.x) * 0.08;
-        cam.position.y += (targetPosY - cam.position.y) * 0.08;
-        cam.position.z += (targetPosZ - cam.position.z) * 0.08;
-        cam.lookAt(
-          invertX * lerp.headX * 300 + fo.lookX,
-          invertY * lerp.headY * 225 + fo.lookY,
-          fo.lookZ
-        );
+        cam.position.x += (targetPosX - cam.position.x) * smooth;
+        cam.position.y += (targetPosY - cam.position.y) * smooth;
+        cam.position.z += (targetPosZ - cam.position.z) * smooth;
+        const targetLookX = invertX * lerp.headX * 300 + fo.lookX;
+        const targetLookY = invertY * lerp.headY * 225 + fo.lookY;
+        const targetLookZ = fo.lookZ;
+        lerpLookRef.current.x += (targetLookX - lerpLookRef.current.x) * smooth;
+        lerpLookRef.current.y += (targetLookY - lerpLookRef.current.y) * smooth;
+        lerpLookRef.current.z += (targetLookZ - lerpLookRef.current.z) * smooth;
+        cam.lookAt(lerpLookRef.current.x, lerpLookRef.current.y, lerpLookRef.current.z);
         rendererRef.current.render(sceneRef.current, cam);
       }
 
