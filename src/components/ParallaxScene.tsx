@@ -4,22 +4,20 @@ import type { CubeWall } from '@/lib/parallax-types';
 import * as THREE from 'three';
 import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRenderer.js';
 
-const CUBE_SIZE = 900;
-const HALF = CUBE_SIZE / 2;
+const DEPTH = 400;
 
-interface WallSpec {
-  wall: CubeWall;
-  position: [number, number, number];
-  rotation: [number, number, number];
+function buildWallSpecs(vw: number, vh: number) {
+  const halfW = vw / 2;
+  const halfH = vh / 2;
+  const halfD = DEPTH / 2;
+  return [
+    { wall: 'back' as CubeWall,   position: [0, 0, -halfD] as [number,number,number],  rotation: [0, 0, 0] as [number,number,number], width: vw, height: vh },
+    { wall: 'left' as CubeWall,   position: [-halfW, 0, 0] as [number,number,number],  rotation: [0, Math.PI / 2, 0] as [number,number,number], width: DEPTH, height: vh },
+    { wall: 'right' as CubeWall,  position: [halfW, 0, 0] as [number,number,number],   rotation: [0, -Math.PI / 2, 0] as [number,number,number], width: DEPTH, height: vh },
+    { wall: 'top' as CubeWall,    position: [0, halfH, 0] as [number,number,number],    rotation: [Math.PI / 2, 0, 0] as [number,number,number], width: vw, height: DEPTH },
+    { wall: 'bottom' as CubeWall, position: [0, -halfH, 0] as [number,number,number],   rotation: [-Math.PI / 2, 0, 0] as [number,number,number], width: vw, height: DEPTH },
+  ];
 }
-
-const WALL_SPECS: WallSpec[] = [
-  { wall: 'back',   position: [0, 0, -HALF],  rotation: [0, 0, 0] },
-  { wall: 'left',   position: [-HALF, 0, 0],  rotation: [0, Math.PI / 2, 0] },
-  { wall: 'right',  position: [HALF, 0, 0],   rotation: [0, -Math.PI / 2, 0] },
-  { wall: 'top',    position: [0, HALF, 0],    rotation: [Math.PI / 2, 0, 0] },
-  { wall: 'bottom', position: [0, -HALF, 0],   rotation: [-Math.PI / 2, 0, 0] },
-];
 
 const WALL_COLORS: Record<CubeWall, { bg: string; border: string }> = {
   back:   { bg: 'rgba(160, 32, 240, 0.06)', border: 'rgba(160, 32, 240, 0.15)' },
@@ -110,11 +108,12 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     `;
     document.head.appendChild(styleEl);
 
-    WALL_SPECS.forEach(spec => {
+    const wallSpecs = buildWallSpecs(w, h);
+    wallSpecs.forEach(spec => {
       const colors = WALL_COLORS[spec.wall];
       const wallEl = document.createElement('div');
-      wallEl.style.width = CUBE_SIZE + 'px';
-      wallEl.style.height = CUBE_SIZE + 'px';
+      wallEl.style.width = spec.width + 'px';
+      wallEl.style.height = spec.height + 'px';
       wallEl.style.background = colors.bg;
       wallEl.style.border = `1px solid ${colors.border}`;
       wallEl.style.boxSizing = 'border-box';
@@ -195,9 +194,9 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         cam.position.x = invertX * lerp.headX * 80;
         cam.position.y = -lerp.headY * 60;
         cam.lookAt(
-          invertX * lerp.headX * CUBE_SIZE * 0.4,
-          -lerp.headY * CUBE_SIZE * 0.3,
-          -HALF
+          invertX * lerp.headX * 200,
+          -lerp.headY * 150,
+          -(DEPTH / 2)
         );
         rendererRef.current.render(sceneRef.current, cam);
       }
