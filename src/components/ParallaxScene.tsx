@@ -6,6 +6,8 @@ import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRe
 import ParallaxControls from '@/components/ParallaxControls';
 
 const DEPTH = 400;
+const LEFT_W = 500;
+const RIGHT_W = 400;
 const TOP_STRIP_H = 100;
 const BOTTOM_STRIP_H = 80;
 const SIDE_ANGLE = Math.PI / 3;
@@ -16,13 +18,15 @@ function buildWallSpecs(vw: number, vh: number) {
   const mainH = vh - TOP_STRIP_H - BOTTOM_STRIP_H;
   const mainCenterY = -TOP_STRIP_H / 2 + BOTTOM_STRIP_H / 2;
 
-  const sideCenterX = DEPTH / 2 * Math.cos(SIDE_ANGLE);
-  const sideCenterZ = DEPTH / 2 * Math.sin(SIDE_ANGLE);
+  const leftCX = LEFT_W / 2 * Math.cos(SIDE_ANGLE);
+  const leftCZ = LEFT_W / 2 * Math.sin(SIDE_ANGLE);
+  const rightCX = RIGHT_W / 2 * Math.cos(SIDE_ANGLE);
+  const rightCZ = RIGHT_W / 2 * Math.sin(SIDE_ANGLE);
 
   return [
     { wall: 'back' as CubeWall,   position: [0, mainCenterY, -halfD] as [number,number,number],  rotation: [0, 0, 0] as [number,number,number], width: vw, height: mainH },
-    { wall: 'left' as CubeWall,   position: [-(halfW + sideCenterX), mainCenterY, -halfD + sideCenterZ] as [number,number,number],  rotation: [0, SIDE_ANGLE, 0] as [number,number,number], width: DEPTH, height: mainH },
-    { wall: 'right' as CubeWall,  position: [halfW + sideCenterX, mainCenterY, -halfD + sideCenterZ] as [number,number,number],   rotation: [0, -SIDE_ANGLE, 0] as [number,number,number], width: DEPTH, height: mainH },
+    { wall: 'left' as CubeWall,   position: [-(halfW + leftCX), mainCenterY, -halfD + leftCZ] as [number,number,number],  rotation: [0, SIDE_ANGLE, 0] as [number,number,number], width: LEFT_W, height: mainH },
+    { wall: 'right' as CubeWall,  position: [halfW + rightCX, mainCenterY, -halfD + rightCZ] as [number,number,number],   rotation: [0, -SIDE_ANGLE, 0] as [number,number,number], width: RIGHT_W, height: mainH },
     { wall: 'top' as CubeWall,    position: [0, vh / 2 - TOP_STRIP_H / 2, -halfD] as [number,number,number], rotation: [0, 0, 0] as [number,number,number], width: vw, height: TOP_STRIP_H },
     { wall: 'bottom' as CubeWall, position: [0, -(vh / 2 - BOTTOM_STRIP_H / 2), -halfD] as [number,number,number], rotation: [0, 0, 0] as [number,number,number], width: vw, height: BOTTOM_STRIP_H },
   ];
