@@ -72,11 +72,11 @@ function NavArrow({ dir, label, active, onClick }: { dir: string; label: string;
 
 const FOCUS_OFFSETS: Record<FocusTarget, { x: number; y: number; z: number; lookX: number; lookY: number; lookZ: number }> = {
   center: { x: 0, y: 0, z: 0, lookX: 0, lookY: 0, lookZ: -(DEPTH / 2) },
-  back:   { x: 0, y: 0, z: -200, lookX: 0, lookY: 0, lookZ: -(DEPTH / 2) },
-  left:   { x: -500, y: 0, z: -120, lookX: -800, lookY: 0, lookZ: -(DEPTH / 2) + 100 },
-  right:  { x: 500, y: 0, z: -120, lookX: 800, lookY: 0, lookZ: -(DEPTH / 2) + 100 },
-  top:    { x: 0, y: 300, z: -100, lookX: 0, lookY: 600, lookZ: -(DEPTH / 2) },
-  bottom: { x: 0, y: -300, z: -100, lookX: 0, lookY: -600, lookZ: -(DEPTH / 2) },
+  back:   { x: 0, y: 0, z: -160, lookX: 0, lookY: 0, lookZ: -(DEPTH / 2) },
+  left:   { x: -375, y: 0, z: -90, lookX: -600, lookY: 0, lookZ: -(DEPTH / 2) + 50 },
+  right:  { x: 375, y: 0, z: -90, lookX: 600, lookY: 0, lookZ: -(DEPTH / 2) + 50 },
+  top:    { x: 0, y: 240, z: -80, lookX: 0, lookY: 450, lookZ: -(DEPTH / 2) },
+  bottom: { x: 0, y: -240, z: -80, lookX: 0, lookY: -450, lookZ: -(DEPTH / 2) },
 };
 
 export default function ParallaxScene({ children }: { children: React.ReactNode }) {
