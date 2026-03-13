@@ -10,27 +10,17 @@ function configureGpuAcceleration() {
   const isHeadless = !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY;
   const isContainer = fs.existsSync('/.dockerenv') || process.env.container === 'docker';
 
-  // Check for NVIDIA/AMD GPU availability (basic detection)
-  let hasGpu = false;
-  try {
-    // Check for NVIDIA GPU
-    if (fs.existsSync('/dev/nvidia0') || process.env.NVIDIA_VISIBLE_DEVICES) {
-      hasGpu = true;
+  let hasGpu = process.platform === 'win32' || process.platform === 'darwin';
+  if (!hasGpu) {
+    try {
+      if (fs.existsSync('/dev/nvidia0') || process.env.NVIDIA_VISIBLE_DEVICES) hasGpu = true;
+      if (fs.existsSync('/dev/dri/card0')) hasGpu = true;
+    } catch (e) {
+      // Ignore errors in GPU detection
     }
-    // Check for AMD GPU
-    if (fs.existsSync('/dev/dri/card0')) {
-      hasGpu = true;
-    }
-  } catch (e) {
-    // Ignore errors in GPU detection
   }
 
-  // Disable GPU acceleration if:
-  // 1. In headless environment
-  // 2. In container without GPU passthrough
-  // 3. No GPU detected
-  // 4. Explicitly requested via environment variable
-  const shouldDisableGpu = isHeadless || (isContainer && !hasGpu) || !hasGpu || process.env.GROK_DISABLE_GPU === 'true';
+  const shouldDisableGpu = process.env.GROK_DISABLE_GPU === 'true' || (isHeadless && !hasGpu) || (isContainer && !hasGpu);
 
   if (shouldDisableGpu) {
     console.log('Grok Desktop: Disabling GPU acceleration for compatibility');
