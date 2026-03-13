@@ -17,6 +17,14 @@ A self-evolving, self-recursive development environment with AI-powered code evo
 - Framer Motion for animations
 - PWA support via vite-plugin-pwa
 
+## Parallax Mode
+- Toggle in header (top-right) enables/disables 3D parallax effect on entire IDE
+- Two tracking modes: **Mouse** (cursor position) and **Head** (webcam + MediaPipe face detection)
+- Uses CSS `perspective()` + `rotateX/Y` + `translate` transforms with lerp smoothing (0.85/0.15 blend)
+- Head tracking loads MediaPipe Face Detection scripts on-demand from CDN
+- State persisted in localStorage (`parallax-enabled`, `parallax-tracking-mode`)
+- Files: `src/lib/parallax-context.tsx` (provider), `src/components/ParallaxScene.tsx` (3D layer), `src/components/ParallaxControls.tsx` (UI)
+
 ## Project Structure
 ```
 src/
@@ -30,7 +38,9 @@ src/
 │   └── NotFound.tsx
 ├── components/                # UI components (AIChat, CodeViewer, FileTree, etc.)
 │   ├── LogsPanel.tsx          # Preview console log capture panel (errors/warnings from iframe)
-│   └── ProjectExplorer.tsx    # Sub-project file tree + GitHub import UI
+│   ├── ProjectExplorer.tsx    # Sub-project file tree + GitHub import UI
+│   ├── ParallaxScene.tsx      # 3D parallax wrapper with CSS transforms + head/mouse tracking
+│   └── ParallaxControls.tsx   # Parallax toggle + mode switch UI
 ├── integrations/supabase/     # Supabase client + generated types
 ├── lib/                       # Core logic libraries
 │   ├── recursion-engine.ts    # Main recursion loop engine
