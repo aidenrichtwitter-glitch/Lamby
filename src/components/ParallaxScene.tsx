@@ -293,13 +293,12 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     >
       <div
         style={{
-          width: '100%',
-          height: '100%',
-          position: 'relative',
-          zIndex: -1,
+          position: 'absolute',
+          width: 0,
+          height: 0,
+          overflow: 'hidden',
           pointerEvents: 'none',
           opacity: 0,
-          overflow: 'hidden',
         }}
       >
         {children}
