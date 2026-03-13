@@ -82,6 +82,15 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
+    const viewEl = renderer.domElement.firstElementChild as HTMLElement;
+    if (viewEl) {
+      viewEl.style.pointerEvents = 'auto';
+      const camEl = viewEl.firstElementChild as HTMLElement;
+      if (camEl) {
+        camEl.style.pointerEvents = 'auto';
+      }
+    }
+
     const styleEl = document.createElement('style');
     styleEl.textContent = `
       [data-wall="left"] [data-side="left"] > div:last-child {
