@@ -65,6 +65,49 @@ const WALL_SPECS: WallSpec[] = [
   },
 ];
 
+const PANEL_POSITIONS: Record<CubeWall, React.CSSProperties> = {
+  back: {
+    position: 'absolute',
+    inset: 0,
+  },
+  left: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '220px',
+    height: '100%',
+  },
+  right: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: '45%',
+    height: '100%',
+  },
+  top: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 'auto',
+  },
+  bottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 'auto',
+  },
+};
+
+const DEPTH_MULTIPLIER: Record<CubeWall, number> = {
+  back: 1.0,
+  left: 1.8,
+  right: 1.8,
+  top: 1.5,
+  bottom: 1.5,
+};
+
 export default function ParallaxScene({ children }: { children: React.ReactNode }) {
   const {
     enabled, trackingMode,
@@ -80,11 +123,19 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
   const rendererRef = useRef<CSS3DRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const wallMountRefs = useRef<Record<CubeWall, HTMLDivElement | null>>({
+  const panelRefs = useRef<Record<CubeWall, HTMLDivElement | null>>({
     back: null, left: null, right: null, top: null, bottom: null,
   });
   const registerWallMountRef = useRef(registerWallMount);
   registerWallMountRef.current = registerWallMount;
+
+  const panelRefCallbacks = useRef<Record<CubeWall, (el: HTMLDivElement | null) => void>>({
+    back: (el) => { if (panelRefs.current.back !== el) { panelRefs.current.back = el; registerWallMountRef.current('back', el); } },
+    left: (el) => { if (panelRefs.current.left !== el) { panelRefs.current.left = el; registerWallMountRef.current('left', el); } },
+    right: (el) => { if (panelRefs.current.right !== el) { panelRefs.current.right = el; registerWallMountRef.current('right', el); } },
+    top: (el) => { if (panelRefs.current.top !== el) { panelRefs.current.top = el; registerWallMountRef.current('top', el); } },
+    bottom: (el) => { if (panelRefs.current.bottom !== el) { panelRefs.current.bottom = el; registerWallMountRef.current('bottom', el); } },
+  });
 
   const [sceneReady, setSceneReady] = useState(false);
 
@@ -109,10 +160,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
     renderer.domElement.style.zIndex = '0';
-
-    const cameraEl = renderer.domElement.children[0] as HTMLElement | undefined;
-    if (cameraEl) cameraEl.style.pointerEvents = 'auto';
-
+    renderer.domElement.style.pointerEvents = 'none';
     rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
@@ -123,46 +171,10 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.style.background = spec.bgColor;
       wallEl.style.border = `1px solid ${spec.borderColor}`;
       wallEl.style.boxSizing = 'border-box';
-      wallEl.style.overflow = 'hidden';
-      wallEl.style.position = 'relative';
-      wallEl.style.pointerEvents = 'auto';
-
-      const mountPoint = document.createElement('div');
-      mountPoint.style.width = '100%';
-      mountPoint.style.height = '100%';
-      mountPoint.style.position = 'absolute';
-      mountPoint.style.top = '0';
-      mountPoint.style.left = '0';
-      mountPoint.style.overflow = 'auto';
-      mountPoint.style.pointerEvents = 'auto';
-
-      if (spec.wall === 'bottom') {
-        mountPoint.style.display = 'flex';
-        mountPoint.style.flexDirection = 'column';
-        mountPoint.style.justifyContent = 'flex-start';
-      } else if (spec.wall === 'top') {
-        mountPoint.style.display = 'flex';
-        mountPoint.style.flexDirection = 'column';
-        mountPoint.style.justifyContent = 'flex-end';
-      } else if (spec.wall === 'right') {
-        mountPoint.style.display = 'flex';
-        mountPoint.style.flexDirection = 'row';
-        mountPoint.style.justifyContent = 'flex-start';
-      } else if (spec.wall === 'left') {
-        mountPoint.style.display = 'flex';
-        mountPoint.style.flexDirection = 'row';
-        mountPoint.style.justifyContent = 'flex-end';
-      }
-
-      wallEl.appendChild(mountPoint);
-
-      wallMountRefs.current[spec.wall] = mountPoint;
-      registerWallMountRef.current(spec.wall, mountPoint);
 
       const obj = new CSS3DObject(wallEl);
       obj.position.set(...spec.position);
       obj.rotation.set(...spec.rotation);
-      obj.element.style.pointerEvents = 'auto';
       scene.add(obj);
     });
 
@@ -175,10 +187,6 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       rendererRef.current = null;
       sceneRef.current = null;
       cameraRef.current = null;
-      WALL_SPECS.forEach(spec => {
-        wallMountRefs.current[spec.wall] = null;
-        registerWallMountRef.current(spec.wall, null);
-      });
       setSceneReady(false);
     };
   }, []);
@@ -190,11 +198,6 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     rendererRef.current = null;
     sceneRef.current = null;
     cameraRef.current = null;
-    const walls: CubeWall[] = ['back', 'left', 'right', 'top', 'bottom'];
-    walls.forEach(w => {
-      wallMountRefs.current[w] = null;
-      registerWallMountRef.current(w, null);
-    });
     setSceneReady(false);
   }, []);
 
@@ -202,19 +205,10 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     if (!enabled) {
       cancelAnimationFrame(animFrameRef.current);
       destroyScene();
-      if (contentRef.current) contentRef.current.style.transform = '';
       return;
     }
 
     const cleanup = initScene();
-
-    const reEnablePointerEvents = () => {
-      if (!rendererRef.current) return;
-      const cameraEl = rendererRef.current.domElement.children[0] as HTMLElement | undefined;
-      if (cameraEl && cameraEl.style.pointerEvents !== 'auto') {
-        cameraEl.style.pointerEvents = 'auto';
-      }
-    };
 
     const animate = () => {
       const lerp = lerpRef.current;
@@ -231,9 +225,10 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         fpsData.lastTime = now;
       }
 
+      const invertX = trackingMode === 'head' ? -1 : 1;
+
       if (cameraRef.current && rendererRef.current && sceneRef.current) {
         const cam = cameraRef.current;
-        const invertX = trackingMode === 'head' ? -1 : 1;
         cam.position.x = invertX * lerp.headX * 80;
         cam.position.y = -lerp.headY * 60;
         cam.lookAt(
@@ -242,8 +237,17 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
           -HALF
         );
         rendererRef.current.render(sceneRef.current, cam);
-        reEnablePointerEvents();
       }
+
+      const baseShiftX = invertX * lerp.headX * 15;
+      const baseShiftY = -lerp.headY * 10;
+      const walls: CubeWall[] = ['back', 'left', 'right', 'top', 'bottom'];
+      walls.forEach(wall => {
+        const el = panelRefs.current[wall];
+        if (!el) return;
+        const d = DEPTH_MULTIPLIER[wall];
+        el.style.transform = `translate(${baseShiftX * d}px, ${baseShiftY * d}px)`;
+      });
 
       animFrameRef.current = requestAnimationFrame(animate);
     };
@@ -297,6 +301,20 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       >
         {children}
       </div>
+
+      {(['back', 'left', 'right', 'top', 'bottom'] as CubeWall[]).map(wall => (
+        <div
+          key={wall}
+          ref={panelRefCallbacks.current[wall]}
+          data-testid={`parallax-panel-${wall}`}
+          style={{
+            ...PANEL_POSITIONS[wall],
+            zIndex: wall === 'back' ? 2 : 3,
+            overflow: wall === 'back' ? 'auto' : 'visible',
+            willChange: 'transform',
+          }}
+        />
+      ))}
 
       <div
         data-testid="parallax-status-overlay"

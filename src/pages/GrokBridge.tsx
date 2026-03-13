@@ -3563,7 +3563,7 @@ const GrokBridge: React.FC = () => {
       )}
 
       {/* ── Top bar ── */}
-      <ParallaxPortal wall="bottom">
+      <ParallaxPortal wall="top">
       <div className="shrink-0 border-b border-border/40 bg-card/60">
         <div className="px-3 py-1.5 flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 shrink-0">
@@ -3967,7 +3967,7 @@ const GrokBridge: React.FC = () => {
       {/* ── Unified Layout — Browser/API toggle only swaps main content area ── */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {showProjectPanel && (
-          <ParallaxPortal wall="right">
+          <ParallaxPortal wall="left">
             <div className="w-52 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
               <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} onFileEdit={handleFileEdit} />
             </div>
@@ -4177,14 +4177,14 @@ const GrokBridge: React.FC = () => {
             )}
 
             {/* Code extractor — shared across both modes */}
-            <ParallaxPortal wall="top">
+            <ParallaxPortal wall="bottom">
               <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} onReplaceRepo={handleReplaceRepo} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} userTask={userTask} setUserTask={setUserTask} onGenerateContext={async (task?: string) => { const ctx = await buildProjectContext(task); if (ctx) copyContextToClipboard(ctx); }} onEditContext={() => { setEditableContext(projectContext); setShowContextEditor(true); setTimeout(() => contextEditorRef.current?.focus(), 100); }} contextLoading={contextLoading} projectContext={projectContext} />
             </ParallaxPortal>
           </div>
 
           {/* Preview panel — shared across both modes */}
           {showPreviewEmbed && previewPort && (
-            <ParallaxPortal wall="left">
+            <ParallaxPortal wall="right">
             <div className="border-l border-border/30 flex flex-col" style={{ flex: '1 1 50%' }}>
               <div className="flex items-center gap-2 px-2 py-1 bg-card/50 border-b border-border/30 shrink-0">
                 <Monitor className="w-3 h-3 text-[hsl(150_60%_55%)]" />

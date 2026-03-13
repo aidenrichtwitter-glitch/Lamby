@@ -10,11 +10,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       <SidebarProvider>
         <ParallaxScene>
           <div className="h-screen flex w-full overflow-hidden">
-            <ParallaxPortal wall="right">
+            <ParallaxPortal wall="left">
               <AppSidebar />
             </ParallaxPortal>
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-              <ParallaxPortal wall="bottom">
+              <ParallaxPortal wall="top">
                 <header className="h-10 flex items-center border-b border-border bg-background/80 backdrop-blur-sm shrink-0 z-20">
                   <SidebarTrigger className="ml-2" />
                   <div className="ml-auto mr-3">
