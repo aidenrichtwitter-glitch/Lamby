@@ -189,14 +189,15 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       }
 
       const invertX = trackingMode === 'head' ? -1 : 1;
+      const invertY = trackingMode === 'head' ? 1 : -1;
 
       if (cameraRef.current && rendererRef.current && sceneRef.current) {
         const cam = cameraRef.current;
         cam.position.x = invertX * lerp.headX * 80;
-        cam.position.y = -lerp.headY * 60;
+        cam.position.y = invertY * lerp.headY * 60;
         cam.lookAt(
           invertX * lerp.headX * 200,
-          -lerp.headY * 150,
+          invertY * lerp.headY * 150,
           -(DEPTH / 2)
         );
         rendererRef.current.render(sceneRef.current, cam);
