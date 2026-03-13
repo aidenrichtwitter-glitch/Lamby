@@ -2,6 +2,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ParallaxProvider, ParallaxPortal } from "@/lib/parallax-context";
 import ParallaxScene from "@/components/ParallaxScene";
+import ParallaxControls from "@/components/ParallaxControls";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
