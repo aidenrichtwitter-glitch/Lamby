@@ -3967,11 +3967,9 @@ const GrokBridge: React.FC = () => {
       {/* ── Unified Layout — Browser/API toggle only swaps main content area ── */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {showProjectPanel && (
-          <ParallaxPortal wall="left">
             <div className="w-52 border-r border-border/30 bg-card/30 shrink-0 overflow-auto">
               <ProjectExplorer activeProject={activeProject} onSelectProject={handleSelectProject} onFileSelect={(path, content) => setStatusMessage(`Viewing: ${path} (${content.length} chars)`)} onFileEdit={handleFileEdit} />
             </div>
-          </ParallaxPortal>
         )}
         {editorFile && (
           <div className="border-r border-border/30 flex flex-col" style={{ flex: '1 1 40%', minWidth: 0 }}>
@@ -4184,7 +4182,6 @@ const GrokBridge: React.FC = () => {
 
           {/* Preview panel — shared across both modes */}
           {showPreviewEmbed && previewPort && (
-            <ParallaxPortal wall="right">
             <div className="border-l border-border/30 flex flex-col" style={{ flex: '1 1 50%', minWidth: 0, minHeight: 0 }}>
               <div className="flex items-center gap-2 px-2 py-1 bg-card/50 border-b border-border/30 shrink-0">
                 <Monitor className="w-3 h-3 text-[hsl(150_60%_55%)]" />
@@ -4271,7 +4268,6 @@ const GrokBridge: React.FC = () => {
                 alwaysShowBar
               />
             </div>
-            </ParallaxPortal>
           )}
         </div>
       </div>

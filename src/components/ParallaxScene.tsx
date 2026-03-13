@@ -133,7 +133,6 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     renderer.domElement.style.left = '0';
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
-    renderer.domElement.style.pointerEvents = 'auto';
     rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
@@ -145,6 +144,18 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         camEl.style.pointerEvents = 'auto';
       }
     }
+
+    const styleEl = document.createElement('style');
+    styleEl.textContent = `
+      [data-wall="left"] [data-side="left"] > div:last-child {
+        left: auto !important;
+        right: 0 !important;
+      }
+      [data-wall="left"] [data-side="left"] > div:first-child {
+        margin-left: auto !important;
+      }
+    `;
+    document.head.appendChild(styleEl);
 
     const wallSpecs = buildWallSpecs(w, h);
     wallSpecs.forEach(spec => {
@@ -158,9 +169,6 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.style.overflow = 'hidden';
       wallEl.style.contain = 'layout style paint';
       wallEl.style.position = 'relative';
-      wallEl.style.display = 'flex';
-      const flex = WALL_FLEX[spec.wall];
-      Object.entries(flex).forEach(([k, v]) => { (wallEl.style as Record<string, string>)[k] = v; });
       wallEl.setAttribute('data-wall', spec.wall);
 
       const obj = new CSS3DObject(wallEl);
@@ -175,6 +183,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     setSceneReady(true);
 
     return () => {
+      if (styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
       if (renderer.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
@@ -248,8 +257,6 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
           -(DEPTH / 2)
         );
         rendererRef.current.render(sceneRef.current, cam);
-        const vEl = rendererRef.current.domElement.firstElementChild as HTMLElement;
-        if (vEl) vEl.style.pointerEvents = 'auto';
       }
 
       animFrameRef.current = requestAnimationFrame(animate);
@@ -293,12 +300,13 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     >
       <div
         style={{
-          position: 'absolute',
-          width: 0,
-          height: 0,
-          overflow: 'hidden',
+          width: '100%',
+          height: '100%',
+          position: 'relative',
+          zIndex: -1,
           pointerEvents: 'none',
           opacity: 0,
+          overflow: 'hidden',
         }}
       >
         {children}
