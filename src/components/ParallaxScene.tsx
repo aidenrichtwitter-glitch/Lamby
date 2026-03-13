@@ -65,6 +65,69 @@ const WALL_SPECS: WallSpec[] = [
   },
 ];
 
+const OVERLAY_STYLES: Record<CubeWall, React.CSSProperties> = {
+  back: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 2,
+  },
+  top: {
+    position: 'absolute',
+    bottom: '100%',
+    left: 0,
+    width: '100%',
+    height: '48px',
+    zIndex: 3,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'flex-end',
+  },
+  bottom: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    width: '100%',
+    height: '60px',
+    zIndex: 3,
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'flex-start',
+  },
+  left: {
+    position: 'absolute',
+    top: 0,
+    right: '100%',
+    width: '220px',
+    height: '100%',
+    zIndex: 3,
+    display: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  right: {
+    position: 'absolute',
+    top: 0,
+    left: '100%',
+    width: '45%',
+    height: '100%',
+    zIndex: 3,
+    display: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+};
+
+const PARALLAX_DEPTH: Record<CubeWall, { dx: number; dy: number }> = {
+  back: { dx: 0, dy: 0 },
+  top: { dx: 0, dy: 12 },
+  bottom: { dx: 0, dy: -12 },
+  left: { dx: 18, dy: 0 },
+  right: { dx: -18, dy: 0 },
+};
+
 export default function ParallaxScene({ children }: { children: React.ReactNode }) {
   const {
     enabled, trackingMode,
@@ -80,7 +143,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
   const rendererRef = useRef<CSS3DRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const wallMountRefs = useRef<Record<CubeWall, HTMLDivElement | null>>({
+  const overlayRefs = useRef<Record<CubeWall, HTMLDivElement | null>>({
     back: null, left: null, right: null, top: null, bottom: null,
   });
 
@@ -107,8 +170,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
     renderer.domElement.style.zIndex = '0';
-    const cameraEl = renderer.domElement.children[0] as HTMLElement | undefined;
-    if (cameraEl) cameraEl.style.pointerEvents = 'auto';
+    renderer.domElement.style.pointerEvents = 'none';
     rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
@@ -122,23 +184,9 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.style.overflow = 'hidden';
       wallEl.style.position = 'relative';
 
-      const mountPoint = document.createElement('div');
-      mountPoint.style.width = '100%';
-      mountPoint.style.height = '100%';
-      mountPoint.style.position = 'absolute';
-      mountPoint.style.top = '0';
-      mountPoint.style.left = '0';
-      mountPoint.style.overflow = 'auto';
-      mountPoint.style.pointerEvents = 'auto';
-      wallEl.appendChild(mountPoint);
-
-      wallMountRefs.current[spec.wall] = mountPoint;
-      registerWallMount(spec.wall, mountPoint);
-
       const obj = new CSS3DObject(wallEl);
       obj.position.set(...spec.position);
       obj.rotation.set(...spec.rotation);
-      obj.element.style.pointerEvents = 'auto';
       scene.add(obj);
     });
 
@@ -151,13 +199,9 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       rendererRef.current = null;
       sceneRef.current = null;
       cameraRef.current = null;
-      WALL_SPECS.forEach(spec => {
-        wallMountRefs.current[spec.wall] = null;
-        registerWallMount(spec.wall, null);
-      });
       setSceneReady(false);
     };
-  }, [registerWallMount]);
+  }, []);
 
   const destroyScene = useCallback(() => {
     if (rendererRef.current?.domElement?.parentNode) {
@@ -166,12 +210,12 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     rendererRef.current = null;
     sceneRef.current = null;
     cameraRef.current = null;
-    const walls: CubeWall[] = ['back', 'left', 'right', 'top', 'bottom'];
-    walls.forEach(w => {
-      wallMountRefs.current[w] = null;
-      registerWallMount(w, null);
-    });
     setSceneReady(false);
+  }, []);
+
+  const registerOverlayRef = useCallback((wall: CubeWall) => (el: HTMLDivElement | null) => {
+    overlayRefs.current[wall] = el;
+    registerWallMount(wall, el);
   }, [registerWallMount]);
 
   useEffect(() => {
@@ -212,16 +256,16 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         rendererRef.current.render(sceneRef.current, cam);
       }
 
-      if (contentRef.current) {
-        const cInvertX = trackingMode === 'head' ? -1 : 1;
-        const rotY = cInvertX * lerp.headX * 3;
-        const rotX = lerp.headY * 2;
-        const tX = cInvertX * lerp.headX * 15;
-        const tY = -lerp.headY * 10;
-        const scale = 1 + Math.abs(lerp.headX * 0.008) + Math.abs(lerp.headY * 0.006);
-        contentRef.current.style.transform =
-          `perspective(1400px) rotateY(${rotY}deg) rotateX(${rotX}deg) translate(${tX}px, ${tY}px) scale(${scale})`;
-      }
+      const invertX = trackingMode === 'head' ? -1 : 1;
+      const walls: CubeWall[] = ['back', 'left', 'right', 'top', 'bottom'];
+      walls.forEach(wall => {
+        const el = overlayRefs.current[wall];
+        if (!el) return;
+        const depth = PARALLAX_DEPTH[wall];
+        const tx = invertX * lerp.headX * depth.dx;
+        const ty = -lerp.headY * depth.dy;
+        el.style.transform = `translate(${tx}px, ${ty}px)`;
+      });
 
       animFrameRef.current = requestAnimationFrame(animate);
     };
@@ -267,8 +311,6 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         style={{
           width: '100%',
           height: '100%',
-          transformOrigin: 'center center',
-          willChange: 'transform',
           position: 'relative',
           zIndex: 1,
           pointerEvents: 'none',
@@ -276,6 +318,33 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         }}
       >
         {children}
+      </div>
+
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 2,
+          pointerEvents: 'none',
+          overflow: 'visible',
+        }}
+      >
+        {(['back', 'top', 'bottom', 'left', 'right'] as CubeWall[]).map(wall => (
+          <div
+            key={wall}
+            ref={registerOverlayRef(wall)}
+            data-testid={`parallax-overlay-${wall}`}
+            style={{
+              ...OVERLAY_STYLES[wall],
+              pointerEvents: 'auto',
+              overflow: wall === 'back' ? 'auto' : 'hidden',
+              willChange: 'transform',
+            }}
+          />
+        ))}
       </div>
 
       <div
