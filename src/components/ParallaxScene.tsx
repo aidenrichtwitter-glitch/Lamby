@@ -158,6 +158,11 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
           setFocusedWall(focusedWallRef.current === wall ? 'center' : wall);
         });
       }
+      if (wall === 'top' || wall === 'bottom' || wall === 'back') {
+        wallEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+      }
 
       const obj = new CSS3DObject(wallEl);
       obj.position.set(...spec.position);
