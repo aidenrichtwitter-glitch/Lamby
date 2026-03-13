@@ -147,43 +147,64 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
 
     const styleEl = document.createElement('style');
     styleEl.textContent = `
-      [data-wall="left"] {
+      [data-wall] {
         display: flex !important;
+      }
+      [data-wall="left"] {
         flex-direction: row !important;
         justify-content: flex-end !important;
         align-items: stretch !important;
       }
-      [data-wall="left"] > * {
-        min-height: 0 !important;
-        max-height: 100% !important;
-        height: 100% !important;
-        flex-shrink: 0 !important;
-      }
-      [data-wall="left"] .min-h-svh,
-      [data-wall="left"] [class*="min-h-svh"] {
-        min-height: 0 !important;
-        height: 100% !important;
-      }
-      [data-wall="left"] [data-side="left"] > div:last-child {
-        left: auto !important;
-        right: 0 !important;
-      }
-      [data-wall="left"] [data-side="left"] > div:first-child {
-        margin-left: auto !important;
-      }
       [data-wall="right"] {
-        display: flex !important;
         flex-direction: row !important;
         justify-content: flex-start !important;
         align-items: stretch !important;
       }
-      [data-wall="right"] > * {
+      [data-wall] > * {
         min-height: 0 !important;
         max-height: 100% !important;
         height: 100% !important;
+      }
+      [data-wall="left"] > * {
+        flex-shrink: 0 !important;
+      }
+      [data-wall="right"] > * {
         flex: 1 1 100% !important;
         min-width: 0 !important;
         width: 100% !important;
+      }
+
+      /* Fix sidebar inside left wall: override fixed positioning */
+      [data-wall="left"] [data-side="left"] {
+        height: 100% !important;
+        min-height: 0 !important;
+      }
+      [data-wall="left"] [data-side="left"] > div {
+        height: 100% !important;
+        min-height: 0 !important;
+      }
+      [data-wall="left"] [data-side="left"] > div:last-child {
+        position: relative !important;
+        inset: unset !important;
+        left: unset !important;
+        right: unset !important;
+        top: unset !important;
+        bottom: unset !important;
+        z-index: auto !important;
+        display: flex !important;
+      }
+      [data-wall="left"] .h-svh,
+      [data-wall="left"] .min-h-svh,
+      [data-wall="left"] [class*="h-svh"],
+      [data-wall="left"] [class*="min-h-svh"] {
+        height: 100% !important;
+        min-height: 0 !important;
+      }
+
+      /* Wrapper inside sidebar uses min-h-svh too */
+      [data-wall="left"] .group\\/sidebar-wrapper {
+        min-height: 0 !important;
+        height: 100% !important;
       }
     `;
     document.head.appendChild(styleEl);
@@ -279,15 +300,15 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         const cam = cameraRef.current;
         const fo = FOCUS_OFFSETS[focusedWallRef.current];
         const baseZ = DEPTH * 0.65;
-        const targetPosX = invertX * lerp.headX * 80 + fo.x;
-        const targetPosY = invertY * lerp.headY * 60 + fo.y;
+        const targetPosX = invertX * lerp.headX * 120 + fo.x;
+        const targetPosY = invertY * lerp.headY * 90 + fo.y;
         const targetPosZ = baseZ + fo.z;
         cam.position.x += (targetPosX - cam.position.x) * 0.08;
         cam.position.y += (targetPosY - cam.position.y) * 0.08;
         cam.position.z += (targetPosZ - cam.position.z) * 0.08;
         cam.lookAt(
-          invertX * lerp.headX * 200 + fo.lookX,
-          invertY * lerp.headY * 150 + fo.lookY,
+          invertX * lerp.headX * 300 + fo.lookX,
+          invertY * lerp.headY * 225 + fo.lookY,
           -(DEPTH / 2)
         );
         rendererRef.current.render(sceneRef.current, cam);
