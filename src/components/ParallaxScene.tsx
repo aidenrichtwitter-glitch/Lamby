@@ -152,14 +152,10 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
 
       const wall = spec.wall as CubeWall;
       if (wall === 'left' || wall === 'right') {
-        wallEl.addEventListener('click', (e) => {
-          if (e.target !== wallEl) return;
-          setFocusedWall(focusedWallRef.current === wall ? 'center' : wall);
-        });
-      }
-      if (wall === 'top' || wall === 'bottom' || wall === 'back') {
-        wallEl.addEventListener('click', (e) => {
+        wallEl.addEventListener('dblclick', (e) => {
+          e.preventDefault();
           e.stopPropagation();
+          setFocusedWall(focusedWallRef.current === wall ? 'center' : wall);
         });
       }
 
