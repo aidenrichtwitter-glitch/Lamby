@@ -151,11 +151,15 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.setAttribute('data-wall', spec.wall);
 
       const wall = spec.wall as CubeWall;
-      if (wall === 'left' || wall === 'right') {
+      if (wall === 'left' || wall === 'right' || wall === 'back') {
         wallEl.addEventListener('dblclick', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          setFocusedWall(focusedWallRef.current === wall ? 'center' : wall);
+          if (wall === 'back') {
+            setFocusedWall('center');
+          } else {
+            setFocusedWall(focusedWallRef.current === wall ? 'center' : wall);
+          }
         });
       }
 
