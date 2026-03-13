@@ -147,7 +147,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.addEventListener('click', (e) => {
         const target = e.target as HTMLElement;
         if (target.closest('button, a, input, select, textarea, [role="button"], [data-testid]')) return;
-        if (wall === 'back') {
+        if (wall === 'back' || wall === 'top' || wall === 'bottom') {
           setFocusedWall('center');
         } else {
           setFocusedWall(focusedWallRef.current === wall ? 'center' : wall);
