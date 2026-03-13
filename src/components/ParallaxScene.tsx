@@ -11,101 +11,22 @@ interface WallSpec {
   wall: CubeWall;
   position: [number, number, number];
   rotation: [number, number, number];
-  width: number;
-  height: number;
-  bgColor: string;
-  borderColor: string;
 }
 
 const WALL_SPECS: WallSpec[] = [
-  {
-    wall: 'back',
-    position: [0, 0, -HALF],
-    rotation: [0, 0, 0],
-    width: CUBE_SIZE,
-    height: CUBE_SIZE,
-    bgColor: 'rgba(160, 32, 240, 0.06)',
-    borderColor: 'rgba(160, 32, 240, 0.15)',
-  },
-  {
-    wall: 'left',
-    position: [-HALF, 0, 0],
-    rotation: [0, Math.PI / 2, 0],
-    width: CUBE_SIZE,
-    height: CUBE_SIZE,
-    bgColor: 'rgba(0, 255, 255, 0.05)',
-    borderColor: 'rgba(0, 255, 255, 0.12)',
-  },
-  {
-    wall: 'right',
-    position: [HALF, 0, 0],
-    rotation: [0, -Math.PI / 2, 0],
-    width: CUBE_SIZE,
-    height: CUBE_SIZE,
-    bgColor: 'rgba(255, 191, 0, 0.05)',
-    borderColor: 'rgba(255, 191, 0, 0.12)',
-  },
-  {
-    wall: 'top',
-    position: [0, HALF, 0],
-    rotation: [Math.PI / 2, 0, 0],
-    width: CUBE_SIZE,
-    height: CUBE_SIZE,
-    bgColor: 'rgba(0, 128, 128, 0.04)',
-    borderColor: 'rgba(0, 128, 128, 0.1)',
-  },
-  {
-    wall: 'bottom',
-    position: [0, -HALF, 0],
-    rotation: [-Math.PI / 2, 0, 0],
-    width: CUBE_SIZE,
-    height: CUBE_SIZE,
-    bgColor: 'rgba(148, 0, 211, 0.04)',
-    borderColor: 'rgba(148, 0, 211, 0.1)',
-  },
+  { wall: 'back',   position: [0, 0, -HALF],  rotation: [0, 0, 0] },
+  { wall: 'left',   position: [-HALF, 0, 0],  rotation: [0, Math.PI / 2, 0] },
+  { wall: 'right',  position: [HALF, 0, 0],   rotation: [0, -Math.PI / 2, 0] },
+  { wall: 'top',    position: [0, HALF, 0],    rotation: [Math.PI / 2, 0, 0] },
+  { wall: 'bottom', position: [0, -HALF, 0],   rotation: [-Math.PI / 2, 0, 0] },
 ];
 
-const PANEL_POSITIONS: Record<CubeWall, React.CSSProperties> = {
-  back: {
-    position: 'absolute',
-    inset: 0,
-  },
-  left: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '220px',
-    height: '100%',
-  },
-  right: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: '45%',
-    height: '100%',
-  },
-  top: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 'auto',
-  },
-  bottom: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 'auto',
-  },
-};
-
-const DEPTH_MULTIPLIER: Record<CubeWall, number> = {
-  back: 1.0,
-  left: 1.8,
-  right: 1.8,
-  top: 1.5,
-  bottom: 1.5,
+const WALL_COLORS: Record<CubeWall, { bg: string; border: string }> = {
+  back:   { bg: 'rgba(160, 32, 240, 0.06)', border: 'rgba(160, 32, 240, 0.15)' },
+  left:   { bg: 'rgba(0, 255, 255, 0.05)',  border: 'rgba(0, 255, 255, 0.12)' },
+  right:  { bg: 'rgba(255, 191, 0, 0.05)',  border: 'rgba(255, 191, 0, 0.12)' },
+  top:    { bg: 'rgba(0, 128, 128, 0.04)',  border: 'rgba(0, 128, 128, 0.1)' },
+  bottom: { bg: 'rgba(148, 0, 211, 0.04)',  border: 'rgba(148, 0, 211, 0.1)' },
 };
 
 export default function ParallaxScene({ children }: { children: React.ReactNode }) {
@@ -114,28 +35,19 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     lerpRef, targetRef, fpsRef,
     registerWallMount,
     videoRef, faceDotRef,
-    statusText, fps, cameraActive,
+    fps, cameraActive,
   } = useParallax();
 
   const sceneContainerRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
   const animFrameRef = useRef<number>(0);
   const rendererRef = useRef<CSS3DRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const panelRefs = useRef<Record<CubeWall, HTMLDivElement | null>>({
+  const wallElsRef = useRef<Record<CubeWall, HTMLDivElement | null>>({
     back: null, left: null, right: null, top: null, bottom: null,
   });
   const registerWallMountRef = useRef(registerWallMount);
   registerWallMountRef.current = registerWallMount;
-
-  const panelRefCallbacks = useRef<Record<CubeWall, (el: HTMLDivElement | null) => void>>({
-    back: (el) => { if (panelRefs.current.back !== el) { panelRefs.current.back = el; registerWallMountRef.current('back', el); } },
-    left: (el) => { if (panelRefs.current.left !== el) { panelRefs.current.left = el; registerWallMountRef.current('left', el); } },
-    right: (el) => { if (panelRefs.current.right !== el) { panelRefs.current.right = el; registerWallMountRef.current('right', el); } },
-    top: (el) => { if (panelRefs.current.top !== el) { panelRefs.current.top = el; registerWallMountRef.current('top', el); } },
-    bottom: (el) => { if (panelRefs.current.bottom !== el) { panelRefs.current.bottom = el; registerWallMountRef.current('bottom', el); } },
-  });
 
   const [sceneReady, setSceneReady] = useState(false);
 
@@ -159,23 +71,29 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     renderer.domElement.style.left = '0';
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
-    renderer.domElement.style.zIndex = '0';
-    renderer.domElement.style.pointerEvents = 'none';
     rendererRef.current = renderer;
     container.appendChild(renderer.domElement);
 
     WALL_SPECS.forEach(spec => {
+      const colors = WALL_COLORS[spec.wall];
       const wallEl = document.createElement('div');
-      wallEl.style.width = spec.width + 'px';
-      wallEl.style.height = spec.height + 'px';
-      wallEl.style.background = spec.bgColor;
-      wallEl.style.border = `1px solid ${spec.borderColor}`;
+      wallEl.style.width = CUBE_SIZE + 'px';
+      wallEl.style.height = CUBE_SIZE + 'px';
+      wallEl.style.background = colors.bg;
+      wallEl.style.border = `1px solid ${colors.border}`;
       wallEl.style.boxSizing = 'border-box';
+      wallEl.style.overflow = 'auto';
+      wallEl.style.display = 'flex';
+      wallEl.style.flexDirection = 'column';
+      wallEl.setAttribute('data-wall', spec.wall);
 
       const obj = new CSS3DObject(wallEl);
       obj.position.set(...spec.position);
       obj.rotation.set(...spec.rotation);
       scene.add(obj);
+
+      wallElsRef.current[spec.wall] = wallEl;
+      registerWallMountRef.current(spec.wall, wallEl);
     });
 
     setSceneReady(true);
@@ -184,6 +102,11 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       if (renderer.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
+      const walls: CubeWall[] = ['back', 'left', 'right', 'top', 'bottom'];
+      walls.forEach(w => {
+        registerWallMountRef.current(w, null);
+        wallElsRef.current[w] = null;
+      });
       rendererRef.current = null;
       sceneRef.current = null;
       cameraRef.current = null;
@@ -195,6 +118,11 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     if (rendererRef.current?.domElement?.parentNode) {
       rendererRef.current.domElement.parentNode.removeChild(rendererRef.current.domElement);
     }
+    const walls: CubeWall[] = ['back', 'left', 'right', 'top', 'bottom'];
+    walls.forEach(w => {
+      registerWallMountRef.current(w, null);
+      wallElsRef.current[w] = null;
+    });
     rendererRef.current = null;
     sceneRef.current = null;
     cameraRef.current = null;
@@ -239,16 +167,6 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         rendererRef.current.render(sceneRef.current, cam);
       }
 
-      const baseShiftX = invertX * lerp.headX * 15;
-      const baseShiftY = -lerp.headY * 10;
-      const walls: CubeWall[] = ['back', 'left', 'right', 'top', 'bottom'];
-      walls.forEach(wall => {
-        const el = panelRefs.current[wall];
-        if (!el) return;
-        const d = DEPTH_MULTIPLIER[wall];
-        el.style.transform = `translate(${baseShiftX * d}px, ${baseShiftY * d}px)`;
-      });
-
       animFrameRef.current = requestAnimationFrame(animate);
     };
 
@@ -289,32 +207,18 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       }}
     >
       <div
-        ref={contentRef}
         style={{
           width: '100%',
           height: '100%',
           position: 'relative',
-          zIndex: 1,
+          zIndex: -1,
           pointerEvents: 'none',
           opacity: 0,
+          overflow: 'hidden',
         }}
       >
         {children}
       </div>
-
-      {(['back', 'left', 'right', 'top', 'bottom'] as CubeWall[]).map(wall => (
-        <div
-          key={wall}
-          ref={panelRefCallbacks.current[wall]}
-          data-testid={`parallax-panel-${wall}`}
-          style={{
-            ...PANEL_POSITIONS[wall],
-            zIndex: wall === 'back' ? 2 : 3,
-            overflow: wall === 'back' ? 'auto' : 'visible',
-            willChange: 'transform',
-          }}
-        />
-      ))}
 
       <div
         data-testid="parallax-status-overlay"
