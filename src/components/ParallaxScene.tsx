@@ -73,6 +73,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
   registerWallMountRef.current = registerWallMount;
 
   const lerpLookRef = useRef({ x: 0, y: 0, z: -(DEPTH / 2) });
+  const zoomOffsetRef = useRef(0);
   const [sceneReady, setSceneReady] = useState(false);
 
   const initScene = useCallback(() => {
@@ -231,7 +232,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         const smooth = 0.04;
         const targetPosX = invertX * lerp.headX * 120 + fo.x;
         const targetPosY = invertY * lerp.headY * 90 + fo.y;
-        const targetPosZ = baseZ + fo.z;
+        const targetPosZ = baseZ + fo.z + zoomOffsetRef.current;
         cam.position.x += (targetPosX - cam.position.x) * smooth;
         cam.position.y += (targetPosY - cam.position.y) * smooth;
         cam.position.z += (targetPosZ - cam.position.z) * smooth;
@@ -258,7 +259,9 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (!enabled) return;
     const handleWheel = (e: WheelEvent) => {
-      if (e.deltaY > 0 && focusedWallRef.current !== 'center') {
+      const step = e.deltaY > 0 ? 30 : -30;
+      zoomOffsetRef.current = Math.max(-200, Math.min(400, zoomOffsetRef.current + step));
+      if (e.deltaY > 0 && zoomOffsetRef.current > 200 && focusedWallRef.current !== 'center') {
         setFocusedWall('center');
       }
     };
