@@ -8,16 +8,21 @@ import ParallaxControls from '@/components/ParallaxControls';
 const DEPTH = 400;
 const TOP_STRIP_H = 100;
 const BOTTOM_STRIP_H = 80;
+const SIDE_ANGLE = Math.PI / 3;
 
 function buildWallSpecs(vw: number, vh: number) {
   const halfW = vw / 2;
   const halfD = DEPTH / 2;
   const mainH = vh - TOP_STRIP_H - BOTTOM_STRIP_H;
   const mainCenterY = -TOP_STRIP_H / 2 + BOTTOM_STRIP_H / 2;
+
+  const sideCenterX = DEPTH / 2 * Math.cos(SIDE_ANGLE);
+  const sideCenterZ = DEPTH / 2 * Math.sin(SIDE_ANGLE);
+
   return [
     { wall: 'back' as CubeWall,   position: [0, mainCenterY, -halfD] as [number,number,number],  rotation: [0, 0, 0] as [number,number,number], width: vw, height: mainH },
-    { wall: 'left' as CubeWall,   position: [-halfW, mainCenterY, 0] as [number,number,number],  rotation: [0, Math.PI / 2, 0] as [number,number,number], width: DEPTH, height: mainH },
-    { wall: 'right' as CubeWall,  position: [halfW, mainCenterY, 0] as [number,number,number],   rotation: [0, -Math.PI / 2, 0] as [number,number,number], width: DEPTH, height: mainH },
+    { wall: 'left' as CubeWall,   position: [-(halfW + sideCenterX), mainCenterY, -halfD + sideCenterZ] as [number,number,number],  rotation: [0, SIDE_ANGLE, 0] as [number,number,number], width: DEPTH, height: mainH },
+    { wall: 'right' as CubeWall,  position: [halfW + sideCenterX, mainCenterY, -halfD + sideCenterZ] as [number,number,number],   rotation: [0, -SIDE_ANGLE, 0] as [number,number,number], width: DEPTH, height: mainH },
     { wall: 'top' as CubeWall,    position: [0, vh / 2 - TOP_STRIP_H / 2, -halfD] as [number,number,number], rotation: [0, 0, 0] as [number,number,number], width: vw, height: TOP_STRIP_H },
     { wall: 'bottom' as CubeWall, position: [0, -(vh / 2 - BOTTOM_STRIP_H / 2), -halfD] as [number,number,number], rotation: [0, 0, 0] as [number,number,number], width: vw, height: BOTTOM_STRIP_H },
   ];
@@ -114,7 +119,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.style.background = colors.bg;
       wallEl.style.border = `1px solid ${colors.border}`;
       wallEl.style.boxSizing = 'border-box';
-      wallEl.style.overflow = 'auto';
+      wallEl.style.overflow = 'visible';
       wallEl.setAttribute('data-wall', spec.wall);
 
       const obj = new CSS3DObject(wallEl);
