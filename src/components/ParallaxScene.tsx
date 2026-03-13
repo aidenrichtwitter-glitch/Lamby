@@ -241,7 +241,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         const smooth = 0.04;
         const targetPosX = invertX * lerp.headX * 400 + fo.x;
         const targetPosY = invertY * lerp.headY * 200 + fo.y;
-        const targetPosZ = baseZ + fo.z + zoomOffsetRef.current + lerp.headZ * 150;
+        const targetPosZ = baseZ + fo.z + zoomOffsetRef.current - lerp.headZ * 150;
         cam.position.x += (targetPosX - cam.position.x) * smooth;
         cam.position.y += (targetPosY - cam.position.y) * smooth;
         cam.position.z += (targetPosZ - cam.position.z) * smooth;
