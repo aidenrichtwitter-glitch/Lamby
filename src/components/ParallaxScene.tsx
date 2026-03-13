@@ -304,37 +304,13 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         muted
         playsInline
         data-testid="parallax-cam-preview"
-        style={{
-          position: 'fixed',
-          bottom: 20,
-          right: 20,
-          width: 160,
-          height: 120,
-          borderRadius: 8,
-          border: '1px solid rgba(255,255,255,0.2)',
-          objectFit: 'cover',
-          transform: 'scaleX(-1)',
-          display: trackingMode === 'head' && cameraActive ? 'block' : 'none',
-          zIndex: 9999,
-          boxShadow: '0 4px 20px rgba(160,32,240,0.3)',
-        }}
+        style={{ position: 'fixed', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
       />
 
       <div
         ref={faceDotRef}
         data-testid="parallax-face-dot"
-        style={{
-          position: 'fixed',
-          width: 10,
-          height: 10,
-          borderRadius: '50%',
-          background: '#0ff',
-          pointerEvents: 'none',
-          zIndex: 10000,
-          transform: 'translate(-50%, -50%)',
-          display: 'none',
-          boxShadow: '0 0 8px #0ff',
-        }}
+        style={{ position: 'fixed', width: 0, height: 0, display: 'none' }}
       />
     </div>
   );
