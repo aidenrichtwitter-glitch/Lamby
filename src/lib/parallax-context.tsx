@@ -25,8 +25,8 @@ interface ParallaxContextValue extends ParallaxState {
   setEnabled: (v: boolean) => void;
   setTrackingMode: (m: TrackingMode) => void;
   setFocusedWall: (w: FocusTarget) => void;
-  lerpRef: React.MutableRefObject<{ headX: number; headY: number }>;
-  targetRef: React.MutableRefObject<{ x: number; y: number }>;
+  lerpRef: React.MutableRefObject<{ headX: number; headY: number; headZ: number }>;
+  targetRef: React.MutableRefObject<{ x: number; y: number; z: number }>;
   fpsRef: React.MutableRefObject<{ frames: number; lastTime: number; fps: number }>;
   wallMountPoints: Record<CubeWall, HTMLDivElement | null>;
   registerWallMount: (wall: CubeWall, el: HTMLDivElement | null) => void;
@@ -75,8 +75,8 @@ export function ParallaxProvider({ children }: { children: React.ReactNode }) {
     back: null, left: null, right: null, top: null, bottom: null,
   });
 
-  const lerpRef = useRef({ headX: 0, headY: 0 });
-  const targetRef = useRef({ x: 0, y: 0 });
+  const lerpRef = useRef({ headX: 0, headY: 0, headZ: 0 });
+  const targetRef = useRef({ x: 0, y: 0, z: 0 });
   const fpsRef = useRef({ frames: 0, lastTime: performance.now(), fps: 0 });
   const videoRef = useRef<HTMLVideoElement>(null);
   const faceDotRef = useRef<HTMLDivElement>(null);
@@ -124,7 +124,8 @@ export function ParallaxProvider({ children }: { children: React.ReactNode }) {
           const cy = box.yCenter;
           const tx = cx * 2 - 1;
           const ty = cy * 2 - 1;
-          targetRef.current = { x: tx, y: ty };
+          const tz = (box.width - 0.25) * 4;
+          targetRef.current = { x: tx, y: ty, z: tz };
           setFaceDetected(true);
           if (faceDotRef.current) {
             faceDotRef.current.style.left = (cx * window.innerWidth) + 'px';
@@ -171,7 +172,7 @@ export function ParallaxProvider({ children }: { children: React.ReactNode }) {
       if (trackingMode !== 'mouse') return;
       const tx = (e.clientX / window.innerWidth) * 2 - 1;
       const ty = (e.clientY / window.innerHeight) * 2 - 1;
-      targetRef.current = { x: tx, y: ty };
+      targetRef.current = { x: tx, y: ty, z: 0 };
       setStatusText(`Mouse | x:${tx.toFixed(2)} y:${ty.toFixed(2)}`);
     };
     window.addEventListener('mousemove', handleMouseMove);
@@ -190,8 +191,8 @@ export function ParallaxProvider({ children }: { children: React.ReactNode }) {
     setEnabledRaw(v);
     try { localStorage.setItem(LS_KEY_ENABLED, String(v)); } catch { /* noop */ }
     if (!v) {
-      lerpRef.current = { headX: 0, headY: 0 };
-      targetRef.current = { x: 0, y: 0 };
+      lerpRef.current = { headX: 0, headY: 0, headZ: 0 };
+      targetRef.current = { x: 0, y: 0, z: 0 };
     }
   }, []);
 
