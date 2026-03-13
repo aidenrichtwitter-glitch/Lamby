@@ -4185,7 +4185,7 @@ const GrokBridge: React.FC = () => {
           {/* Preview panel — shared across both modes */}
           {showPreviewEmbed && previewPort && (
             <ParallaxPortal wall="right">
-            <div className="border-l border-border/30 flex flex-col" style={{ flex: '1 1 50%' }}>
+            <div className="border-l border-border/30 flex flex-col" style={{ flex: '1 1 50%', minWidth: 0, minHeight: 0 }}>
               <div className="flex items-center gap-2 px-2 py-1 bg-card/50 border-b border-border/30 shrink-0">
                 <Monitor className="w-3 h-3 text-[hsl(150_60%_55%)]" />
                 <span className="text-[10px] font-medium text-foreground/80">{activeProject} Preview</span>

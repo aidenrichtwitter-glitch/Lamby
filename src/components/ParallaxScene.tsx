@@ -93,7 +93,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     lerpRef, targetRef, fpsRef,
     registerWallMount,
     videoRef, faceDotRef,
-    fps, cameraActive,
+    cameraActive,
     focusedWall, setFocusedWall,
   } = useParallax();
 
@@ -147,12 +147,43 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
 
     const styleEl = document.createElement('style');
     styleEl.textContent = `
+      [data-wall="left"] {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: flex-end !important;
+        align-items: stretch !important;
+      }
+      [data-wall="left"] > * {
+        min-height: 0 !important;
+        max-height: 100% !important;
+        height: 100% !important;
+        flex-shrink: 0 !important;
+      }
+      [data-wall="left"] .min-h-svh,
+      [data-wall="left"] [class*="min-h-svh"] {
+        min-height: 0 !important;
+        height: 100% !important;
+      }
       [data-wall="left"] [data-side="left"] > div:last-child {
         left: auto !important;
         right: 0 !important;
       }
       [data-wall="left"] [data-side="left"] > div:first-child {
         margin-left: auto !important;
+      }
+      [data-wall="right"] {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: flex-start !important;
+        align-items: stretch !important;
+      }
+      [data-wall="right"] > * {
+        min-height: 0 !important;
+        max-height: 100% !important;
+        height: 100% !important;
+        flex: 1 1 100% !important;
+        min-width: 0 !important;
+        width: 100% !important;
       }
     `;
     document.head.appendChild(styleEl);
@@ -169,6 +200,9 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.style.overflow = 'hidden';
       wallEl.style.contain = 'layout style paint';
       wallEl.style.position = 'relative';
+      wallEl.style.display = 'flex';
+      const flex = WALL_FLEX[spec.wall];
+      Object.entries(flex).forEach(([k, v]) => { (wallEl.style as Record<string, string>)[k] = v; });
       wallEl.setAttribute('data-wall', spec.wall);
 
       const obj = new CSS3DObject(wallEl);
@@ -354,29 +388,6 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
         <div />
         <NavArrow dir="bottom" label="▼" active={focusedWall === 'bottom'} onClick={() => setFocusedWall(focusedWall === 'bottom' ? 'center' : 'bottom')} />
         <div />
-      </div>
-
-      <div
-        data-testid="parallax-status-overlay"
-        style={{
-          position: 'fixed',
-          top: 60,
-          left: 20,
-          padding: '8px 12px',
-          background: 'rgba(0,0,0,0.6)',
-          color: '#0ff',
-          borderRadius: 6,
-          fontSize: 11,
-          lineHeight: 1.6,
-          backdropFilter: 'blur(4px)',
-          border: '1px solid rgba(0,255,255,0.2)',
-          fontFamily: 'monospace',
-          zIndex: 10000,
-          pointerEvents: 'none',
-          whiteSpace: 'pre',
-        }}
-      >
-        {`Mode: ${trackingMode === 'head' ? 'Head Tracking' : 'Mouse'}\nx: ${lerpRef.current.headX.toFixed(2)}  y: ${lerpRef.current.headY.toFixed(2)}\nFPS: ${fps}`}
       </div>
 
       <video
