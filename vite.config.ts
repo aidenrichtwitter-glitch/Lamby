@@ -761,22 +761,9 @@ function projectManagementPlugin(): Plugin {
                 const script = `tell application "Terminal" to do script "cd '${safeCwd}' && ${escaped}"`;
                 spawn("osascript", ["-e", script], { detached: true, stdio: "ignore" });
               } else {
-                const terminals = ["x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "xterm"];
-                let launched = false;
-                for (const term of terminals) {
-                  try {
-                    if (term === "gnome-terminal") {
-                      spawn(term, ["--", "bash", "-c", `cd '${safeCwd}' && ${cmd}; exec bash`], { detached: true, stdio: "ignore" });
-                    } else {
-                      spawn(term, ["-e", `bash -c "cd '${safeCwd}' && ${cmd}; exec bash"`], { detached: true, stdio: "ignore" });
-                    }
-                    launched = true;
-                    break;
-                  } catch {}
-                }
-                if (!launched) {
-                  spawn("bash", ["-c", cmd], { cwd: safeCwd, detached: true, stdio: "ignore" });
-                }
+                const child = spawn("bash", ["-c", cmd], { cwd: safeCwd, detached: true, stdio: "ignore" });
+                child.on('error', () => {});
+                child.unref();
               }
               console.log(`[Preview] Spawned terminal for ${label} in ${safeCwd}: ${cmd}`);
               return true;
