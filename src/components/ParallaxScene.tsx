@@ -6,17 +6,20 @@ import { CSS3DRenderer, CSS3DObject } from 'three/examples/jsm/renderers/CSS3DRe
 import ParallaxControls from '@/components/ParallaxControls';
 
 const DEPTH = 400;
+const TOP_STRIP_H = 100;
+const BOTTOM_STRIP_H = 80;
 
 function buildWallSpecs(vw: number, vh: number) {
   const halfW = vw / 2;
-  const halfH = vh / 2;
   const halfD = DEPTH / 2;
+  const mainH = vh - TOP_STRIP_H - BOTTOM_STRIP_H;
+  const mainCenterY = -TOP_STRIP_H / 2 + BOTTOM_STRIP_H / 2;
   return [
-    { wall: 'back' as CubeWall,   position: [0, 0, -halfD] as [number,number,number],  rotation: [0, 0, 0] as [number,number,number], width: vw, height: vh },
-    { wall: 'left' as CubeWall,   position: [-halfW, 0, 0] as [number,number,number],  rotation: [0, Math.PI / 2, 0] as [number,number,number], width: DEPTH, height: vh },
-    { wall: 'right' as CubeWall,  position: [halfW, 0, 0] as [number,number,number],   rotation: [0, -Math.PI / 2, 0] as [number,number,number], width: DEPTH, height: vh },
-    { wall: 'top' as CubeWall,    position: [0, halfH, 0] as [number,number,number],    rotation: [Math.PI / 2, 0, 0] as [number,number,number], width: vw, height: DEPTH },
-    { wall: 'bottom' as CubeWall, position: [0, -halfH, 0] as [number,number,number],   rotation: [-Math.PI / 2, 0, 0] as [number,number,number], width: vw, height: DEPTH },
+    { wall: 'back' as CubeWall,   position: [0, mainCenterY, -halfD] as [number,number,number],  rotation: [0, 0, 0] as [number,number,number], width: vw, height: mainH },
+    { wall: 'left' as CubeWall,   position: [-halfW, mainCenterY, 0] as [number,number,number],  rotation: [0, Math.PI / 2, 0] as [number,number,number], width: DEPTH, height: mainH },
+    { wall: 'right' as CubeWall,  position: [halfW, mainCenterY, 0] as [number,number,number],   rotation: [0, -Math.PI / 2, 0] as [number,number,number], width: DEPTH, height: mainH },
+    { wall: 'top' as CubeWall,    position: [0, vh / 2 - TOP_STRIP_H / 2, -halfD] as [number,number,number], rotation: [0, 0, 0] as [number,number,number], width: vw, height: TOP_STRIP_H },
+    { wall: 'bottom' as CubeWall, position: [0, -(vh / 2 - BOTTOM_STRIP_H / 2), -halfD] as [number,number,number], rotation: [0, 0, 0] as [number,number,number], width: vw, height: BOTTOM_STRIP_H },
   ];
 }
 
@@ -32,7 +35,7 @@ const WALL_FLEX: Record<CubeWall, Record<string, string>> = {
   back: { flexDirection: 'column' },
   left: { flexDirection: 'row', justifyContent: 'flex-end' },
   right: { flexDirection: 'row', justifyContent: 'flex-start' },
-  top: { flexDirection: 'column', justifyContent: 'flex-end' },
+  top: { flexDirection: 'column', justifyContent: 'flex-start' },
   bottom: { flexDirection: 'column', justifyContent: 'flex-start' },
 };
 
@@ -98,13 +101,6 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       }
       [data-wall="left"] [data-side="left"] > div:first-child {
         margin-left: auto !important;
-      }
-      [data-wall="top"] > header {
-        position: absolute !important;
-        bottom: 0 !important;
-        top: auto !important;
-        left: 0 !important;
-        right: 0 !important;
       }
     `;
     document.head.appendChild(styleEl);
