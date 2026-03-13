@@ -1,7 +1,9 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "guardian-ai",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Guardian AI - Recursive IDE with parallax 3D interface",
+  "author": "Guardian AI",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "electron:dev": "concurrently --kill-others \"vite --host 0.0.0.0 --port 5000\" \"wait-on http://localhost:5000 && cd electron-browser && npx electron .\"",
-    "electron:build": "vite build && cd electron-browser && npm run build"
+    "electron:build": "vite build && cd electron-browser && npm run build",
+    "electron:package": "vite build && cd electron-browser && npm install && npx --yes electron-builder@latest --win --x64"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

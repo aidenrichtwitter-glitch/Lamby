@@ -2,6 +2,7 @@
   "name": "guardian-ai-browser",
   "version": "1.0.0",
   "description": "Grok Desktop browser for Guardian AI",
+  "author": "Guardian AI",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",

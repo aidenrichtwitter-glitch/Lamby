@@ -1,0 +1,407 @@
+Microsoft Windows [Version 10.0.26200.8037]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:package
+
+> vite_react_shadcn_ts@0.0.0 electron:package
+> npm run electron:build && electron-builder --win --dir
+
+
+> vite_react_shadcn_ts@0.0.0 electron:build
+> vite build && cd electron-browser && npm run build
+
+vite v5.4.19 building for production...
+✓ 3292 modules transformed.
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/safety-engine.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/components/ChangeLog.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/CodeViewer.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/FileEditor.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/maturity-test.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-safety-guard.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/self-test-runner.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/verification-engine.ts, C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/pages/Index.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/code-parser.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-toaster.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, dynamic import will not move module into another chunk.
+
+dist/registerSW.js                  0.13 kB
+dist/manifest.webmanifest           0.38 kB
+dist/index.html                     2.28 kB │ gzip:   0.85 kB
+dist/assets/index-C8ppEuaj.css     84.82 kB │ gzip:  14.65 kB
+dist/assets/index-Bz3dD3Hi.js   1,542.27 kB │ gzip: 460.53 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 6.55s
+
+PWA v1.2.0
+mode      generateSW
+precache  10 entries (1624.18 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-8c29f6e4.js
+
+> guardian-ai-browser@1.0.0 build
+> npx --yes electron-builder@latest --win --x64
+
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • author is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\electron-browser\package.json
+  • writing effective config  file=build\builder-effective-config.yaml
+  • executing @electron/rebuild  electronVersion=41.0.2 arch=x64 buildFromSource=false workspaceRoot=C:\Users\Aiden\Desktop\guardian-ai\electron-browser projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=41.0.2 appOutDir=build\win-unpacked
+  • searching for node modules  pm=npm searchDir=C:\Users\Aiden\Desktop\guardian-ai\electron-browser
+(node:15120) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • updating asar integrity executable resource  executablePath=build\win-unpacked\Guardian AI Browser.exe
+  • default Electron icon is used  reason=application icon is not set
+  • signing with signtool.exe  path=build\win-unpacked\Guardian AI Browser.exe
+  • building        target=nsis file=build\Guardian AI Browser Setup 1.0.0.exe archs=x64 oneClick=true perMachine=false
+  • signing with signtool.exe  path=build\win-unpacked\resources\elevate.exe
+  • signing with signtool.exe  path=build\Guardian AI Browser Setup 1.0.0.__uninstaller.exe
+  • signing with signtool.exe  path=build\Guardian AI Browser Setup 1.0.0.exe
+  • building block map  blockMapFile=build\Guardian AI Browser Setup 1.0.0.exe.blockmap
+  • building        target=portable file=build\Guardian AI Browser 1.0.0.exe archs=x64
+  • signing with signtool.exe  path=build\Guardian AI Browser 1.0.0.exe
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • description is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\package.json
+  • author is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\package.json
+  ⨯ Cannot compute electron version from installed node modules - none of the possible electron modules are installed.
+See https://github.com/electron-userland/electron-builder/issues/3984#issuecomment-504968246
+
+C:\Users\Aiden\Desktop\guardian-ai>cd electron-browser
+
+C:\Users\Aiden\Desktop\guardian-ai\electron-browser>npm install --save-dev electron@latest
+
+up to date, audited 72 packages in 899ms
+
+17 packages are looking for funding
+  run `npm fund` for details
+
+3 moderate severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+C:\Users\Aiden\Desktop\guardian-ai\electron-browser>cd . .
+
+C:\Users\Aiden\Desktop\guardian-ai\electron-browser>cd .
+
+C:\Users\Aiden\Desktop\guardian-ai\electron-browser>cd ..
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:package
+
+> vite_react_shadcn_ts@0.0.0 electron:package
+> npm run electron:build && electron-builder --win --dir
+
+
+> vite_react_shadcn_ts@0.0.0 electron:build
+> vite build && cd electron-browser && npm run build
+
+vite v5.4.19 building for production...
+✓ 3292 modules transformed.
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/safety-engine.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/components/ChangeLog.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/CodeViewer.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/FileEditor.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/maturity-test.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-safety-guard.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/self-test-runner.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/verification-engine.ts, C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/pages/Index.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/code-parser.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-toaster.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, dynamic import will not move module into another chunk.
+
+dist/registerSW.js                  0.13 kB
+dist/manifest.webmanifest           0.38 kB
+dist/index.html                     2.28 kB │ gzip:   0.85 kB
+dist/assets/index-C8ppEuaj.css     84.82 kB │ gzip:  14.65 kB
+dist/assets/index-Bz3dD3Hi.js   1,542.27 kB │ gzip: 460.53 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.74s
+
+PWA v1.2.0
+mode      generateSW
+precache  10 entries (1624.18 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-8c29f6e4.js
+
+> guardian-ai-browser@1.0.0 build
+> npx --yes electron-builder@latest --win --x64
+
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • author is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\electron-browser\package.json
+  • writing effective config  file=build\builder-effective-config.yaml
+  • executing @electron/rebuild  electronVersion=41.0.2 arch=x64 buildFromSource=false workspaceRoot=C:\Users\Aiden\Desktop\guardian-ai\electron-browser projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=41.0.2 appOutDir=build\win-unpacked
+  • searching for node modules  pm=npm searchDir=C:\Users\Aiden\Desktop\guardian-ai\electron-browser
+(node:18848) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • updating asar integrity executable resource  executablePath=build\win-unpacked\Guardian AI Browser.exe
+  • default Electron icon is used  reason=application icon is not set
+  • signing with signtool.exe  path=build\win-unpacked\Guardian AI Browser.exe
+  • building        target=nsis file=build\Guardian AI Browser Setup 1.0.0.exe archs=x64 oneClick=true perMachine=false
+  • signing with signtool.exe  path=build\win-unpacked\resources\elevate.exe
+  • signing with signtool.exe  path=build\Guardian AI Browser Setup 1.0.0.__uninstaller.exe
+  • signing with signtool.exe  path=build\Guardian AI Browser Setup 1.0.0.exe
+  • building block map  blockMapFile=build\Guardian AI Browser Setup 1.0.0.exe.blockmap
+  • building        target=portable file=build\Guardian AI Browser 1.0.0.exe archs=x64
+  • signing with signtool.exe  path=build\Guardian AI Browser 1.0.0.exe
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • description is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\package.json
+  • author is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\package.json
+  ⨯ Cannot compute electron version from installed node modules - none of the possible electron modules are installed.
+See https://github.com/electron-userland/electron-builder/issues/3984#issuecomment-504968246
+
+C:\Users\Aiden\Desktop\guardian-ai>rmdir /s /q build
+The system cannot find the file specified.
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:package
+
+> vite_react_shadcn_ts@0.0.0 electron:package
+> npm run electron:build && electron-builder --win --dir
+
+
+> vite_react_shadcn_ts@0.0.0 electron:build
+> vite build && cd electron-browser && npm run build
+
+vite v5.4.19 building for production...
+✓ 3292 modules transformed.
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/safety-engine.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/components/ChangeLog.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/CodeViewer.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/FileEditor.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/maturity-test.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-safety-guard.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/self-test-runner.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/verification-engine.ts, C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/pages/Index.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/code-parser.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-toaster.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, dynamic import will not move module into another chunk.
+
+dist/registerSW.js                  0.13 kB
+dist/manifest.webmanifest           0.38 kB
+dist/index.html                     2.28 kB │ gzip:   0.85 kB
+dist/assets/index-C8ppEuaj.css     84.82 kB │ gzip:  14.65 kB
+dist/assets/index-Bz3dD3Hi.js   1,542.27 kB │ gzip: 460.53 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.86s
+
+PWA v1.2.0
+mode      generateSW
+precache  10 entries (1624.18 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-8c29f6e4.js
+npm error code EJSONPARSE
+npm error JSON.parse Invalid package.json: JSONParseError: Expected ',' or '}' after property value in JSON at position 935 (line 39 column 38) while parsing near ".../public/icon.ico\"   // ← Add your .ico f..."
+npm error JSON.parse Failed to parse JSON data.
+npm error JSON.parse Note: package.json must be actual JSON, not just JavaScript.
+npm error A complete log of this run can be found in: C:\Users\Aiden\AppData\Roaming\npm-cache\_logs\2026-03-13T20_53_45_894Z-debug-0.log
+
+C:\Users\Aiden\Desktop\guardian-ai>rmdir /s /q build
+The system cannot find the file specified.
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:package
+
+> vite_react_shadcn_ts@0.0.0 electron:package
+> npm run electron:build && electron-builder --win --dir
+
+
+> vite_react_shadcn_ts@0.0.0 electron:build
+> vite build && cd electron-browser && npm run build
+
+vite v5.4.19 building for production...
+✓ 3292 modules transformed.
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/safety-engine.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/components/ChangeLog.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/CodeViewer.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/FileEditor.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/maturity-test.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-safety-guard.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/self-test-runner.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/verification-engine.ts, C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/pages/Index.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/code-parser.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-toaster.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, dynamic import will not move module into another chunk.
+
+dist/registerSW.js                  0.13 kB
+dist/manifest.webmanifest           0.38 kB
+dist/index.html                     2.28 kB │ gzip:   0.85 kB
+dist/assets/index-C8ppEuaj.css     84.82 kB │ gzip:  14.65 kB
+dist/assets/index-Bz3dD3Hi.js   1,542.27 kB │ gzip: 460.53 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.96s
+
+PWA v1.2.0
+mode      generateSW
+precache  10 entries (1624.18 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-8c29f6e4.js
+
+> guardian-ai-browser@1.0.0 build
+> npx --yes electron-builder@latest --win --x64
+
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • writing effective config  file=build\builder-effective-config.yaml
+  • executing @electron/rebuild  electronVersion=41.0.2 arch=x64 buildFromSource=false workspaceRoot=C:\Users\Aiden\Desktop\guardian-ai\electron-browser projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=41.0.2 appOutDir=build\win-unpacked
+  • searching for node modules  pm=npm searchDir=C:\Users\Aiden\Desktop\guardian-ai\electron-browser
+(node:21200) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • updating asar integrity executable resource  executablePath=build\win-unpacked\Guardian AI Browser.exe
+  • default Electron icon is used  reason=application icon is not set
+  • signing with signtool.exe  path=build\win-unpacked\Guardian AI Browser.exe
+  • building        target=nsis file=build\Guardian AI Browser Setup 1.0.0.exe archs=x64 oneClick=true perMachine=false
+  • signing with signtool.exe  path=build\win-unpacked\resources\elevate.exe
+  • signing with signtool.exe  path=build\Guardian AI Browser Setup 1.0.0.__uninstaller.exe
+  • signing with signtool.exe  path=build\Guardian AI Browser Setup 1.0.0.exe
+  • building block map  blockMapFile=build\Guardian AI Browser Setup 1.0.0.exe.blockmap
+  • building        target=portable file=build\Guardian AI Browser 1.0.0.exe archs=x64
+  • signing with signtool.exe  path=build\Guardian AI Browser 1.0.0.exe
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • description is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\package.json
+  • author is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\package.json
+  ⨯ Cannot compute electron version from installed node modules - none of the possible electron modules are installed.
+See https://github.com/electron-userland/electron-builder/issues/3984#issuecomment-504968246
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:package
+
+> vite_react_shadcn_ts@0.0.0 electron:package
+> npm run electron:build && electron-builder --win --dir
+
+
+> vite_react_shadcn_ts@0.0.0 electron:build
+> vite build && cd electron-browser && npm run build
+
+vite v5.4.19 building for production...
+✓ 3292 modules transformed.
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/safety-engine.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/components/ChangeLog.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/CodeViewer.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/FileEditor.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/maturity-test.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-safety-guard.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/self-test-runner.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/verification-engine.ts, C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/pages/Index.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/code-parser.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-toaster.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, dynamic import will not move module into another chunk.
+
+dist/registerSW.js                  0.13 kB
+dist/manifest.webmanifest           0.38 kB
+dist/index.html                     2.28 kB │ gzip:   0.85 kB
+dist/assets/index-C8ppEuaj.css     84.82 kB │ gzip:  14.65 kB
+dist/assets/index-Bz3dD3Hi.js   1,542.27 kB │ gzip: 460.53 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 6.04s
+
+PWA v1.2.0
+mode      generateSW
+precache  10 entries (1624.18 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-8c29f6e4.js
+
+> guardian-ai-browser@1.0.0 build
+> npx --yes electron-builder@latest --win --x64
+
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • writing effective config  file=build\builder-effective-config.yaml
+  • executing @electron/rebuild  electronVersion=41.0.2 arch=x64 buildFromSource=false workspaceRoot=C:\Users\Aiden\Desktop\guardian-ai\electron-browser projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=41.0.2 appOutDir=build\win-unpacked
+  • searching for node modules  pm=npm searchDir=C:\Users\Aiden\Desktop\guardian-ai\electron-browser
+(node:19552) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • updating asar integrity executable resource  executablePath=build\win-unpacked\Guardian AI Browser.exe
+  • default Electron icon is used  reason=application icon is not set
+  • signing with signtool.exe  path=build\win-unpacked\Guardian AI Browser.exe
+  • building        target=nsis file=build\Guardian AI Browser Setup 1.0.0.exe archs=x64 oneClick=true perMachine=false
+  • signing with signtool.exe  path=build\win-unpacked\resources\elevate.exe
+  • signing with signtool.exe  path=build\Guardian AI Browser Setup 1.0.0.__uninstaller.exe
+  • signing with signtool.exe  path=build\Guardian AI Browser Setup 1.0.0.exe
+  • building block map  blockMapFile=build\Guardian AI Browser Setup 1.0.0.exe.blockmap
+  • building        target=portable file=build\Guardian AI Browser 1.0.0.exe archs=x64
+  • signing with signtool.exe  path=build\Guardian AI Browser 1.0.0.exe
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • description is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\package.json
+  • author is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\package.json
+  ⨯ Cannot compute electron version from installed node modules - none of the possible electron modules are installed.
+See https://github.com/electron-userland/electron-builder/issues/3984#issuecomment-504968246
+
+C:\Users\Aiden\Desktop\guardian-ai>rmdir /s /q electron-browser\build
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:package
+
+> vite_react_shadcn_ts@0.0.0 electron:package
+> npm run electron:build && electron-builder --win --dir
+
+
+> vite_react_shadcn_ts@0.0.0 electron:build
+> vite build && cd electron-browser && npm run build
+
+vite v5.4.19 building for production...
+✓ 3292 modules transformed.
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/safety-engine.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/components/ChangeLog.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/CodeViewer.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/components/FileEditor.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/maturity-test.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-safety-guard.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/self-test-runner.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/verification-engine.ts, C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, C:/Users/Aiden/Desktop/guardian-ai/src/pages/Index.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/guardian-ai/src/lib/code-parser.ts is dynamically imported by C:/Users/Aiden/Desktop/guardian-ai/src/lib/evolution-bridge.ts, C:/Users/Aiden/Desktop/guardian-ai/src/lib/ollama-toaster.ts but also statically imported by C:/Users/Aiden/Desktop/guardian-ai/src/pages/GrokBridge.tsx, dynamic import will not move module into another chunk.
+
+dist/registerSW.js                  0.13 kB
+dist/manifest.webmanifest           0.38 kB
+dist/index.html                     2.28 kB │ gzip:   0.85 kB
+dist/assets/index-C8ppEuaj.css     84.82 kB │ gzip:  14.65 kB
+dist/assets/index-Bz3dD3Hi.js   1,542.27 kB │ gzip: 460.53 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 5.96s
+
+PWA v1.2.0
+mode      generateSW
+precache  10 entries (1624.18 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-8c29f6e4.js
+
+> guardian-ai-browser@1.0.0 build
+> npx --yes electron-builder@latest --win --x64
+
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • writing effective config  file=build\builder-effective-config.yaml
+  • executing @electron/rebuild  electronVersion=41.0.2 arch=x64 buildFromSource=false workspaceRoot=C:\Users\Aiden\Desktop\guardian-ai\electron-browser projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=41.0.2 appOutDir=build\win-unpacked
+  • searching for node modules  pm=npm searchDir=C:\Users\Aiden\Desktop\guardian-ai\electron-browser
+(node:15712) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • updating asar integrity executable resource  executablePath=build\win-unpacked\Guardian AI Browser.exe
+  • default Electron icon is used  reason=application icon is not set
+  • signing with signtool.exe  path=build\win-unpacked\Guardian AI Browser.exe
+  • building        target=nsis file=build\Guardian AI Browser Setup 1.0.0.exe archs=x64 oneClick=true perMachine=false
+  • signing with signtool.exe  path=build\win-unpacked\resources\elevate.exe
+  • signing with signtool.exe  path=build\Guardian AI Browser Setup 1.0.0.__uninstaller.exe
+  • signing with signtool.exe  path=build\Guardian AI Browser Setup 1.0.0.exe
+  • building block map  blockMapFile=build\Guardian AI Browser Setup 1.0.0.exe.blockmap
+  • building        target=portable file=build\Guardian AI Browser 1.0.0.exe archs=x64
+  • signing with signtool.exe  path=build\Guardian AI Browser 1.0.0.exe
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • description is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\package.json
+  • author is missed in the package.json  appPackageFile=C:\Users\Aiden\Desktop\guardian-ai\package.json
+  ⨯ Cannot compute electron version from installed node modules - none of the possible electron modules are installed.
+See https://github.com/electron-userland/electron-builder/issues/3984#issuecomment-504968246
+
+C:\Users\Aiden\Desktop\guardian-ai>
