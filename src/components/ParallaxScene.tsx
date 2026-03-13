@@ -41,13 +41,11 @@ const WALL_COLORS: Record<CubeWall, { bg: string; border: string }> = {
 
 type FocusTarget = CubeWall | 'center';
 
-const FOCUS_OFFSETS: Record<FocusTarget, { x: number; y: number; z: number; lookX: number; lookY: number; lookZ: number }> = {
+const FOCUS_OFFSETS: Record<string, { x: number; y: number; z: number; lookX: number; lookY: number; lookZ: number }> = {
   center: { x: 0, y: 0, z: 0, lookX: 0, lookY: 0, lookZ: -(DEPTH / 2) },
-  back:   { x: 0, y: 0, z: -160, lookX: 0, lookY: 0, lookZ: -(DEPTH / 2) },
+  back:   { x: 0, y: 0, z: 0, lookX: 0, lookY: 0, lookZ: -(DEPTH / 2) },
   left:   { x: -375, y: 0, z: -90, lookX: -600, lookY: 0, lookZ: -(DEPTH / 2) + 50 },
   right:  { x: 375, y: 0, z: -90, lookX: 600, lookY: 0, lookZ: -(DEPTH / 2) + 50 },
-  top:    { x: 0, y: 240, z: -80, lookX: 0, lookY: 450, lookZ: -(DEPTH / 2) },
-  bottom: { x: 0, y: -240, z: -80, lookX: 0, lookY: -450, lookZ: -(DEPTH / 2) },
 };
 
 export default function ParallaxScene({ children }: { children: React.ReactNode }) {
@@ -149,15 +147,12 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.setAttribute('data-wall', spec.wall);
 
       const wall = spec.wall as CubeWall;
-      wallEl.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-        if (target.closest('button, a, input, select, textarea, [role="button"], [data-testid]')) return;
-        if (wall === 'back' || wall === 'top' || wall === 'bottom') {
-          setFocusedWall('center');
-        } else {
+      if (wall === 'left' || wall === 'right') {
+        wallEl.addEventListener('click', (e) => {
+          if (e.target !== wallEl) return;
           setFocusedWall(focusedWallRef.current === wall ? 'center' : wall);
-        }
-      });
+        });
+      }
 
       const obj = new CSS3DObject(wallEl);
       obj.position.set(...spec.position);
@@ -231,7 +226,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
 
       if (cameraRef.current && rendererRef.current && sceneRef.current) {
         const cam = cameraRef.current;
-        const fo = FOCUS_OFFSETS[focusedWallRef.current];
+        const fo = FOCUS_OFFSETS[focusedWallRef.current] || FOCUS_OFFSETS.center;
         const baseZ = DEPTH * 0.65;
         const smooth = 0.04;
         const targetPosX = invertX * lerp.headX * 120 + fo.x;
@@ -259,6 +254,17 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       if (cleanup) cleanup();
     };
   }, [enabled, trackingMode, lerpRef, targetRef, fpsRef, initScene, destroyScene]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const handleWheel = (e: WheelEvent) => {
+      if (e.deltaY > 0 && focusedWallRef.current !== 'center') {
+        setFocusedWall('center');
+      }
+    };
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [enabled, setFocusedWall]);
 
   useEffect(() => {
     if (!enabled || !rendererRef.current || !cameraRef.current) return;
