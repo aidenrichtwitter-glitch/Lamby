@@ -1,8 +1,8 @@
 import { useParallax } from '@/lib/parallax-context';
-import { Layers, Mouse, Eye, X } from 'lucide-react';
+import { Layers, Mouse, Eye } from 'lucide-react';
 
 export default function ParallaxControls() {
-  const { enabled, setEnabled, trackingMode, setTrackingMode, statusText, cameraActive } = useParallax();
+  const { enabled, setEnabled, trackingMode, setTrackingMode, statusText, cameraActive, lerpRef, faceDetected } = useParallax();
 
   return (
     <div className="flex items-center gap-1.5" data-testid="parallax-controls">
@@ -38,12 +38,12 @@ export default function ParallaxControls() {
             {trackingMode === 'mouse' ? (
               <><Mouse className="w-3 h-3" /><span>Mouse</span></>
             ) : (
-              <><Eye className="w-3 h-3" /><span>Head</span></>
+              <><Eye className="w-3 h-3" /><span>Head Tracking</span></>
             )}
           </button>
 
           <div
-            className="px-2 py-0.5 rounded bg-black/40 text-[9px] font-mono text-cyan-400/80 border border-cyan-500/15 max-w-[200px] truncate"
+            className="px-2 py-0.5 rounded bg-black/40 text-[9px] font-mono text-cyan-400/80 border border-cyan-500/15 max-w-[220px] truncate"
             data-testid="text-parallax-status"
             title={statusText}
           >
@@ -55,6 +55,10 @@ export default function ParallaxControls() {
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
               CAM
             </span>
+          )}
+
+          {trackingMode === 'head' && faceDetected && (
+            <span className="text-[9px] text-green-400">✓ Face</span>
           )}
         </>
       )}
