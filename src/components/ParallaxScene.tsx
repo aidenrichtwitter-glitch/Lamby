@@ -46,7 +46,6 @@ type FocusTarget = CubeWall | 'center';
 
 const FOCUS_OFFSETS: Record<string, { x: number; y: number; z: number; lookX: number; lookY: number; lookZ: number }> = {
   center: { x: 0, y: 0, z: 0, lookX: 0, lookY: 0, lookZ: -(DEPTH / 2) },
-  back:   { x: 0, y: 0, z: 0, lookX: 0, lookY: 0, lookZ: -(DEPTH / 2) },
   left:   { x: -375, y: 0, z: -90, lookX: -600, lookY: 0, lookZ: -(DEPTH / 2) + 50 },
   right:  { x: 375, y: 0, z: -90, lookX: 600, lookY: 0, lookZ: -(DEPTH / 2) + 50 },
 };
@@ -164,14 +163,14 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       wallEl.setAttribute('data-wall', spec.wall);
 
       const wall = spec.wall as CubeWall;
-      if (wall === 'left' || wall === 'right' || wall === 'back') {
+      if (wall === 'left' || wall === 'right') {
         wallEl.addEventListener('dblclick', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (wall === 'back') {
-            setFocusedWall('center');
+          if (focusedWallRef.current !== wall) {
+            setFocusedWall(wall);
           } else {
-            setFocusedWall(focusedWallRef.current === wall ? 'center' : wall);
+            setFocusedWall('center');
           }
         });
       }
@@ -302,13 +301,10 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
       if (isInsideScrollable(e.target)) return;
       const step = e.deltaY > 0 ? 30 : -30;
       zoomOffsetRef.current = Math.max(-200, Math.min(400, zoomOffsetRef.current + step));
-      if (e.deltaY > 0 && zoomOffsetRef.current > 200 && focusedWallRef.current !== 'center') {
-        setFocusedWall('center');
-      }
     };
     window.addEventListener('wheel', handleWheel, { passive: true });
     return () => window.removeEventListener('wheel', handleWheel);
-  }, [enabled, setFocusedWall]);
+  }, [enabled]);
 
   useEffect(() => {
     if (!enabled || !rendererRef.current || !cameraRef.current) return;
