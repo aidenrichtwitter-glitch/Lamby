@@ -1240,48 +1240,35 @@ interface PreviewFrameProps {
 const PreviewFrame = React.forwardRef<HTMLIFrameElement, PreviewFrameProps>(
   ({ previewKey, src, title, previewLogs, activeProject }, ref) => {
     const [iframeLoaded, setIframeLoaded] = useState(false);
-    const [blankDetected, setBlankDetected] = useState(false);
-    const blankTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const gotContentRef = useRef(false);
-    const logsRef = useRef(previewLogs);
-    logsRef.current = previewLogs;
+    const [serverDown, setServerDown] = useState(false);
+    const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
       setIframeLoaded(false);
-      setBlankDetected(false);
-      gotContentRef.current = false;
-      if (blankTimerRef.current) clearTimeout(blankTimerRef.current);
-      return () => { if (blankTimerRef.current) clearTimeout(blankTimerRef.current); };
+      setServerDown(false);
+      if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+      return () => { if (checkTimerRef.current) clearTimeout(checkTimerRef.current); };
     }, [previewKey]);
-
-    useEffect(() => {
-      if (previewLogs.length > 0 && !gotContentRef.current) {
-        const hasRealContent = previewLogs.some(l =>
-          l.level === 'log' && !l.message.startsWith('[HMR]') && !l.message.startsWith('[vite]')
-        );
-        if (hasRealContent) {
-          gotContentRef.current = true;
-          setBlankDetected(false);
-        }
-      }
-    }, [previewLogs]);
 
     const handleIframeLoad = useCallback(() => {
       setIframeLoaded(true);
-      if (blankTimerRef.current) clearTimeout(blankTimerRef.current);
-      blankTimerRef.current = setTimeout(() => {
-        if (!gotContentRef.current) {
-          const logs = logsRef.current;
-          const hasErrors = logs.some(l => l.level === 'error');
-          if (hasErrors) {
-            setBlankDetected(true);
-          }
+      if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+      checkTimerRef.current = setTimeout(async () => {
+        try {
+          const res = await fetch(src, { method: 'HEAD', mode: 'no-cors' });
+          setServerDown(false);
+        } catch {
+          setServerDown(true);
         }
-      }, 4000);
+      }, 3000);
+    }, [src]);
+
+    const handleIframeError = useCallback(() => {
+      setIframeLoaded(true);
+      setServerDown(true);
     }, []);
 
     const errorCount = previewLogs.filter(l => l.level === 'error').length;
-    const lastError = previewLogs.filter(l => l.level === 'error').slice(-1)[0];
 
     return (
       <div className="flex-1 w-full relative min-h-0">
@@ -1295,6 +1282,7 @@ const PreviewFrame = React.forwardRef<HTMLIFrameElement, PreviewFrameProps>(
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
           title={title}
           onLoad={handleIframeLoad}
+          onError={handleIframeError}
         />
         {!iframeLoaded && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[hsl(220_15%_8%)] z-10" data-testid="preview-loading-overlay">
@@ -1303,23 +1291,23 @@ const PreviewFrame = React.forwardRef<HTMLIFrameElement, PreviewFrameProps>(
             <span className="text-[10px] text-muted-foreground/40">Starting dev server & bundling</span>
           </div>
         )}
-        {blankDetected && iframeLoaded && (
+        {serverDown && iframeLoaded && (
           <div className="absolute inset-x-0 top-0 flex flex-col items-center gap-2 pt-6 z-10 pointer-events-none" data-testid="preview-blank-overlay">
             <div className="pointer-events-auto flex flex-col items-center gap-2 px-4 py-3 rounded-lg bg-background/95 border border-amber-500/30 shadow-lg max-w-sm text-center backdrop-blur-sm">
               <AlertTriangle className="w-5 h-5 text-amber-400" />
               <span className="text-xs text-amber-300 font-medium">
-                {`Preview loaded with ${errorCount} error${errorCount > 1 ? 's' : ''}`}
+                Preview server not responding
               </span>
-              {lastError && (
-                <span className="text-[10px] text-red-400/80 font-mono break-all line-clamp-3">
-                  {lastError.message.slice(0, 200)}
+              {errorCount > 0 && (
+                <span className="text-[10px] text-red-400/80">
+                  {errorCount} error{errorCount > 1 ? 's' : ''} in console
                 </span>
               )}
               <span className="text-[10px] text-muted-foreground/60">
-                {'Check console below for details — click "Send Logs to Grok" for help'}
+                The dev server may have crashed. Check console below.
               </span>
               <button
-                onClick={() => setBlankDetected(false)}
+                onClick={() => setServerDown(false)}
                 className="pointer-events-auto text-[9px] text-muted-foreground/50 hover:text-muted-foreground transition-colors mt-1"
                 data-testid="button-dismiss-blank-overlay"
               >
