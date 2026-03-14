@@ -103,14 +103,27 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
     container.appendChild(renderer.domElement);
 
     renderer.domElement.style.pointerEvents = 'auto';
+    renderer.domElement.style.overflow = 'hidden';
     const viewEl = renderer.domElement.firstElementChild as HTMLElement;
     if (viewEl) {
       viewEl.style.pointerEvents = 'auto';
+      viewEl.style.overflow = 'visible';
       const camEl = viewEl.firstElementChild as HTMLElement;
       if (camEl) {
         camEl.style.pointerEvents = 'auto';
+        camEl.style.overflow = 'visible';
       }
     }
+
+    const resetScroll = () => {
+      renderer.domElement.scrollTop = 0;
+      renderer.domElement.scrollLeft = 0;
+      if (viewEl) { viewEl.scrollTop = 0; viewEl.scrollLeft = 0; }
+      const camEl = viewEl?.firstElementChild as HTMLElement | null;
+      if (camEl) { camEl.scrollTop = 0; camEl.scrollLeft = 0; }
+    };
+    renderer.domElement.addEventListener('scroll', resetScroll, true);
+    renderer.domElement.addEventListener('focusin', () => requestAnimationFrame(resetScroll), true);
 
     const styleEl = document.createElement('style');
     styleEl.textContent = `
@@ -176,6 +189,7 @@ export default function ParallaxScene({ children }: { children: React.ReactNode 
 
     return () => {
       if (styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+      renderer.domElement.removeEventListener('scroll', resetScroll, true);
       if (renderer.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
