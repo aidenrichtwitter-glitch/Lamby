@@ -282,31 +282,60 @@ supabase/
   - Grok makes the final decision — no conflicting suggestions from multiple sources
   - Shows "Built Before" indicator when matches found
 
-## Sandbox API (Bridge Relay)
-- **Core file**: `server/sandbox-dispatcher.cjs` — all sandbox action handlers. Imported by both `vite.config.ts` (dev) and `electron-browser/src/local-server.js` (desktop).
-- **1:1 Mirror Rule**: `commandProtocol` strings in `vite.config.ts` and `local-server.js` must list identical action types.
-- **Grok Prompt**: `buildSandboxApiSection()` in `GrokBridge.tsx` documents all commands for the AI.
-- **Action Types** (~110 total: 20 from Task #67, 13 from Task #68, 51 from Task #69):
+## Sandbox API — Architecture & Flow
+
+### System Architecture (3 separate pieces)
+1. **Bridge Relay** (`bridge-relay.replit.app`) — SEPARATE deployed app, NOT part of this codebase. It is a publicly accessible relay server that:
+   - Accepts POST requests from Grok at `/api/sandbox/execute?key=KEY`
+   - Forwards those actions via WebSocket to connected "desktop clients"
+   - Returns results back to Grok
+   - Also serves snapshot/console-log endpoints for project state viewing
+2. **This Replit Vite Dev Server** (`vite.config.ts`) — Runs here. Connects TO the bridge relay as a "desktop client" via WebSocket (`/bridge-ws`). When it receives a `sandbox-execute-request` message, it calls `sandbox-dispatcher.cjs` locally to execute actions on disk. Results sent back via WebSocket.
+3. **Desktop Electron App** (`electron-browser/src/local-server.js`) — Alternative client. Also connects to bridge relay as a "desktop client." Also calls `sandbox-dispatcher.cjs`. Used when running locally on user's machine instead of Replit.
+
+### End-to-End Flow
+```
+Grok (xAI) → POST JSON actions → bridge-relay.replit.app → WebSocket → This Vite Server (or Desktop Electron) → sandbox-dispatcher.cjs → fs.writeFileSync (disk) → results flow back the same path
+```
+
+### How This Vite Server Connects to the Bridge Relay
+- `vite.config.ts` line ~5040: Creates a WebSocket connection to `wss://bridge-relay.replit.app/bridge-ws?key=BRIDGE_KEY&snapshotKey=SNAPSHOT_KEY`
+- Reconnects automatically with exponential backoff (every 301s normal reconnect cycle)
+- Sends `ping` every 15s for keepalive
+- Handles incoming messages: `snapshot-request`, `sandbox-execute-request`, `console-logs-request`, `relay-log`
+- The `[Relay INFO/WARN/ERROR]` messages in workflow logs are forwarded from the external relay via `relay-log` WebSocket messages — they show what's happening on the relay side
+
+### Sandbox Dispatcher
+- **Core file**: `server/sandbox-dispatcher.cjs` — all sandbox action handlers
+- Imported by both `vite.config.ts` (this Replit app) and `electron-browser/src/local-server.js` (desktop Electron app)
+- **1:1 Mirror Rule**: Both consumers must support the same set of action types
+- **Grok Prompt**: `buildSandboxApiSection()` in `GrokBridge.tsx` documents all commands for the AI
+- **Action Types** (~110 total):
   - **File**: `list_tree`, `read_file`, `read_multiple_files`, `write_file`, `create_file`, `bulk_write` (atomic+rollback), `delete_file`, `bulk_delete`, `move_file`, `copy_file`, `copy_folder`, `rename_file`
-  - **Folder** (Task #69): `create_folder`, `delete_folder`, `move_folder`, `rename_folder`, `list_tree_filtered` (by extension, depth, ignore)
+  - **Folder**: `create_folder`, `delete_folder`, `move_folder`, `rename_folder`, `list_tree_filtered` (by extension, depth, ignore)
   - **Search**: `grep`, `search_files`, `search_replace` (single/multi-file, regex), `apply_patch` (unified diff with context validation)
-  - **Code Intelligence** (Task #69): `dead_code_detection`, `dependency_graph`, `symbol_search`, `grep_advanced` (with include/exclude filters), `extract_imports`
+  - **Code Intelligence**: `dead_code_detection`, `dependency_graph`, `symbol_search`, `grep_advanced` (with include/exclude filters), `extract_imports`
   - **Shell**: `run_command`, `install_deps`, `add_dependency` (pkg mgr auto-detect, version, dev flag), `run_command_advanced` (timeout, env vars)
-  - **Build** (Task #69): `build_with_flags`, `clean_build_cache`
+  - **Build**: `build_with_flags`, `clean_build_cache`
   - **Code Quality**: `type_check` (tsc --noEmit), `lint_and_fix` (eslint/prettier), `format_files` (prettier)
   - **Process**: `start_process`, `kill_process`, `list_processes`, `restart_dev_server`, `list_open_ports`, `start_process_named`, `monitor_process`, `get_process_logs`, `stop_all_processes`, `switch_port`
   - **Git**: `git_init`, `git_status`, `git_add`, `git_commit`, `git_diff`, `git_log`, `git_branch`, `git_checkout`, `git_stash`, `git_push`, `git_pull`, `git_merge`, `git_stash_pop`, `git_reset`, `git_revert`, `git_tag`
   - **Environment**: `set_env_var`, `get_env_vars`, `rollback_last_change`
   - **Project**: `detect_structure`, `build_project`, `run_tests`, `get_build_metrics`, `archive_project`, `export_project` (zip/tar.gz)
-  - **Analysis** (Task #68): `project_analyze`, `tailwind_audit`, `find_usages`, `component_tree`, `extract_theme`/`extract_colors`
-  - **Visual/Preview** (Tasks #68/#69): `get_preview_url`, `capture_preview`, `visual_diff`, `capture_component`, `record_video`, `get_dom_snapshot`, `get_console_errors`
-  - **AI Generation** (Tasks #68/#69): `generate_component`, `generate_page`, `refactor_file`, `generate_test`, `generate_storybook`, `optimize_code`, `convert_to_typescript`, `add_feature`, `migrate_framework`. All require `XAI_API` env var.
-  - **Debugging/Profiling** (Task #69): `react_profiler`, `memory_leak_detection`, `console_error_analysis`, `runtime_error_trace`, `bundle_analyzer`, `network_monitor`, `accessibility_audit`, `security_scan`
-  - **Validation** (Task #68): `validate_change` (type-check + lint pass/fail), `profile_performance` (bundle sizes + lighthouse info)
-  - **Config** (Task #69): `set_tailwind_config`, `set_next_config`, `update_package_json`, `manage_scripts`, `switch_package_manager`
-  - **Super/Meta** (Task #69): `deploy_preview`, `export_project_zip`, `import_project` (git clone), `super_command` (AI natural language → action list)
+  - **Analysis**: `project_analyze`, `tailwind_audit`, `find_usages`, `component_tree`, `extract_theme`/`extract_colors`
+  - **Visual/Preview**: `get_preview_url`, `capture_preview`, `visual_diff`, `capture_component`, `record_video`, `get_dom_snapshot`, `get_console_errors`
+  - **AI Generation**: `generate_component`, `generate_page`, `refactor_file`, `generate_test`, `generate_storybook`, `optimize_code`, `convert_to_typescript`, `add_feature`, `migrate_framework`. All require `XAI_API` env var.
+  - **Debugging/Profiling**: `react_profiler`, `memory_leak_detection`, `console_error_analysis`, `runtime_error_trace`, `bundle_analyzer`, `network_monitor`, `accessibility_audit`, `security_scan`
+  - **Validation**: `validate_change` (type-check + lint pass/fail), `profile_performance` (bundle sizes + lighthouse info)
+  - **Config**: `set_tailwind_config`, `set_next_config`, `update_package_json`, `manage_scripts`, `switch_package_manager`
+  - **Super/Meta**: `deploy_preview`, `export_project_zip`, `import_project` (git clone), `super_command` (AI natural language → action list)
 - **Bridge Prompt Doc**: `electron-browser/BRIDGE_PROMPT.md` — paste-ready prompt for AI chat with all ~110 commands documented.
 - **Field names**: `copy_file`/`rename_file`/`move_file` use `source`/`dest` (not `from`/`to`). `move_folder`/`rename_folder` accept `from`/`source` + `to`/`dest`/`newName`. `list_tree` returns `entries`. `search_files` uses `pattern`.
+
+### Direct API (bypass relay)
+- This vite server also exposes `POST /api/sandbox/execute?key=SNAPSHOT_KEY` directly (line ~5348 in `vite.config.ts`)
+- When called, if the key matches a connected bridge client's snapshotKey, it relays to that client; otherwise it executes locally via sandbox-dispatcher
+- The batch test scripts (`server/batch-cmd-test.cjs`) POST directly to this endpoint, not to the external relay
 
 ## Batch Command Testing
 - **Test harness**: `server/batch-cmd-test.cjs` — 9 groups covering all 84+ sandbox commands
