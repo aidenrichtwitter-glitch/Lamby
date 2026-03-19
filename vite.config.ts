@@ -5106,7 +5106,9 @@ function projectManagementPlugin(): Plugin {
 
       function bridgeRelaySend(data: string) {
         if (!bridgeRelaySocket || !bridgeRelayConnected) return;
-        try { bridgeRelaySocket.write(wsRelayEncodeFrame(data)); } catch {}
+        try { bridgeRelaySocket.write(wsRelayEncodeFrame(data)); } catch (err: any) {
+          console.error(`[Bridge] Send failed: ${err.message}`);
+        }
       }
 
       function gatherConsoleLogs(projectName: string) {
@@ -5133,21 +5135,33 @@ function projectManagementPlugin(): Plugin {
         try {
           const parsed = JSON.parse(msg);
           if (parsed.type === "snapshot-request" && parsed.requestId) {
+            console.log(`[Bridge] Received snapshot-request for "${parsed.projectName || ""}" (reqId: ${parsed.requestId.slice(0, 8)})`);
             const snapshot = await gatherProjectSnapshot(parsed.projectName || "");
             bridgeRelaySend(JSON.stringify({ type: "snapshot-response", requestId: parsed.requestId, snapshot }));
+            console.log(`[Bridge] Sent snapshot-response (reqId: ${parsed.requestId.slice(0, 8)}, len: ${typeof snapshot === 'string' ? snapshot.length : JSON.stringify(snapshot).length})`);
           } else if (parsed.type === "sandbox-execute-request" && parsed.requestId) {
+            console.log(`[Bridge] Received sandbox-execute-request (reqId: ${parsed.requestId.slice(0, 8)}, actions: ${(parsed.actions || []).length})`);
             try {
               const projectsDir = path.resolve(process.cwd(), "projects");
               const result = await executeSandboxActions(parsed.actions || [], projectsDir, { auditLog: sandboxAuditLog });
               bridgeRelaySend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result }));
+              console.log(`[Bridge] Sent sandbox-execute-response (reqId: ${parsed.requestId.slice(0, 8)})`);
             } catch (err: any) {
+              console.error(`[Bridge] sandbox-execute error: ${err.message}`);
               bridgeRelaySend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result: { error: err.message } }));
             }
           } else if (parsed.type === "console-logs-request" && parsed.requestId) {
+            console.log(`[Bridge] Received console-logs-request for "${parsed.projectName || ""}" (reqId: ${parsed.requestId.slice(0, 8)})`);
             const logs = gatherConsoleLogs(parsed.projectName || "");
             bridgeRelaySend(JSON.stringify({ type: "console-logs-response", requestId: parsed.requestId, logs }));
+            console.log(`[Bridge] Sent console-logs-response (reqId: ${parsed.requestId.slice(0, 8)})`);
+          } else if (parsed.type === "ping") {
+            bridgeRelaySend(JSON.stringify({ type: "pong" }));
+          } else if (parsed.type === "pong") {
           }
-        } catch {}
+        } catch (err: any) {
+          console.error(`[Bridge] handleBridgeRelayMessage error: ${err.message}`);
+        }
       }
 
       function processRelayBuffer() {
@@ -5232,10 +5246,12 @@ function projectManagementPlugin(): Plugin {
             bridgeRelayLastConnectedAt = Date.now();
             bridgeRelayReconnectDelay = 2000;
             console.log(`[Bridge] Connected to relay at ${host}`);
+            bridgeRelaySend(JSON.stringify({ type: "ping" }));
             bridgeRelayPingTimer = setInterval(() => {
               bridgeRelaySend(JSON.stringify({ type: "ping" }));
-            }, 30000);
-            const remaining = chunk.slice(Buffer.from(httpBuffer.slice(0, headerEnd + 4)).length);
+            }, 15000);
+            const headerBytes = Buffer.byteLength(httpBuffer.slice(0, headerEnd + 4), "utf-8");
+            const remaining = chunk.slice(headerBytes);
             if (remaining.length > 0) {
               bridgeRelayBuffer = Buffer.concat([bridgeRelayBuffer, remaining]);
               processRelayBuffer();
@@ -5246,8 +5262,9 @@ function projectManagementPlugin(): Plugin {
           processRelayBuffer();
         });
 
-        socket.on("close", () => {
-          if (bridgeRelayConnected) console.log("[Bridge] Disconnected from relay");
+        socket.on("close", (hadError: boolean) => {
+          const uptime = bridgeRelayLastConnectedAt ? Math.round((Date.now() - bridgeRelayLastConnectedAt) / 1000) : 0;
+          if (bridgeRelayConnected) console.log(`[Bridge] Disconnected from relay (hadError: ${hadError}, uptime: ${uptime}s)`);
           bridgeRelayConnected = false;
           bridgeRelaySocket = null;
           if (bridgeRelayPingTimer) { clearInterval(bridgeRelayPingTimer); bridgeRelayPingTimer = null; }
@@ -5255,7 +5272,7 @@ function projectManagementPlugin(): Plugin {
         });
 
         socket.on("error", (err: any) => {
-          console.error(`[Bridge] Connection error: ${err.message}`);
+          console.error(`[Bridge] Connection error: ${err.code || err.message}`);
           bridgeRelayConnected = false;
           bridgeRelaySocket = null;
           if (bridgeRelayPingTimer) { clearInterval(bridgeRelayPingTimer); bridgeRelayPingTimer = null; }

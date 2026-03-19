@@ -124,7 +124,9 @@ function wsClientDecodeFrame(buf) {
 
 function bridgeSend(data) {
   if (!bridgeSocket || !bridgeConnected) return;
-  try { bridgeSocket.write(wsClientEncodeFrame(data)); } catch {}
+  try { bridgeSocket.write(wsClientEncodeFrame(data)); } catch (err) {
+    console.error(`[Bridge] Send failed: ${err.message}`);
+  }
 }
 
 function gatherConsoleLogs(projectName) {
@@ -151,21 +153,32 @@ async function handleBridgeMessage(msg) {
   try {
     const parsed = JSON.parse(msg);
     if (parsed.type === "snapshot-request" && parsed.requestId) {
+      console.log(`[Bridge] Received snapshot-request for "${parsed.projectName || ""}" (reqId: ${parsed.requestId.slice(0, 8)})`);
       const snapshot = gatherProjectSnapshot(parsed.projectName || "", PROJECTS_DIR);
       bridgeSend(JSON.stringify({ type: "snapshot-response", requestId: parsed.requestId, snapshot }));
+      console.log(`[Bridge] Sent snapshot-response (reqId: ${parsed.requestId.slice(0, 8)}, len: ${typeof snapshot === 'string' ? snapshot.length : JSON.stringify(snapshot).length})`);
     } else if (parsed.type === "sandbox-execute-request" && parsed.requestId) {
+      console.log(`[Bridge] Received sandbox-execute-request (reqId: ${parsed.requestId.slice(0, 8)}, actions: ${(parsed.actions || []).length})`);
       try {
         const result = await executeSandboxActions(parsed.actions || [], PROJECTS_DIR, { auditLog: sandboxAuditLog });
         bridgeSend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result }));
+        console.log(`[Bridge] Sent sandbox-execute-response (reqId: ${parsed.requestId.slice(0, 8)})`);
       } catch (err) {
+        console.error(`[Bridge] sandbox-execute error: ${err.message}`);
         bridgeSend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result: { error: err.message } }));
       }
     } else if (parsed.type === "console-logs-request" && parsed.requestId) {
+      console.log(`[Bridge] Received console-logs-request for "${parsed.projectName || ""}" (reqId: ${parsed.requestId.slice(0, 8)})`);
       const logs = gatherConsoleLogs(parsed.projectName || "");
       bridgeSend(JSON.stringify({ type: "console-logs-response", requestId: parsed.requestId, logs }));
+      console.log(`[Bridge] Sent console-logs-response (reqId: ${parsed.requestId.slice(0, 8)})`);
+    } else if (parsed.type === "ping") {
+      bridgeSend(JSON.stringify({ type: "pong" }));
     } else if (parsed.type === "pong") {
     }
-  } catch {}
+  } catch (err) {
+    console.error(`[Bridge] handleBridgeMessage error: ${err.message}`);
+  }
 }
 
 function connectToBridgeRelay() {
@@ -247,10 +260,12 @@ function connectToBridgeRelay() {
       bridgeFailCount = 0;
       bridgeTriedFallback = false;
       console.log(`[Bridge] Connected to relay at ${host}`);
+      bridgeSend(JSON.stringify({ type: "ping" }));
       bridgePingTimer = setInterval(() => {
         bridgeSend(JSON.stringify({ type: "ping" }));
-      }, 30000);
-      const remaining = chunk.slice(Buffer.from(httpBuffer.slice(0, headerEnd + 4)).length);
+      }, 15000);
+      const headerBytes = Buffer.byteLength(httpBuffer.slice(0, headerEnd + 4), "utf-8");
+      const remaining = chunk.slice(headerBytes);
       if (remaining.length > 0) {
         bridgeBuffer = Buffer.concat([bridgeBuffer, remaining]);
         processBridgeBuffer();
@@ -261,8 +276,9 @@ function connectToBridgeRelay() {
     processBridgeBuffer();
   });
 
-  socket.on("close", () => {
-    if (bridgeConnected) console.log("[Bridge] Disconnected from relay");
+  socket.on("close", (hadError) => {
+    const uptime = bridgeLastConnectedAt ? Math.round((Date.now() - bridgeLastConnectedAt) / 1000) : 0;
+    if (bridgeConnected) console.log(`[Bridge] Disconnected from relay (hadError: ${hadError}, uptime: ${uptime}s)`);
     bridgeConnected = false;
     bridgeSocket = null;
     if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
@@ -270,7 +286,7 @@ function connectToBridgeRelay() {
   });
 
   socket.on("error", (err) => {
-    console.error(`[Bridge] Connection error: ${err.message}`);
+    console.error(`[Bridge] Connection error: ${err.code || err.message}`);
     bridgeConnected = false;
     bridgeSocket = null;
     if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
