@@ -247,21 +247,22 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   if (!snapshotUrl && !cmdEndpoint) return '';
   const proj = project || 'PROJECT_NAME';
   const consoleLogsUrl = snapshotUrl ? snapshotUrl.replace(/\/api\/snapshot\/[^?]+/, '/api/console-logs') + `&project=${proj}` : '';
+  const proxyBaseUrl = cmdEndpoint ? cmdEndpoint.replace(/\/api\/sandbox\/execute\b/, '/api/grok-proxy') : '';
 
   let section = '\n=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS — USE IT) ===\n';
-  section += `You have web browsing capabilities. Use them NOW to directly read, modify, and execute code in this project.\n`;
-  section += `DO NOT just suggest code changes. Actually make the changes yourself by calling these HTTP endpoints, then tell the user what you did.\n`;
-  section += `The \`key\` query parameter authenticates your requests. All endpoints below are live and publicly accessible via HTTPS.\n\n`;
+  section += `You have web browsing capabilities (browse_page). Use them NOW to directly read, modify, and execute code in this project.\n`;
+  section += `DO NOT just suggest code changes. Actually make the changes yourself by browsing these URLs, then tell the user what you did.\n`;
+  section += `All endpoints below are GET-based, live, and publicly accessible via HTTPS. Authentication is via the \`key\` query parameter.\n\n`;
 
   if (!bridgeOnline) {
     section += `⚠ WARNING: The user's desktop app may be temporarily offline — API calls might fail until it reconnects. If calls fail, fall back to // file: blocks.\n\n`;
   }
 
   section += `YOUR WORKFLOW — do this every time:\n`;
-  section += `  1. FETCH the snapshot URL below to see all project files and their contents\n`;
+  section += `  1. BROWSE the snapshot URL below to see all project files and their contents\n`;
   section += `  2. ANALYZE the code to understand what needs to change\n`;
-  section += `  3. POST to the command endpoint to write files, run commands, install deps, etc.\n`;
-  section += `  4. VERIFY by fetching the snapshot again or checking console logs\n`;
+  section += `  3. BROWSE the proxy URL with base64-encoded actions to write files, run commands, etc.\n`;
+  section += `  4. VERIFY by browsing the snapshot URL again or checking console logs\n`;
   section += `  5. TELL the user what you did and what changed\n\n`;
 
   if (snapshotUrl) {
@@ -276,12 +277,20 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `  Returns: JSON { previews: [{ name, port, stdout, stderr }] } — live output from running dev servers.\n`;
     section += `  Use this to check for runtime errors, build failures, or confirm your fix worked.\n\n`;
   }
-  if (cmdEndpoint) {
-    section += `EXECUTE COMMANDS (write files, run shell, install deps, git, etc.):\n`;
-    section += `  POST ${cmdEndpoint}\n`;
-    section += `  Content-Type: application/json\n`;
-    section += `  Body: { "actions": [ ...action objects... ] }\n\n`;
-    section += `  Each action requires "type" and "project": "${proj}". Actions execute in order.\n\n`;
+  if (proxyBaseUrl) {
+    section += `EXECUTE COMMANDS via GET proxy (write files, run shell, install deps, git, etc.):\n`;
+    section += `  This endpoint lets you execute ANY sandbox command using only GET requests (browse_page).\n`;
+    section += `  You MUST use this endpoint — do NOT attempt POST requests, they will fail.\n\n`;
+    section += `  HOW IT WORKS:\n`;
+    section += `  1. Build your actions JSON:  { "actions": [ ...action objects... ] }\n`;
+    section += `  2. Base64-encode that JSON string\n`;
+    section += `  3. Browse this URL:  ${proxyBaseUrl}&project=${proj}&payload=BASE64_ENCODED_ACTIONS\n\n`;
+    section += `  URL FORMAT:\n`;
+    section += `    GET ${proxyBaseUrl}&project=${proj}&payload=<base64>\n`;
+    section += `  where <base64> = base64encode(JSON.stringify({ "actions": [ ... ] }))\n\n`;
+    section += `  Each action requires "type" and "project": "${proj}". Actions execute in order. Max 50 per request.\n\n`;
+    section += `  IMPORTANT: For large writes (big file content), keep payloads under ~6000 characters of JSON before encoding.\n`;
+    section += `  If a file is very large, split into multiple requests or use search_replace instead of write_file.\n\n`;
     section += `  FILE OPERATIONS:\n`;
     section += `    { type: "list_tree", project: "${proj}" }  → full file tree\n`;
     section += `    { type: "read_file", project: "${proj}", path: "src/App.tsx" }  → file content\n`;
@@ -291,6 +300,7 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    { type: "move_file", project: "${proj}", source: "old/path.ts", dest: "new/path.ts" }\n`;
     section += `    { type: "copy_file", project: "${proj}", source: "src/a.ts", dest: "src/b.ts" }\n`;
     section += `    { type: "rename_file", project: "${proj}", source: "src/old.ts", dest: "src/new.ts" }\n`;
+    section += `    { type: "search_replace", project: "${proj}", path: "src/App.tsx", search: "oldText", replace: "newText" }  → find & replace (preferred for large files)\n`;
     section += `  SEARCH:\n`;
     section += `    { type: "grep", project: "${proj}", pattern: "TODO" }  → regex search across all files\n`;
     section += `    { type: "search_files", project: "${proj}", pattern: "Button" }  → filename search\n`;
@@ -315,21 +325,31 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    { type: "detect_structure", project: "${proj}" }  → framework, entry point, package manager\n`;
     section += `    { type: "build_project", project: "${proj}" }  → runs the project build command\n`;
     section += `    { type: "run_tests", project: "${proj}" }  → runs the project test suite\n\n`;
-    section += `  RESPONSE FORMAT:\n`;
+    section += `  RESPONSE FORMAT (returned as JSON in the page you browse):\n`;
     section += `    { "success": true, "results": [ { "actionIndex": 0, "status": "success", "data": {...} }, ... ] }\n\n`;
-    section += `  EXAMPLE — read a file, fix it, verify:\n`;
-    section += `    POST ${cmdEndpoint}\n`;
-    section += `    { "actions": [\n`;
-    section += `      { "type": "read_file", "project": "${proj}", "path": "index.html" },\n`;
-    section += `      { "type": "write_file", "project": "${proj}", "path": "index.html", "content": "<!DOCTYPE html>\\n..." },\n`;
-    section += `      { "type": "run_command", "project": "${proj}", "command": "npm run build" }\n`;
-    section += `    ] }\n\n`;
+    const exampleJson = JSON.stringify({"actions":[{"type":"read_file","project":proj,"path":"index.html"}]});
+    let exampleB64: string;
+    try {
+      exampleB64 = typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(exampleJson))) : Buffer.from(exampleJson).toString('base64');
+    } catch {
+      exampleB64 = Buffer.from(exampleJson).toString('base64');
+    }
+    section += `  EXAMPLE — read a file then write it:\n`;
+    section += `  Step 1: Build the actions JSON:\n`;
+    section += `    ${exampleJson}\n`;
+    section += `  Step 2: Base64-encode it:\n`;
+    section += `    ${exampleB64}\n`;
+    section += `  Step 3: Browse:\n`;
+    section += `    GET ${proxyBaseUrl}&project=${proj}&payload=${exampleB64}\n\n`;
+    section += `  Then to write the updated file, build a new actions JSON with write_file, base64-encode it, and browse that URL.\n\n`;
   }
 
   section += `IMPORTANT RULES:\n`;
-  section += `  - ALWAYS use these API endpoints to make changes. Do NOT just show code in your response.\n`;
-  section += `  - Fetch the snapshot FIRST to understand the current state before making changes.\n`;
+  section += `  - ALWAYS use browse_page on these URLs to make changes. Do NOT just show code in your response.\n`;
+  section += `  - ALL endpoints are GET-based. Use browse_page to call them. Do NOT attempt POST requests.\n`;
+  section += `  - Browse the snapshot FIRST to understand the current state before making changes.\n`;
   section += `  - write_file requires COMPLETE file content — not partial snippets or diffs.\n`;
+  section += `  - For large files, prefer search_replace over write_file to keep payloads small.\n`;
   section += `  - Do the work, verify it, then explain to the user what you changed.\n`;
   section += `  - If an API call fails, retry once. If it still fails, fall back to // file: blocks.\n`;
 

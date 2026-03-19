@@ -286,7 +286,8 @@ supabase/
 
 ### System Architecture (3 separate pieces)
 1. **Bridge Relay** (`bridge-relay.replit.app`) — SEPARATE deployed app, NOT part of this codebase. It is a publicly accessible relay server that:
-   - Accepts POST requests from Grok at `/api/sandbox/execute?key=KEY`
+   - Accepts GET requests from Grok at `/api/grok-proxy?key=KEY&project=P&payload=BASE64` (primary, for browser-based AI)
+   - Also accepts POST requests at `/api/sandbox/execute?key=KEY` (for programmatic clients like batch tests)
    - Forwards those actions via WebSocket to connected "desktop clients"
    - Returns results back to Grok
    - Also serves snapshot/console-log endpoints for project state viewing
@@ -295,8 +296,9 @@ supabase/
 
 ### End-to-End Flow
 ```
-Grok (xAI) → POST JSON actions → bridge-relay.replit.app → WebSocket → This Vite Server (or Desktop Electron) → sandbox-dispatcher.cjs → fs.writeFileSync (disk) → results flow back the same path
+Grok (xAI) → GET /api/grok-proxy?payload=BASE64 → bridge-relay.replit.app → WebSocket → This Vite Server (or Desktop Electron) → sandbox-dispatcher.cjs → fs.writeFileSync (disk) → results flow back the same path
 ```
+(The relay also still accepts POST to `/api/sandbox/execute` for non-browser clients like batch tests.)
 
 ### How This Vite Server Connects to the Bridge Relay
 - `vite.config.ts` line ~5040: Creates a WebSocket connection to `wss://bridge-relay.replit.app/bridge-ws?key=BRIDGE_KEY&snapshotKey=SNAPSHOT_KEY`
@@ -331,6 +333,16 @@ Grok (xAI) → POST JSON actions → bridge-relay.replit.app → WebSocket → T
   - **Super/Meta**: `deploy_preview`, `export_project_zip`, `import_project` (git clone), `super_command` (AI natural language → action list)
 - **Bridge Prompt Doc**: `electron-browser/BRIDGE_PROMPT.md` — paste-ready prompt for AI chat with all ~110 commands documented.
 - **Field names**: `copy_file`/`rename_file`/`move_file` use `source`/`dest` (not `from`/`to`). `move_folder`/`rename_folder` accept `from`/`source` + `to`/`dest`/`newName`. `list_tree` returns `entries`. `search_files` uses `pattern`.
+
+### GET Proxy (Grok browsing workaround)
+- Grok's `browse_page` tool only supports GET requests — it cannot POST JSON
+- The bridge relay has a `/api/grok-proxy` GET endpoint that accepts base64-encoded action payloads
+- URL format: `GET /api/grok-proxy?key=KEY&project=PROJECT&payload=BASE64`
+- Where `BASE64` = `base64encode(JSON.stringify({ "actions": [...] }))`
+- The relay decodes the payload and executes it exactly like a POST to `/api/sandbox/execute`
+- The Grok prompt in `buildSandboxApiSection()` (GrokBridge.tsx) and `BRIDGE_PROMPT.md` now document this GET-based approach
+- URL length limit: payloads should stay under ~6000 chars of JSON before encoding; for large files use `search_replace` instead of `write_file`
+- The proxy URL is derived from `cmdUrl` by replacing `/api/sandbox/execute` with `/api/grok-proxy`
 
 ### Direct API (bypass relay)
 - This vite server also exposes `POST /api/sandbox/execute?key=SNAPSHOT_KEY` directly (line ~5348 in `vite.config.ts`)

@@ -1,38 +1,51 @@
 # Lamby Workspace Bridge Prompt
 
-Paste the section below (between the `---` markers) into the AI chat (Grok, ChatGPT, Claude, etc.) as the **first message** of your conversation, replacing `SNAPSHOT_URL` and `COMMAND_URL` with the actual URLs shown in the Lamby bridge panel.
+Paste the section below (between the `---` markers) into the AI chat (Grok, ChatGPT, Claude, etc.) as the **first message** of your conversation, replacing `SNAPSHOT_URL`, `CONSOLE_LOGS_URL`, and `PROXY_URL` with the actual URLs shown in the Lamby bridge panel.
+
+The PROXY_URL is the GET-based proxy endpoint: `https://bridge-relay.replit.app/api/grok-proxy?key=YOUR_KEY`
 
 ---
 
 === LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS — USE IT) ===
 
-You have web browsing capabilities. Use them NOW to directly read, modify, and execute code in this project.
-DO NOT just suggest code changes. Actually make the changes yourself by calling these HTTP endpoints, then tell the user what you did.
-The `key` query parameter authenticates your requests. All endpoints below are live and publicly accessible via HTTPS.
+You have web browsing capabilities (browse_page). Use them NOW to directly read, modify, and execute code in this project.
+DO NOT just suggest code changes. Actually make the changes yourself by browsing these URLs, then tell the user what you did.
+All endpoints below are GET-based, live, and publicly accessible via HTTPS. Authentication is via the `key` query parameter.
 
 YOUR WORKFLOW — do this every time:
-  1. FETCH the snapshot URL below to see all project files and their contents
+  1. BROWSE the snapshot URL below to see all project files and their contents
   2. ANALYZE the code to understand what needs to change
-  3. POST to the command endpoint to write files, run commands, install deps, etc.
-  4. VERIFY by fetching the snapshot again or checking console logs
+  3. BROWSE the proxy URL with base64-encoded actions to write files, run commands, etc.
+  4. VERIFY by browsing the snapshot URL again or checking console logs
   5. TELL the user what you did and what changed
 
 READ THE PROJECT (do this first):
   GET SNAPSHOT_URL
   Returns: plain-text snapshot with the complete file tree, package.json, git status, and full contents of every source file.
-  This is your primary way to understand the codebase. Fetch this URL with your web browser.
+  This is your primary way to understand the codebase. Browse this URL with browse_page.
 
 CHECK CONSOLE/PREVIEW LOGS:
   GET CONSOLE_LOGS_URL
   Returns: JSON { previews: [{ name, port, stdout, stderr }] } — live output from running dev servers.
   Use this to check for runtime errors, build failures, or confirm your fix worked.
 
-EXECUTE COMMANDS (write files, run shell, install deps, git, etc.):
-  POST COMMAND_URL
-  Content-Type: application/json
-  Body: { "actions": [ ...action objects... ] }
+EXECUTE COMMANDS via GET proxy (write files, run shell, install deps, git, etc.):
+  This endpoint lets you execute ANY sandbox command using only GET requests (browse_page).
+  You MUST use this endpoint — do NOT attempt POST requests, they will fail.
 
-  Each action requires "type" and "project": "PROJECT_NAME". Actions execute in order.
+  HOW IT WORKS:
+  1. Build your actions JSON:  { "actions": [ ...action objects... ] }
+  2. Base64-encode that JSON string
+  3. Browse this URL:  PROXY_URL&project=PROJECT_NAME&payload=BASE64_ENCODED_ACTIONS
+
+  URL FORMAT:
+    GET PROXY_URL&project=PROJECT_NAME&payload=<base64>
+  where <base64> = base64encode(JSON.stringify({ "actions": [ ... ] }))
+
+  Each action requires "type" and "project": "PROJECT_NAME". Actions execute in order. Max 50 per request.
+
+  IMPORTANT: For large writes (big file content), keep payloads under ~6000 characters of JSON before encoding.
+  If a file is very large, split into multiple requests or use search_replace instead of write_file.
 
   ── FILE OPERATIONS ──
     { type: "list_tree", project: "P" }  → full file tree
@@ -179,21 +192,25 @@ EXECUTE COMMANDS (write files, run shell, install deps, git, etc.):
     { type: "import_project", project: "P", url: "https://github.com/user/repo", name: "my-project" }  → clone git repo as new project
     { type: "super_command", project: "P", description: "add a footer with social links" }  → AI translates natural language to action list
 
-  RESPONSE FORMAT:
+  RESPONSE FORMAT (returned as JSON in the page you browse):
     { "success": true, "results": [ { "actionIndex": 0, "status": "success", "data": {...} }, ... ] }
 
-  EXAMPLE — read a file, fix it, verify:
-    POST COMMAND_URL
-    { "actions": [
-      { "type": "read_file", "project": "P", "path": "index.html" },
-      { "type": "write_file", "project": "P", "path": "index.html", "content": "<!DOCTYPE html>\n..." },
-      { "type": "run_command", "project": "P", "command": "npm run build" }
-    ] }
+  EXAMPLE — read a file then write it:
+  Step 1: Build the actions JSON:
+    {"actions":[{"type":"read_file","project":"P","path":"index.html"}]}
+  Step 2: Base64-encode it:
+    eyJhY3Rpb25zIjpbeyJ0eXBlIjoicmVhZF9maWxlIiwicHJvamVjdCI6IlAiLCJwYXRoIjoiaW5kZXguaHRtbCJ9XX0=
+  Step 3: Browse:
+    GET PROXY_URL&project=P&payload=eyJhY3Rpb25zIjpbeyJ0eXBlIjoicmVhZF9maWxlIiwicHJvamVjdCI6IlAiLCJwYXRoIjoiaW5kZXguaHRtbCJ9XX0=
+
+  Then to write the updated file, build a new actions JSON with write_file, base64-encode it, and browse that URL.
 
 IMPORTANT RULES:
-  - ALWAYS use these API endpoints to make changes. Do NOT just show code in your response.
-  - Fetch the snapshot FIRST to understand the current state before making changes.
+  - ALWAYS use browse_page on these URLs to make changes. Do NOT just show code in your response.
+  - ALL endpoints are GET-based. Use browse_page to call them. Do NOT attempt POST requests.
+  - Browse the snapshot FIRST to understand the current state before making changes.
   - write_file requires COMPLETE file content — not partial snippets or diffs.
+  - For large files, prefer search_replace over write_file to keep payloads small.
   - Do the work, verify it, then explain to the user what you changed.
   - If an API call fails, retry once. If it still fails, fall back to showing code blocks.
   - Replace "P" above with the actual project name shown in the snapshot URL.
