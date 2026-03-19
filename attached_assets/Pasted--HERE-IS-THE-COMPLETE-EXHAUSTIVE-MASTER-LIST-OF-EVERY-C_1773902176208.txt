@@ -1,0 +1,105 @@
+**🚀 HERE IS THE COMPLETE, EXHAUSTIVE MASTER LIST OF EVERY COMMAND I WANT IN THE LAMBY WORKSPACE API RIGHT NOW**
+
+I’m not holding back at all. This is the **full final spec** you can implement today.  
+Copy-paste the categories into your handler and we’re golden.
+
+I grouped them by **priority** so you can add them in waves if you want (but you said “ALL right now”, so here they are).
+
+### 1. CORE FILE SYSTEM (must-have — already partially there)
+- `list_tree` `{}`  
+- `read_file` `{ path: string }`  
+- `read_multiple_files` `{ paths: string[] }` ← **HIGH PRIORITY**  
+- `write_file` `{ path: string, content: string }`  
+- `bulk_write` `{ files: [{path, content}, ...] }` ← atomic with rollback  
+- `create_file`  
+- `delete_file`  
+- `move_file` / `rename_file` / `copy_file`  
+- `search_replace` `{ path?: string, paths?: string[], search: string, replace: string, regex?: boolean }` ← **HIGH PRIORITY**  
+- `apply_patch` `{ patch: string (unified diff) }` ← **HIGH PRIORITY**
+
+### 2. SEARCH & ANALYSIS
+- `grep` `{ pattern: string, path?: string }`  
+- `search_files` `{ query: string }`  
+- `project_analyze` `{}` ← returns routes, components, deps, colors used, etc.  
+- `tailwind_audit` `{}`  
+- `find_usages` `{ symbol: string }`  
+- `component_tree` `{}`  
+- `extract_theme` / `extract_colors` `{}`
+
+### 3. SHELL & BUILD
+- `run_command` `{ command: string, cwd?: string }`  
+- `install_deps` `{}` (existing)  
+- `add_dependency` `{ name: string, version?: string, dev?: boolean }`  
+- `lint_and_fix` `{ files?: string | "all" }`  
+- `type_check` `{}`  
+- `format_files` `{ files?: string | "all" }`  
+- `build_project` (existing)  
+- `run_tests` `{ file?: string }`  
+- `get_build_metrics` `{}` (bundle size, etc.)
+
+### 4. PROCESS & SERVER
+- `start_process` `{ command: string, name?: string }`  
+- `list_processes` `{}`  
+- `kill_process` `{ pid: number | "all" }`  
+- `restart_dev_server` `{}` ← clean kill + restart
+
+### 5. GIT (full set)
+- All existing git_* actions +  
+- `git_push` `{ remote?: string, branch?: string }`  
+- `git_pull`  
+- `git_merge` `{ branch: string }`
+
+### 6. VISUAL / PREVIEW (game-changers)
+- `capture_preview` `{ url?: string, fullPage?: boolean, selector?: string }` ← returns image URL/base64  
+- `take_screenshot` (alias)  
+- `get_preview_url` `{}`
+
+### 7. AI-ASSISTED GENERATION
+- `generate_component` `{ name: string, spec: string, framework?: "next" | "react" | "vite" }`  
+- `generate_page` `{ route: string, spec: string }`  
+- `refactor_file` `{ path: string, instructions: string }`
+
+### 8. ENVIRONMENT & CONFIG
+- `set_env_var` `{ key: string, value: string }`  
+- `get_env_vars` `{}`  
+- `detect_structure` (existing + enhanced)  
+- `archive_project` `{ format: "zip" | "tar" }`  
+- `export_project` `{}`
+
+### 9. ADVANCED / FUTURE-PROOF
+- `run_custom_script` `{ script: string }`  
+- `profile_performance` `{}`  
+- `lighthouse_audit` `{ url?: string }`  
+- `deploy_preview` `{}` (if you ever add Vercel/Netlify integration)  
+- `rollback_last_change` `{}` (safety net)  
+- `validate_change` (run your safety-engine before write)
+
+### 10. BONUS / NICE-TO-HAVE
+- `bulk_delete`  
+- `copy_folder`  
+- `list_open_ports`  
+- `watch_file` (for live diffing if you want)  
+- `ai_suggest_changes` `{ prompt: string }` (meta — I describe what I want, you generate the action list)
+
+---
+
+**Implementation note (for you):**  
+All actions still go through the same single POST endpoint.  
+Just add new `type` cases in your switch/handler. Most can reuse existing code.
+
+**My immediate top 8 I want first (in this exact order):**
+1. `read_multiple_files`  
+2. `search_replace`  
+3. `apply_patch`  
+4. `capture_preview`  
+5. `project_analyze`  
+6. `bulk_write`  
+7. `add_dependency`  
+8. `restart_dev_server`
+
+Once you drop “added” + any of these, I’ll test them instantly on the landing-page project (and turn it into whatever we want next).
+
+You said it’s easy to give me **ALL** of them right now — so go for it.  
+I’m ready the second you push the update.
+
+Which batch do you want to add first, or are we doing the whole list? 🔥
