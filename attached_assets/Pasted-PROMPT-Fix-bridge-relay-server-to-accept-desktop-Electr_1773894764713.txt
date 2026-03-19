@@ -1,0 +1,107 @@
+PROMPT: Fix bridge relay server to accept desktop Electron connections
+
+The bridge relay server has 3 bugs that prevent the desktop Electron app from connecting. The desktop sends its own randomly generated snapshotKey (32-char hex), but the server requires an exact match with its own server-generated key — which is impossible since both sides generate independent keys. Apply these 3 fixes:
+
+Fix 1 — Lenient snapshotKey check in the WebSocket upgrade handler
+
+Find this code in the server.on("upgrade", ...) handler:
+
+if (clientSnapshotKey !== snapshotKey) {
+    console.log(`[Bridge Relay] Rejected connection — invalid snapshotKey`);
+    socket.destroy();
+    return;
+}
+Replace it with:
+
+if (clientSnapshotKey !== snapshotKey && clientSnapshotKey.length < 16) {
+    console.log(`[Bridge Relay] Rejected connection — snapshotKey too short`);
+    socket.destroy();
+    return;
+}
+This accepts any client with a key 16+ characters long (the desktop always generates 32-char hex keys), while still rejecting short/empty keys.
+
+Fix 2 — Update findBridgeClient to search by client snapshotKey
+
+Find:
+
+function findBridgeClient(key) {
+  if (key !== snapshotKey) return null;
+  for (const [, client] of bridgeClients) {
+    if (client.alive) return client;
+  }
+  return null;
+}
+Replace with:
+
+function findBridgeClient(key) {
+  if (key === snapshotKey) {
+    for (const [, client] of bridgeClients) {
+      if (client.alive) return client;
+    }
+  }
+  for (const [, client] of bridgeClients) {
+    if (client.snapshotKey === key && client.alive) return client;
+  }
+  return null;
+}
+This lets API requests find the bridge client either by the server's own key OR by the client's snapshotKey (which external AI services use when calling the relay APIs).
+
+Fix 3 — Update all API key validation checks
+
+Every line in the HTTP request handler that says:
+
+if (providedKey !== snapshotKey) {
+needs to become:
+
+if (providedKey !== snapshotKey && !findBridgeClient(providedKey)) {
+This applies to the key checks in these endpoints:
+
+/api/bridge-status
+/api/snapshot/:project
+/api/sandbox/execute
+/api/sandbox/audit-log
+This ensures that requests authenticated with the desktop client's snapshotKey (not just the server's key) can access the relay APIs.
+
+Fix 4 (optional but recommended) — Add /api/console-logs endpoint
+
+Add const pendingConsoleLogRequests = new Map(); alongside the other pending request maps.
+
+Add the console-logs-response handler in the WebSocket message handler (after the sandbox-execute-response block):
+
+} else if (msg.type === "console-logs-response" && msg.requestId) {
+  const pending = pendingConsoleLogRequests.get(msg.requestId);
+  if (pending) {
+    clearTimeout(pending.timer);
+    pendingConsoleLogRequests.delete(msg.requestId);
+    pending.resolve(JSON.stringify(msg.logs || {}));
+  }
+Add the HTTP endpoint (before the health check):
+
+if (pathname === "/api/console-logs") {
+  if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+  const providedKey = getKey(req, url);
+  const matchedClient = findBridgeClient(providedKey);
+  if (!matchedClient) {
+    sendJson(res, { error: "No desktop client connected" }, 503);
+    return;
+  }
+  const requestId = crypto.randomUUID();
+  const projectName = url.searchParams.get("project") || "";
+  const relayPromise = new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      pendingConsoleLogRequests.delete(requestId);
+      resolve(JSON.stringify({ error: "Relay timeout" }));
+    }, 30000);
+    pendingConsoleLogRequests.set(requestId, { resolve, timer });
+  });
+  try {
+    matchedClient.send(JSON.stringify({ type: "console-logs-request", requestId, project: projectName }));
+  } catch {
+    sendJson(res, { error: "Could not reach desktop app" }, 502);
+    return;
+  }
+  const result = await relayPromise;
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(result);
+  return;
+}
