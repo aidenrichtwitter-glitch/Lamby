@@ -1,0 +1,112 @@
+Microsoft Windows [Version 10.0.26200.8037]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:dev
+
+> guardian-ai@1.0.0 electron:dev
+> concurrently --kill-others "vite --host 0.0.0.0 --port 5000" "wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 npx electron ."
+
+[0] [Lamby] Snapshot key generated (use /api/snapshot-key from localhost to retrieve)
+[0] Re-optimizing dependencies because lockfile has changed
+[0]
+[0]   VITE v5.4.19  ready in 335 ms
+[0]
+[0]   ➜  Local:   http://localhost:5000/
+[0]   ➜  Network: http://192.168.1.182:5000/
+[1] npm warn exec The following package was not found and will be installed: cross-env@10.1.0
+[0] [Bridge] Connecting to bridge-relay.replit.app...
+[1]
+[0] [Bridge] Connected to relay at bridge-relay.replit.app
+[1] Grok Desktop: GPU acceleration enabled
+[0] Error: The following dependencies are imported but could not be resolved:
+[0]
+[0]   react-redux (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/components/RightDSDisplay/Node/Node.tsx)
+[0]   @apollo/client/react (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/index.tsx)
+[0]   svelte (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/todomvc/examples/svelte/src/Header.svelte?id=0)
+[0]   todomvc-app-css/index.css (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/todomvc/examples/svelte/src/App.svelte?id=0)
+[0]   @reduxjs/toolkit (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/features/sharedActions.ts)
+[0]   @apollo/client (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/__generated__/resolvers-types.ts)
+[0]   todomvc-common/base.css (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/todomvc/examples/svelte/src/App.svelte?id=0)
+[0]   @apollo/client/link/error (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/database/dbClient.ts)
+[0]   @mui/material (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/scenes/SelectorScene/SelectorNoData.tsx)
+[0]   @mui/material/styles (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/theme.tsx)
+[0]   react-pro-sidebar (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/AppSidebar.tsx)
+[0]   react-pro-sidebar/dist/css/styles.css (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/AppSidebar.tsx)
+[0]   @mui/icons-material/HelpOutlineOutlined (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/AppSidebar.tsx)
+[0]   @mui/icons-material/MenuOutlined (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/AppSidebar.tsx)
+[0]   @mui/material/Accordion (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/scenes/SelectorScene/SelectorAccordian.tsx)
+[0]   @mui/icons-material/Apps (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/AppSidebar.tsx)
+[0]   @mui/material/AccordionSummary (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/scenes/SelectorScene/SelectorAccordian.tsx)
+[0]   @mui/icons-material/GitHub (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/AppSidebar.tsx)
+[0]   @mui/icons-material/LinkedIn (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/AppSidebar.tsx)
+[0]   @mui/material/AccordionDetails (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/scenes/SelectorScene/SelectorAccordian.tsx)
+[0]   @mui/material/Typography (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/scenes/SelectorScene/SelectorAccordian.tsx)
+[0]   @mui/icons-material/MoreHoriz (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/AppSidebar.tsx)
+[0]   @mui/icons-material/ExpandMore (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/scenes/SelectorScene/SelectorAccordian.tsx)
+[0]   @mui/icons-material/Share (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/AppSidebar.tsx)
+[0]   @mui/icons-material/Toc (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/AppSidebar.tsx)
+[0]   @mui/icons-material/Link (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/AppSidebar.tsx)
+[0]   d3 (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/components/StandardDistributionGraph/StandardDistributionGraph.tsx)
+[0]   gsap (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/components/RightDSDisplay/Grid/Grid.tsx)
+[0]   @mui/material/Button (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/scenes/SelectorScene/SelectorAccordian.tsx)
+[0]   use-immer (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/components/RightDSDisplay/Graph/Graph.tsx)
+[0]   gsap/Flip (imported by C:/Users/Aiden/Desktop/guardian-ai/guardian-ai/projects/lc-slice/frontend/src/components/RightDSDisplay/LinkedList/LinkedList.tsx)
+[0]
+[0] Are they installed?
+[0]     at file:///C:/Users/Aiden/Desktop/guardian-ai/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:50669:15
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[0]     at async file:///C:/Users/Aiden/Desktop/guardian-ai/node_modules/vite/dist/node/chunks/dep-C6uTJdX2.js:50174:26
+[1] [Lamby Local] Server running on port 4999
+[1] [Lamby Local] Snapshot key: f2ae451b6ac7e5c3853a0531ef2a1e6a
+[1] [Lamby Local] Projects dir: C:\Users\Aiden\.guardian-ai\projects
+[1] [Lamby Local] Sandbox API: http://localhost:4999/api/sandbox/execute
+[1] [Lamby Local] Bridge relay: https://1c939773-48b7-4bc9-a756-e1662d029e2d-00-2lo4tnwfe5r7g.worf.replit.dev
+[1] [Bridge] Connecting to 1c939773-48b7-4bc9-a756-e1662d029e2d-00-2lo4tnwfe5r7g.worf.replit.dev:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 502 Bad Gateway
+[1] [Bridge] Reconnecting in 2s...
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [Bridge] Connecting to 1c939773-48b7-4bc9-a756-e1662d029e2d-00-2lo4tnwfe5r7g.worf.replit.dev:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 502 Bad Gateway
+[1] [Bridge] Reconnecting in 3s...
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [Bridge] Connecting to 1c939773-48b7-4bc9-a756-e1662d029e2d-00-2lo4tnwfe5r7g.worf.replit.dev:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 502 Bad Gateway
+[1] [Bridge] Reconnecting in 4.5s...
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [Bridge] Stored relay URL failed 3 times — falling back to https://bridge-relay.replit.app
+[1] [Bridge] Connecting to bridge-relay.replit.app:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 500 Internal Server Error
+[1] [Bridge] Reconnecting in 6.75s...
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [Bridge] Connecting to bridge-relay.replit.app:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 500 Internal Server Error
+[1] [Bridge] Reconnecting in 10.125s...
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [Bridge] Connecting to bridge-relay.replit.app:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 500 Internal Server Error
+[1] [Bridge] Reconnecting in 15.1875s...
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[0] [Preview] Starting landing-page with: npx vite --host 0.0.0.0 --port 5193
+[0] [Preview] Using local binary for landing-page: C:\Users\Aiden\Desktop\guardian-ai\projects\landing-page\node_modules\.bin\vite.cmd
+[0] (node:15376) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+[0] (Use `node --trace-deprecation ...` to show where the warning was created)
+[0] [Preview:landing-page] VITE v5.4.21  ready in 247 ms
+[0] [Preview:landing-page] ➜  Local:   http://localhost:5193/
+[0]   ➜  Network: http://192.168.1.182:5193/
+[1] [Bridge] Connecting to bridge-relay.replit.app:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 500 Internal Server Error
+[1] [Bridge] Reconnecting in 22.78125s...
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1

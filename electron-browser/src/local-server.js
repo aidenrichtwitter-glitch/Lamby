@@ -26,14 +26,25 @@ if (!fs.existsSync(USER_DATA_DIR)) fs.mkdirSync(USER_DATA_DIR, { recursive: true
 if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
 const snapshotKey = crypto.randomBytes(16).toString("hex");
+const CANONICAL_RELAY_URL = "https://bridge-relay.replit.app";
 
 function loadBridgeConfig() {
   try {
     if (fs.existsSync(BRIDGE_CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(BRIDGE_CONFIG_PATH, "utf-8"));
+      const cfg = JSON.parse(fs.readFileSync(BRIDGE_CONFIG_PATH, "utf-8"));
+      let changed = false;
+      if (!cfg.relayUrl) { cfg.relayUrl = CANONICAL_RELAY_URL; changed = true; }
+      if (!cfg.bridgeKey || cfg.bridgeKey.length < 8) { cfg.bridgeKey = crypto.randomBytes(16).toString("hex"); changed = true; }
+      if (changed) { try { fs.writeFileSync(BRIDGE_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8"); } catch {} }
+      return cfg;
     }
   } catch {}
-  return { relayUrl: "https://bridge-relay.replit.app", bridgeKey: "" };
+  const cfg = { relayUrl: CANONICAL_RELAY_URL, bridgeKey: crypto.randomBytes(16).toString("hex") };
+  try {
+    fs.mkdirSync(path.dirname(BRIDGE_CONFIG_PATH), { recursive: true });
+    fs.writeFileSync(BRIDGE_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8");
+  } catch {}
+  return cfg;
 }
 
 function saveBridgeConfig(config) {
@@ -44,7 +55,6 @@ function saveBridgeConfig(config) {
   }
 }
 
-const CANONICAL_RELAY_URL = "https://bridge-relay.replit.app";
 let bridgeConfig = loadBridgeConfig();
 let bridgeSocket = null;
 let bridgeConnected = false;
@@ -180,7 +190,12 @@ function connectToBridgeRelay() {
   const host = parsed.hostname;
   const port = parsed.port ? parseInt(parsed.port) : (parsed.protocol === "https:" ? 443 : 80);
   const useTls = parsed.protocol === "https:";
-  const bridgeKey = bridgeConfig.bridgeKey || crypto.randomBytes(16).toString("hex");
+  let bridgeKey = bridgeConfig.bridgeKey;
+  if (!bridgeKey || bridgeKey.length < 8) {
+    bridgeKey = crypto.randomBytes(16).toString("hex");
+    bridgeConfig.bridgeKey = bridgeKey;
+    saveBridgeConfig(bridgeConfig);
+  }
   const wsPath = `/bridge-ws?key=${encodeURIComponent(bridgeKey)}&snapshotKey=${encodeURIComponent(snapshotKey)}`;
   const wsKeyRaw = crypto.randomBytes(16).toString("base64");
 
@@ -948,6 +963,7 @@ const server = http.createServer(async (req, res) => {
     sendJson(res, {
       status: bridgeConnected ? "connected" : (bridgeReconnectTimer ? "connecting" : "disconnected"),
       relayUrl: bridgeConfig.relayUrl || "",
+      bridgeKey: bridgeConfig.bridgeKey || "",
       key: snapshotKey,
     });
     return;

@@ -10,6 +10,7 @@ const snapshotKey = crypto.randomBytes(16).toString("hex");
 const bridgeClients = new Map();
 const pendingRelayRequests = new Map();
 const pendingSandboxRelayRequests = new Map();
+const pendingConsoleLogRequests = new Map();
 const sandboxAuditLog = [];
 
 const MIME_TYPES = {
@@ -56,9 +57,13 @@ function getKey(req, url) {
 }
 
 function findBridgeClient(key) {
-  if (key !== snapshotKey) return null;
+  if (key === snapshotKey) {
+    for (const [, client] of bridgeClients) {
+      if (client.alive) return client;
+    }
+  }
   for (const [, client] of bridgeClients) {
-    if (client.alive) return client;
+    if (client.snapshotKey === key && client.alive) return client;
   }
   return null;
 }
@@ -206,6 +211,13 @@ function handleWsUpgrade(req, socket, bridgeKey, clientSnapshotKey) {
             pendingSandboxRelayRequests.delete(msg.requestId);
             pending.resolve(JSON.stringify(msg.result || { error: "Empty sandbox response from desktop." }));
           }
+        } else if (msg.type === "console-logs-response" && msg.requestId) {
+          const pending = pendingConsoleLogRequests.get(msg.requestId);
+          if (pending) {
+            clearTimeout(pending.timer);
+            pendingConsoleLogRequests.delete(msg.requestId);
+            pending.resolve(JSON.stringify(msg.logs || {}));
+          }
         } else if (msg.type === "ping") {
           client.lastPing = Date.now();
           client.send(JSON.stringify({ type: "pong" }));
@@ -246,7 +258,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/bridge-status") {
     const providedKey = getKey(req, url);
-    if (providedKey !== snapshotKey) {
+    if (providedKey !== snapshotKey && !findBridgeClient(providedKey)) {
       sendJson(res, { error: "Invalid key" }, 403);
       return;
     }
@@ -266,7 +278,7 @@ const server = http.createServer(async (req, res) => {
     const projectName = pathParts[0] || "";
     const providedKey = getKey(req, url);
 
-    if (providedKey !== snapshotKey) {
+    if (providedKey !== snapshotKey && !findBridgeClient(providedKey)) {
       res.writeHead(403, { "Content-Type": "text/plain" });
       res.end("Lamby Snapshot API\n\nAccess denied — invalid or missing key.\nProvide ?key=YOUR_KEY or Authorization: Bearer YOUR_KEY");
       return;
@@ -304,7 +316,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
     try {
       const providedKey = getKey(req, url);
-      if (providedKey !== snapshotKey) {
+      if (providedKey !== snapshotKey && !findBridgeClient(providedKey)) {
         sendJson(res, { error: "Invalid key" }, 403);
         return;
       }
@@ -358,11 +370,40 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/sandbox/audit-log") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     const providedKey = getKey(req, url);
-    if (providedKey !== snapshotKey) {
+    if (providedKey !== snapshotKey && !findBridgeClient(providedKey)) {
       sendJson(res, { error: "Invalid key" }, 403);
       return;
     }
     sendJson(res, { entries: sandboxAuditLog.slice(-100) });
+    return;
+  }
+
+  if (pathname === "/api/console-logs") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const providedKey = getKey(req, url);
+    const matchedClient = findBridgeClient(providedKey);
+    if (!matchedClient) {
+      sendJson(res, { error: "No desktop client connected" }, 503);
+      return;
+    }
+    const requestId = crypto.randomUUID();
+    const projectName = url.searchParams.get("project") || "";
+    const relayPromise = new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingConsoleLogRequests.delete(requestId);
+        resolve(JSON.stringify({ error: "Relay timeout" }));
+      }, 30000);
+      pendingConsoleLogRequests.set(requestId, { resolve, timer });
+    });
+    try {
+      matchedClient.send(JSON.stringify({ type: "console-logs-request", requestId, project: projectName }));
+    } catch {
+      sendJson(res, { error: "Could not reach desktop app" }, 502);
+      return;
+    }
+    const result = await relayPromise;
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(result);
     return;
   }
 
@@ -383,8 +424,8 @@ server.on("upgrade", (req, socket, head) => {
       socket.destroy();
       return;
     }
-    if (clientSnapshotKey !== snapshotKey) {
-      console.log(`[Bridge Relay] Rejected connection — invalid snapshotKey`);
+    if (clientSnapshotKey !== snapshotKey && clientSnapshotKey.length < 16) {
+      console.log(`[Bridge Relay] Rejected connection — snapshotKey too short`);
       socket.destroy();
       return;
     }

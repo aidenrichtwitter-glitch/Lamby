@@ -3755,6 +3755,8 @@ const GrokBridge: React.FC = () => {
           const relayUrl = statusResult?.relayUrl || '';
           setBridgeStatus(status);
           setBridgeRelayUrl(relayUrl);
+          if (relayUrl) setBridgeRelayInput(relayUrl);
+          if (statusResult?.bridgeKey) setBridgeKeyInput(statusResult.bridgeKey);
           if (status === 'connected' && relayUrl) {
             const relayBase = relayUrl.replace(/\/$/, '');
             setSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
