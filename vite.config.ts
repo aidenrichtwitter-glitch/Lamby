@@ -5168,6 +5168,17 @@ function projectManagementPlugin(): Plugin {
           } else if (parsed.type === "ping") {
             bridgeRelaySend(JSON.stringify({ type: "pong" }));
           } else if (parsed.type === "pong") {
+          } else if (parsed.type === "relay-log") {
+            const lvl = (parsed.level || "info").toUpperCase();
+            const logMsg = parsed.message || "";
+            const prefix = `[Relay ${lvl}]`;
+            if (lvl === "ERROR") console.error(`${prefix} ${logMsg}`);
+            else if (lvl === "WARN") console.warn(`${prefix} ${logMsg}`);
+            else console.log(`${prefix} ${logMsg}`);
+            if (typeof sandboxWss !== "undefined") {
+              const fwd = JSON.stringify({ type: "relay-log", level: parsed.level, message: logMsg, ts: parsed.ts || Date.now() });
+              sandboxWss.clients.forEach((c: any) => { try { if (c.readyState === 1) c.send(fwd); } catch {} });
+            }
           }
         } catch (err: any) {
           console.error(`[Bridge] handleBridgeRelayMessage error: ${err.message}`);
