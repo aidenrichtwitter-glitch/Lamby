@@ -1346,8 +1346,11 @@ function executeSandboxAction(action, projectsDir, options) {
         const lighthousePath = fs.existsSync(path.join(dir, "node_modules/.bin/lighthouse")) ? path.join(dir, "node_modules/.bin/lighthouse") : null;
         if (lhciPath || lighthousePath) {
           try {
-            const lhCmd = lhciPath ? `${lhciPath} autorun` : `${lighthousePath} http://localhost:${action.port || 3000} --output=json --chrome-flags="--no-sandbox --headless"`;
-            const lhOutput = childProcess.execSync(lhCmd, { cwd: dir, timeout: 120000, maxBuffer: 8 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            const safePort = Math.max(1, Math.min(65535, parseInt(action.port, 10) || 3000));
+            const lhArgs = lhciPath
+              ? [lhciPath, "autorun"]
+              : [lighthousePath, `http://localhost:${safePort}`, "--output=json", "--chrome-flags=--no-sandbox --headless"];
+            const lhOutput = childProcess.execFileSync(lhArgs[0], lhArgs.slice(1), { cwd: dir, timeout: 120000, maxBuffer: 8 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
             results.lighthouse = { available: true, ran: true, output: lhOutput.slice(0, 20000) };
           } catch (e) {
             results.lighthouse = { available: true, ran: false, error: (e.stderr || e.message || "").slice(0, 2000), output: (e.stdout || "").slice(0, 5000) };
