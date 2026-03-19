@@ -1,0 +1,1441 @@
+ok you have 110 commands at your disposal, do whatever you want, have fun "=== ACTIVE PROJECT (BUILD THIS ONLY) ===
+=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS — USE IT) ===
+You have web browsing capabilities. Use them NOW to directly read, modify, and execute code in this project.
+DO NOT just suggest code changes. Actually make the changes yourself by calling these HTTP endpoints, then tell the user what you did.
+The `key` query parameter authenticates your requests. All endpoints below are live and publicly accessible via HTTPS.
+YOUR WORKFLOW — do this every time:
+  1. FETCH the snapshot URL below to see all project files and their contents
+  2. ANALYZE the code to understand what needs to change
+  3. POST to the command endpoint to write files, run commands, install deps, etc.
+  4. VERIFY by fetching the snapshot again or checking console logs
+  5. TELL the user what you did and what changed
+READ THE PROJECT (do this first):
+  GET https://bridge-relay.replit.app/api/snapshot/landing-page?key=f40ad1e517d309d0a054c9bd0ddbec5c
+  Returns: plain-text snapshot with the complete file tree, package.json, git status, and full contents of every source file.
+  This is your primary way to understand the codebase. Fetch this URL with your web browser.
+CHECK CONSOLE/PREVIEW LOGS:
+  GET https://bridge-relay.replit.app/api/console-logs?key=f40ad1e517d309d0a054c9bd0ddbec5c&project=landing-page
+  Returns: JSON { previews: [{ name, port, stdout, stderr }] } — live output from running dev servers.
+  Use this to check for runtime errors, build failures, or confirm your fix worked.
+EXECUTE COMMANDS (write files, run shell, install deps, git, etc.):
+  POST https://bridge-relay.replit.app/api/sandbox/execute?key=f40ad1e517d309d0a054c9bd0ddbec5c
+  Content-Type: application/json
+  Body: { "actions": [ ...action objects... ] }
+  Each action requires "type" and "project": "landing-page". Actions execute in order.
+  FILE OPERATIONS:
+    { type: "list_tree", project: "landing-page" } → full file tree
+    { type: "read_file", project: "landing-page", path: "src/App.tsx" } → file content
+    { type: "read_multiple_files", project: "landing-page", paths: ["src/App.tsx","src/main.ts"] } → batch read
+    { type: "write_file", project: "landing-page", path: "src/App.tsx", content: "..." } → overwrite file (FULL content required)
+    { type: "create_file", project: "landing-page", path: "src/new.ts", content: "..." } → create new file
+    { type: "bulk_write", project: "landing-page", files: [{path:"a.ts",content:"..."},{path:"b.ts",content:"..."}] } → atomic multi-file write (rollback on failure)
+    { type: "delete_file", project: "landing-page", path: "src/old.ts" }
+    { type: "bulk_delete", project: "landing-page", paths: ["src/old.ts","src/tmp/"] } → delete multiple files/folders
+    { type: "move_file", project: "landing-page", source: "old/path.ts", dest: "new/path.ts" }
+    { type: "copy_file", project: "landing-page", source: "src/a.ts", dest: "src/b.ts" }
+    { type: "copy_folder", project: "landing-page", source: "src/components", dest: "src/components-backup" } → recursive copy
+    { type: "rename_file", project: "landing-page", source: "src/old.ts", dest: "src/new.ts" }
+  SEARCH & REPLACE:
+    { type: "grep", project: "landing-page", pattern: "TODO" } → regex search across all files
+    { type: "search_files", project: "landing-page", pattern: "Button" } → filename search
+    { type: "search_replace", project: "landing-page", path: "src/App.tsx", search: "oldText", replace: "newText" } → find & replace (regex flag optional)
+    { type: "search_replace", project: "landing-page", paths: ["src/a.ts","src/b.ts"], search: "old", replace: "new", regex: true }
+    { type: "apply_patch", project: "landing-page", patch: "--- a/file\n+++ b/file\n@@ ...\n-old\n+new" } → apply unified diff
+  SHELL COMMANDS:
+    { type: "run_command", project: "landing-page", command: "npm run build" }
+    { type: "install_deps", project: "landing-page" } → auto-detects npm/yarn/pnpm/bun
+    { type: "add_dependency", project: "landing-page", name: "lodash", dev: false } → add package (optional version, dev flag)
+  CODE QUALITY:
+    { type: "type_check", project: "landing-page" } → runs tsc --noEmit
+    { type: "lint_and_fix", project: "landing-page" } → eslint --fix or prettier
+    { type: "format_files", project: "landing-page", files: "src/" } → prettier --write
+  DEV SERVER & PROCESS:
+    { type: "start_process", project: "landing-page", command: "npm run dev" }
+    { type: "list_processes", project: "landing-page" }
+    { type: "kill_process", project: "landing-page", name: "proc-name" }
+    { type: "restart_dev_server", project: "landing-page", command: "npm run dev" } → kills all, optionally restarts
+    { type: "list_open_ports", project: "landing-page" } → shows listening ports
+  GIT:
+    { type: "git_init", project: "landing-page" }
+    { type: "git_status", project: "landing-page" }
+    { type: "git_add", project: "landing-page", files: "." }
+    { type: "git_commit", project: "landing-page", message: "fix: description" }
+    { type: "git_diff", project: "landing-page" }
+    { type: "git_log", project: "landing-page", count: 10 }
+    { type: "git_branch", project: "landing-page", name: "feature-x" } → create branch (omit name to list)
+    { type: "git_checkout", project: "landing-page", ref: "main" }
+    { type: "git_stash", project: "landing-page" }
+    { type: "git_push", project: "landing-page", remote: "origin", branch: "main" }
+    { type: "git_pull", project: "landing-page", remote: "origin" }
+    { type: "git_merge", project: "landing-page", branch: "feature-x" }
+  ENVIRONMENT:
+    { type: "set_env_var", project: "landing-page", key: "API_KEY", value: "..." } → sets in .env
+    { type: "get_env_vars", project: "landing-page" } → reads .env key-value pairs
+    { type: "rollback_last_change", project: "landing-page", files: "src/App.tsx" } → git checkout specific files
+    { type: "rollback_last_change", project: "landing-page" } → git stash pop or checkout all
+  PROJECT INFO:
+    { type: "detect_structure", project: "landing-page" } → framework, entry point, package manager
+    { type: "build_project", project: "landing-page" } → runs the project build command
+    { type: "run_tests", project: "landing-page" } → runs the project test suite
+    { type: "get_build_metrics", project: "landing-page" } → dist/ file sizes and total
+    { type: "archive_project", project: "landing-page" } → create git archive
+    { type: "export_project", project: "landing-page", format: "zip" } → archive project (zip or tar.gz)
+  ANALYSIS:
+    { type: "project_analyze", project: "landing-page" } → routes, components, deps, file stats, CSS vars
+    { type: "tailwind_audit", project: "landing-page" } → Tailwind config, custom colors, used classes
+    { type: "find_usages", project: "landing-page", symbol: "MyComponent" } → grep symbol with context lines
+    { type: "component_tree", project: "landing-page" } → React import/export/JSX dependency tree
+    { type: "extract_theme", project: "landing-page" } → CSS custom properties + Tailwind color config
+    { type: "extract_colors", project: "landing-page" } → alias for extract_theme
+  PREVIEW:
+    { type: "get_preview_url", project: "landing-page" } → returns running dev server URL/port
+    { type: "capture_preview", project: "landing-page" } → preview URL + screenshot info
+  AI GENERATION (requires XAI_API env var):
+    { type: "generate_component", project: "landing-page", spec: "a dark-themed login form", name: "LoginForm" } → AI generates component file
+    { type: "generate_page", project: "landing-page", spec: "dashboard with charts", name: "Dashboard" } → AI generates page file
+    { type: "refactor_file", project: "landing-page", path: "src/App.tsx", instructions: "add error boundary" } → AI refactors existing file
+  VALIDATION & PERFORMANCE:
+    { type: "validate_change", project: "landing-page" } → runs type-check + lint, reports pass/fail
+    { type: "profile_performance", project: "landing-page" } → bundle sizes + lighthouse availability
+  FOLDER OPERATIONS:
+    { type: "create_folder", project: "landing-page", path: "src/components/new" } → create directory recursively
+    { type: "delete_folder", project: "landing-page", path: "src/old", recursive: true } → remove folder
+    { type: "move_folder", project: "landing-page", from: "src/old", to: "src/new" } → move/rename folder
+    { type: "rename_folder", project: "landing-page", source: "src/old", newName: "renamed" } → rename folder in place
+    { type: "list_tree_filtered", project: "landing-page", filter: "ts|tsx", depth: 4 } → filtered file listing
+  CODE INTELLIGENCE:
+    { type: "dead_code_detection", project: "landing-page" } → finds exported but unused modules
+    { type: "dependency_graph", project: "landing-page" } → import/require graph of all modules
+    { type: "symbol_search", project: "landing-page", query: "Button" } → search function/class/type definitions
+    { type: "grep_advanced", project: "landing-page", pattern: "TODO|FIXME", include: [".ts"], case_sensitive: false } → regex with file filters
+    { type: "extract_imports", project: "landing-page", file: "src/App.tsx" } → list all imports from a file
+  BUILD & EXECUTION:
+    { type: "run_command_advanced", project: "landing-page", command: "npm run build", timeout: 60000, env: { NODE_ENV: "production" } } → shell with timeout/env
+    { type: "build_with_flags", project: "landing-page", flags: ["--mode", "production"] } → build with custom flags
+    { type: "clean_build_cache", project: "landing-page" } → removes dist, .next, .cache, build, etc.
+  PROCESS MANAGEMENT:
+    { type: "start_process_named", project: "landing-page", command: "npm run dev", name: "my-server" } → start with explicit name
+    { type: "monitor_process", project: "landing-page", pid: 1234 } → check if process alive
+    { type: "get_process_logs", project: "landing-page", name: "dev-server" } → get stdout/stderr of running process
+    { type: "stop_all_processes", project: "landing-page" } → SIGTERM all sandbox processes
+    { type: "switch_port", project: "landing-page", port: 3001 } → register port preference
+  GIT (EXTENDED):
+    { type: "git_stash_pop", project: "landing-page" } → pop latest stash
+    { type: "git_reset", project: "landing-page", mode: "hard", ref: "HEAD~1" } → git reset (soft/hard)
+    { type: "git_revert", project: "landing-page", commit: "abc123" } → revert a commit
+    { type: "git_tag", project: "landing-page", name: "v1.0.0", message: "Release" } → create annotated tag
+  VISUAL & PREVIEW:
+    { type: "visual_diff", project: "landing-page", beforeUrl: "...", afterUrl: "..." } → visual comparison stub
+    { type: "capture_component", project: "landing-page", componentName: "Header" } → component screenshot stub
+    { type: "record_video", project: "landing-page", duration: 5 } → video recording stub
+    { type: "get_dom_snapshot", project: "landing-page" } → fetch HTML of running preview
+    { type: "get_console_errors", project: "landing-page" } → extract errors from running processes
+  AI GENERATION (EXTENDED):
+    { type: "generate_test", project: "landing-page", file: "src/utils.ts" } → AI generates unit test file
+    { type: "generate_storybook", project: "landing-page", component: "Button" } → AI generates Storybook stories
+    { type: "optimize_code", project: "landing-page", file: "src/App.tsx" } → AI optimizes file for performance
+    { type: "convert_to_typescript", project: "landing-page", file: "src/utils.js" } → AI converts JS to TS
+    { type: "add_feature", project: "landing-page", featureSpec: "add dark mode toggle", path: "src/ThemeToggle.tsx" } → AI generates feature
+    { type: "migrate_framework", project: "landing-page", target: "vite" } → migration guide for framework switch
+  DEBUGGING & PROFILING:
+    { type: "react_profiler", project: "landing-page" } → static analysis for React perf issues
+    { type: "memory_leak_detection", project: "landing-page" } → scan for event/timer/connection leaks
+    { type: "console_error_analysis", project: "landing-page" } → categorize errors/warnings from all processes
+    { type: "runtime_error_trace", project: "landing-page" } → find error boundaries, try/catch, unhandled throws
+    { type: "bundle_analyzer", project: "landing-page" } → detailed build output analysis by file type
+    { type: "network_monitor", project: "landing-page" } → list active TCP connections
+    { type: "accessibility_audit", project: "landing-page" } → heuristic a11y scan (alt, roles, labels)
+    { type: "security_scan", project: "landing-page" } → npm audit + dangerous patterns + hardcoded secrets
+  CONFIG & META:
+    { type: "set_tailwind_config", project: "landing-page", config: { content: ["./src/**/*.tsx"] } } → create/update tailwind config
+    { type: "set_next_config", project: "landing-page", config: { reactStrictMode: true } } → create/update next.js config
+    { type: "update_package_json", project: "landing-page", changes: { scripts: { dev: "vite" } } } → merge changes into package.json
+    { type: "manage_scripts", project: "landing-page", scriptName: "lint", command: "eslint src/" } → add/update/delete npm scripts
+    { type: "switch_package_manager", project: "landing-page", manager: "pnpm" } → switch between npm/yarn/pnpm
+  SUPER & META:
+    { type: "deploy_preview", project: "landing-page", command: "npm run dev" } → start preview server
+    { type: "export_project_zip", project: "landing-page" } → alias for export_project format:zip
+    { type: "import_project", project: "landing-page", url: "https://github.com/user/repo", name: "my-project" } → clone git repo as new project
+    { type: "super_command", project: "landing-page", description: "add a footer component with social links" } → AI translates natural language to action list
+  RESPONSE FORMAT:
+    { "success": true, "results": [ { "actionIndex": 0, "status": "success", "data": {...} }, ... ] }
+  EXAMPLE — read a file, fix it, verify:
+    POST https://bridge-relay.replit.app/api/sandbox/execute?key=f40ad1e517d309d0a054c9bd0ddbec5c
+    { "actions": [
+      { "type": "read_file", "project": "landing-page", "path": "index.html" },
+      { "type": "write_file", "project": "landing-page", "path": "index.html", "content": "<!DOCTYPE html>\n..." },
+      { "type": "run_command", "project": "landing-page", "command": "npm run build" }
+    ] }
+IMPORTANT RULES:
+  - ALWAYS use these API endpoints to make changes. Do NOT just show code in your response.
+  - Fetch the snapshot FIRST to understand the current state before making changes.
+  - write_file requires COMPLETE file content — not partial snippets or diffs.
+  - Do the work, verify it, then explain to the user what you changed.
+  - If an API call fails, retry once. If it still fails, fall back to // file: blocks.
+=== END WORKSPACE API ===
+Project name: landing-page
+Status: Active project with 54 source files.
+About this project: Free Tailwind landing page template Simple Light is a free landing page template built on top of TailwindCSS and fully coded in React / Next.js. Simple light is designed to provide all the basic components a developer need to create a landing page for SaaS products, online services, and more. UPDATE | Framework: next
+Detected framework: next (based on package.json — for your awareness, not a restriction)
+Current file tree:
+- .vscode/settings.json
+- app/(auth)/reset-password/page.tsx
+- app/(auth)/signin/page.tsx
+- app/(auth)/signup/page.tsx
+- app/(auth)/layout.tsx
+- app/(default)/layout.tsx
+- app/(default)/page.tsx
+- app/api/hello/route.ts
+- app/css/additional-styles/custom-fonts.css
+- app/css/additional-styles/theme.css
+- app/css/additional-styles/utility-patterns.css
+- app/css/style.css
+- app/layout.tsx
+- components/ui/footer.tsx
+- components/ui/header.tsx
+- components/ui/logo.tsx
+- components/accordion.tsx
+- components/banner.tsx
+- components/business-categories.tsx
+- components/cta.tsx
+- components/features-planet.tsx
+- components/hero-home.tsx
+- components/large-testimonial.tsx
+- components/page-illustration.tsx
+- public/images/auth-bg.svg
+- public/images/avatar-01.jpg
+- public/images/avatar-02.jpg
+- public/images/avatar-03.jpg
+- public/images/avatar-04.jpg
+- public/images/avatar-05.jpg
+- public/images/avatar-06.jpg
+- public/images/large-testimonial.jpg
+- public/images/logo-01.svg
+- public/images/logo-02.svg
+- public/images/logo-03.svg
+- public/images/logo-04.svg
+- public/images/logo-05.svg
+- public/images/logo-06.svg
+- public/images/logo-07.svg
+- public/images/logo-08.svg
+- public/images/logo-09.svg
+- public/images/planet-overlay.svg
+- public/images/planet-tag-01.png
+- public/images/planet-tag-02.png
+- public/images/planet-tag-03.png
+- public/images/planet-tag-04.png
+- public/images/planet.png
+- public/images/stripes-dark.svg
+- public/images/stripes.svg
+- public/favicon.ico
+- .gitignore
+- .lamby-meta.json
+- CHANGELOG.md
+- next-env.d.ts
+- next.config.js
+- package.json
+- postcss.config.js
+- README.md
+- tsconfig.json
+package.json:
+{
+  "name": "simple-next",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@headlessui/react": "^2.2.0",
+    "@types/node": "^22.13.0",
+    "@types/react": "19.0.8",
+    "@types/react-dom": "19.0.3",
+    "aos": "3.0.0-beta.6",
+    "next": "^15.1.11",
+    "prettier-plugin-tailwindcss": "^0.6.11",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "typescript": "^5.7.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/forms": "^0.5.10",
+    "@tailwindcss/postcss": "^4.0.3",
+    "@types/aos": "^3.0.7",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^4.0.3"
+  },
+  "overrides": {
+    "@types/react": "19.0.8",
+    "@types/react-dom": "19.0.3"
+  },
+  "packageManager": "pnpm@10.15.1+sha512.34e538c329b5553014ca8e8f4535997f96180a1d0f614339357449935350d924e22f8614682191264ec33d1462ac21561aff97f6bb18065351c162c7e8f6de67"
+}
+Primary task right now: Respond to the user's request below. Check current files, plan minimal changes, output code.
+=== OUTPUT RULES (FOLLOW EXACTLY — THESE ARE HOW GUARDIAN APPLIES YOUR CODE) ===
+PREFER STRUCTURED FORMAT: Always use the // file: headers, DEPENDENCIES block, and COMMANDS block whenever possible.
+If you need to explain, do it in normal text BEFORE the structured blocks. Never bury code inside paragraphs.
+FORMAT FOR CODE CHANGES — put a // file: header immediately before each fenced code block:
+// file: src/components/App.tsx
+```tsx
+[full file content here]
+```
+FORMAT FOR NEW DEPENDENCIES — use a structured block:
+=== DEPENDENCIES ===
+package-name
+dev: @types/whatever
+=== END_DEPENDENCIES ===
+FORMAT FOR SHELL COMMANDS — use a structured block:
+=== COMMANDS ===
+npm run build
+npx prisma generate
+=== END_COMMANDS ===
+ALTERNATIVE FORMAT FOR SMALL EDITS — search/replace blocks (use when changing only a few lines in a large file):
+// file: src/components/App.tsx
+<<<<<<< SEARCH
+[exact old code to find]
+=======
+[new replacement code]
+>>>>>>> REPLACE
+RULES:
+1. Every code block MUST have a // file: header. No exceptions. Lamby auto-applies blocks with headers.
+2. For FULL replacement: provide COMPLETE file content. Do NOT use "// ... rest unchanged" or partial snippets.
+3. For SEARCH/REPLACE: the SEARCH section must match existing code EXACTLY (including whitespace). The REPLACE section is the new code.
+4. Only cite real, published npm packages — never invent package names.
+5. Keep explanations brief BEFORE the code blocks. Focus on what changed and why.
+6. Do NOT wrap code in narrative like "here's what your file should look like". Just use the // file: header directly.
+7. If multiple files need changes, output multiple // file: blocks in sequence.
+8. You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.
+NOTE: If a "LAMBY WORKSPACE API" section appears below, you should use those HTTP endpoints to directly make changes instead of outputting // file: blocks. Use // file: blocks only as a fallback if the API is unreachable.
+app/(auth)/reset-password/page.tsx:
+export const metadata = {
+  title: "Reset Password - Simple",
+  description: "Page description",
+};
+export default function ResetPassword() {
+  return (
+    <>
+      <div className="mb-10">
+        <h1 className="text-4xl font-bold">Reset password</h1>
+      </div>
+      {/* Form */}
+      <form>
+        <div className="space-y-4">
+          <div>
+            <label
+              className="mb-1 block text-sm font-medium text-gray-700"
+              htmlFor="email"
+            >
+              Email
+            </label>
+            <input
+              id="email"
+              className="form-input w-full py-2"
+              type="email"
+              placeholder="corybarker@email.com"
+              required
+            />
+          </div>
+        </div>
+        <div className="mt-6">
+          <button className="btn w-full bg-linear-to-t from-blue-600 to-blue-500 bg-[length:100%_100%] bg-[bottom] text-white shadow-sm hover:bg-[length:100%_150%]">
+            Reset Password
+          </button>
+        </div>
+      </form>
+    </>
+  );
+}
+app/(auth)/signin/page.tsx:
+export const metadata = {
+  title: "Sign In - Simple",
+  description: "Page description",
+};
+import Link from "next/link";
+export default function SignIn() {
+  return (
+    <>
+      <>
+        <div className="mb-10">
+          <h1 className="text-4xl font-bold">Sign in to your account</h1>
+        </div>
+        {/* Form */}
+        <form>
+          <div className="space-y-4">
+            <div>
+              <label
+                className="mb-1 block text-sm font-medium text-gray-700"
+                htmlFor="email"
+              >
+                Email
+              </label>
+              <input
+                id="email"
+                className="form-input w-full py-2"
+                type="email"
+                placeholder="corybarker@email.com"
+                required
+              />
+            </div>
+            <div>
+              <label
+                className="mb-1 block text-sm font-medium text-gray-700"
+                htmlFor="password"
+              >
+                Password
+              </label>
+              <input
+                id="password"
+                className="form-input w-full py-2"
+                type="password"
+                autoComplete="on"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+          </div>
+          <div className="mt-6">
+            <button className="btn w-full bg-linear-to-t from-blue-600 to-blue-500 bg-[length:100%_100%] bg-[bottom] text-white shadow-sm hover:bg-[length:100%_150%]">
+              Sign In
+            </button>
+          </div>
+        </form>
+        {/* Bottom link */}
+        <div className="mt-6 text-center">
+          <Link
+            className="text-sm text-gray-700 underline hover:no-underline"
+            href="/reset-password"
+          >
+            Forgot password
+          </Link>
+        </div>
+      </>
+    </>
+  );
+}
+app/(auth)/signup/page.tsx:
+export const metadata = {
+  title: "Sign Up - Simple",
+  description: "Page description",
+};
+export default function SignUp() {
+  return (
+    <>
+      <div className="mb-10">
+        <h1 className="text-4xl font-bold">Create your account</h1>
+      </div>
+      {/* Form */}
+      <form>
+        <div className="space-y-4">
+          <div>
+            <label
+              className="mb-1 block text-sm font-medium text-gray-700"
+              htmlFor="name"
+            >
+              Full name
+            </label>
+            <input
+              id="name"
+              className="form-input w-full py-2"
+              type="text"
+              placeholder="Corey Barker"
+              required
+            />
+          </div>
+          <div>
+            <label
+              className="mb-1 block text-sm font-medium text-gray-700"
+              htmlFor="email"
+            >
+              Email
+            </label>
+            <input
+              id="email"
+              className="form-input w-full py-2"
+              type="email"
+              placeholder="corybarker@email.com"
+              required
+            />
+          </div>
+          <div>
+            <label
+              className="mb-1 block text-sm font-medium text-gray-700"
+              htmlFor="phone"
+            >
+              Phone
+            </label>
+            <input
+              id="phone"
+              className="form-input w-full py-2"
+              type="text"
+              placeholder="(+750) 932-8907"
+              required
+            />
+          </div>
+          <div>
+            <label
+              className="mb-1 block text-sm font-medium text-gray-700"
+              htmlFor="password"
+            >
+              Password
+            </label>
+            <input
+              id="password"
+              className="form-input w-full py-2"
+              type="password"
+              autoComplete="on"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+        </div>
+        <div className="mt-6 space-y-3">
+          <button className="btn w-full bg-linear-to-t from-blue-600 to-blue-500 bg-[length:100%_100%] bg-[bottom] text-white shadow-sm hover:bg-[length:100%_150%]">
+            Register
+          </button>
+          <div className="text-center text-sm italic text-gray-400">Or</div>
+          <button className="btn w-full bg-linear-to-t from-gray-900 to-gray-700 bg-[length:100%_100%] bg-[bottom] text-white shadow-sm hover:bg-[length:100%_150%]">
+            Continue with GitHub
+          </button>
+        </div>
+      </form>
+      {/* Bottom link */}
+      <div className="mt-6 text-center">
+        <p className="text-sm text-gray-500">
+          By signing up, you agree to the{" "}
+          <a
+            className="whitespace-nowrap font-medium text-gray-700 underline hover:no-underline"
+            href="#0"
+          >
+            Terms of Service
+          </a>{" "}
+          and{" "}
+          <a
+            className="whitespace-nowrap font-medium text-gray-700 underline hover:no-underline"
+            href="#0"
+          >
+            Privacy Policy
+          </a>
+          .
+        </p>
+      </div>
+    </>
+  );
+}
+app/(auth)/layout.tsx:
+import Image from "next/image";
+import Logo from "@/components/ui/logo";
+import AuthBg from "@/public/images/auth-bg.svg";
+export default function AuthLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <header className="absolute z-30 w-full">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <div className="flex h-16 items-center justify-between md:h-20">
+            {/* Site branding */}
+            <div className="mr-4 shrink-0">
+              <Logo />
+            </div>
+          </div>
+        </div>
+      </header>
+      <main className="relative flex grow">
+        <div
+          className="pointer-events-none absolute bottom-0 left-0 -translate-x-1/3"
+          aria-hidden="true"
+        >
+          <div className="h-80 w-80 rounded-full bg-linear-to-tr from-blue-500 opacity-70 blur-[160px]"></div>
+        </div>
+        {/* Content */}
+        <div className="w-full">
+          <div className="flex h-full flex-col justify-center before:min-h-[4rem] before:flex-1 after:flex-1 md:before:min-h-[5rem]">
+            <div className="px-4 sm:px-6">
+              <div className="mx-auto w-full max-w-sm">
+                <div className="py-16 md:py-20">{children}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <>
+          {/* Right side */}
+          <div className="relative my-6 mr-6 hidden w-[572px] shrink-0 overflow-hidden rounded-2xl lg:block">
+            {/* Background */}
+            <div
+              className="pointer-events-none absolute left-1/2 top-1/2 -z-10 -ml-24 -translate-x-1/2 -translate-y-1/2 bg-blue-50"
+              aria-hidden="true"
+            >
+              <Image
+                src={AuthBg}
+                className="max-w-none"
+                width={1285}
+                height={1684}
+                alt="Auth bg"
+              />
+            </div>
+            {/* Illustration */}
+            <div className="absolute left-32 top-1/2 w-[500px] -translate-y-1/2">
+              <div className="aspect-video w-full rounded-2xl bg-gray-900 px-5 py-3 shadow-xl transition duration-300">
+                <div className="relative mb-8 flex items-center justify-between before:block before:h-[9px] before:w-[41px] before:bg-[length:16px_9px] before:[background-image:radial-gradient(circle_at_4.5px_4.5px,var(--color-gray-600)_4.5px,transparent_0)] after:w-[41px]">
+                  <span className="text-[13px] font-medium text-white">
+                    cruip.com
+                  </span>
+                </div>
+                <div className="font-mono text-sm text-gray-500 transition duration-300 [&_span]:opacity-0">
+                  <span className="animate-[code-1_10s_infinite] text-gray-200">
+                    npm login
+                  </span>{" "}
+                  <span className="animate-[code-2_10s_infinite]">
+                    --registry=https://npm.pkg.github.com
+                  </span>
+                  <br />
+                  <span className="animate-[code-3_10s_infinite]">
+                    --scope=@phanatic
+                  </span>{" "}
+                  <span className="animate-[code-4_10s_infinite]">
+                    Successfully logged-in.
+                  </span>
+                  <br />
+                  <br />
+                  <span className="animate-[code-5_10s_infinite] text-gray-200">
+                    npm publish
+                  </span>
+                  <br />
+                  <span className="animate-[code-6_10s_infinite]">
+                    Package published.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      </main>
+    </>
+  );
+}
+app/(default)/layout.tsx:
+"use client";
+import { useEffect } from "react";
+import AOS from "aos";
+import "aos/dist/aos.css";
+import Header from "@/components/ui/header";
+import Footer from "@/components/ui/footer";
+export default function DefaultLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    AOS.init({
+      once: true,
+      disable: "phone",
+      duration: 700,
+      easing: "ease-out-cubic",
+    });
+  });
+  return (
+    <>
+      <Header />
+      <main className="grow">{children}</main>
+      <Footer border={true} />
+    </>
+  );
+}
+app/(default)/page.tsx:
+export const metadata = {
+  title: "Home - Simple",
+  description: "Page description",
+};
+import Hero from "@/components/hero-home";
+import BusinessCategories from "@/components/business-categories";
+import FeaturesPlanet from "@/components/features-planet";
+import LargeTestimonial from "@/components/large-testimonial";
+import Cta from "@/components/cta";
+export default function Home() {
+  return (
+    <>
+      <Hero />
+      <BusinessCategories />
+      <FeaturesPlanet />
+      <LargeTestimonial />
+      <Cta />
+    </>
+  );
+}
+app/api/hello/route.ts:
+export async function GET(request: Request) {
+  return new Response("Hello, Next.js!");
+}
+app/css/additional-styles/custom-fonts.css:
+app/css/additional-styles/theme.css:
+/* Scrollspy links */
+[data-scrollspy-link].scrollspy-active {
+  @apply text-blue-500 font-medium;
+}
+/* Custom AOS animations */
+[data-aos="zoom-y-out"] {
+transform: scaleX(1.03);
+opacity: 0;
+transition-property: transform, opacity;
+}
+@media screen {
+  html:not(.no-js) body [data-aos=fade-up] {
+      -webkit-transform: translate3d(0, 10px, 0);
+      transform: translate3d(0, 10px, 0);
+  }
+  html:not(.no-js) body [data-aos=fade-down] {
+      -webkit-transform: translate3d(0, -10px, 0);
+      transform: translate3d(0, -10px, 0);
+  }
+  html:not(.no-js) body [data-aos=fade-right] {
+      -webkit-transform: translate3d(-10px, 0, 0);
+      transform: translate3d(-10px, 0, 0);
+  }
+  html:not(.no-js) body [data-aos=fade-left] {
+      -webkit-transform: translate3d(10px, 0, 0);
+      transform: translate3d(10px, 0, 0);
+  }
+  html:not(.no-js) body [data-aos=fade-up-right] {
+      -webkit-transform: translate3d(-10px, 10px, 0);
+      transform: translate3d(-10px, 10px, 0);
+  }
+  html:not(.no-js) body [data-aos=fade-up-left] {
+      -webkit-transform: translate3d(10px, 10px, 0);
+      transform: translate3d(10px, 10px, 0);
+  }
+  html:not(.no-js) body [data-aos=fade-down-right] {
+      -webkit-transform: translate3d(-10px, -10px, 0);
+      transform: translate3d(-10px, -10px, 0);
+  }
+  html:not(.no-js) body [data-aos=fade-down-left] {
+      -webkit-transform: translate3d(10px, -10px, 0);
+      transform: translate3d(10px, -10px, 0);
+  }
+  html:not(.no-js) body [data-aos=zoom-in-up] {
+      -webkit-transform: translate3d(0, 10px, 0) scale(.6);
+      transform: translate3d(0, 10px, 0) scale(.6);
+  }
+  html:not(.no-js) body [data-aos=zoom-in-down] {
+      -webkit-transform: translate3d(0, -10px, 0) scale(.6);
+      transform: translate3d(0, -10px, 0) scale(.6);
+  }
+  html:not(.no-js) body [data-aos=zoom-in-right] {
+      -webkit-transform: translate3d(-10px, 0, 0) scale(.6);
+      transform: translate3d(-10px, 0, 0) scale(.6);
+  }
+  html:not(.no-js) body [data-aos=zoom-in-left] {
+      -webkit-transform: translate3d(10px, 0, 0) scale(.6);
+      transform: translate3d(10px, 0, 0) scale(.6);
+  }
+  html:not(.no-js) body [data-aos=zoom-out-up] {
+      -webkit-transform: translate3d(0, 10px, 0) scale(1.2);
+      transform: translate3d(0, 10px, 0) scale(1.2);
+  }
+  html:not(.no-js) body [data-aos=zoom-out-down] {
+      -webkit-transform: translate3d(0, -10px, 0) scale(1.2);
+      transform: translate3d(0, -10px, 0) scale(1.2);
+  }
+  html:not(.no-js) body [data-aos=zoom-out-right] {
+      -webkit-transform: translate3d(-10px, 0, 0) scale(1.2);
+      transform: translate3d(-10px, 0, 0) scale(1.2);
+  }
+  html:not(.no-js) body [data-aos=zoom-out-left] {
+      -webkit-transform: translate3d(10px, 0, 0) scale(1.2);
+      transform: translate3d(10px, 0, 0) scale(1.2);
+  }
+}
+app/css/additional-styles/utility-patterns.css:
+/* Buttons */
+.btn,
+.btn-sm {
+    @apply text-sm font-medium inline-flex items-center justify-center rounded-lg whitespace-nowrap transition-all;
+}
+.btn {
+    @apply px-4 py-[11px] shadow-lg;
+}
+.btn-sm {
+    @apply px-3 py-[5px] shadow-sm;
+}
+/* Forms */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+}
+.form-input,
+.form-textarea,
+.form-multiselect,
+.form-select,
+.form-checkbox,
+.form-radio {
+    @apply border border-gray-200 shadow-xs rounded-lg focus:ring-0 focus:ring-offset-0;
+}
+.form-input,
+.form-textarea,
+.form-multiselect,
+.form-select {
+    @apply bg-white text-sm py-2.5 px-4 focus:border-blue-300;
+}
+.form-input,
+.form-textarea {
+    @apply placeholder-gray-400;
+}
+.form-select {
+    @apply pr-10;
+}
+.form-checkbox,
+.form-radio {
+    @apply text-gray-800 checked:bg-blue-500 checked:border-transparent focus-visible:not-checked:border-blue-300;
+}
+.form-checkbox {
+    @apply rounded-xs;
+}
+app/css/style.css:
+@import 'tailwindcss';
+/* Additional styles */
+@import './additional-styles/utility-patterns.css' layer(components);
+@import './additional-styles/theme.css';
+@plugin "@tailwindcss/forms" {
+  strategy: base;
+}
+@theme {
+  --font-inter: Inter, sans-serif;
+  --font-mono: Roboto Mono, monospace;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.5715;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5;
+  --text-base--letter-spacing: -0.017em;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.5;
+  --text-lg--letter-spacing: -0.017em;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.5;
+  --text-xl--letter-spacing: -0.017em;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 1.415;
+  --text-2xl--letter-spacing: -0.037em;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 1.3333;
+  --text-3xl--letter-spacing: -0.037em;
+  --text-4xl: 2.25rem;
+  --text-4xl--line-height: 1.2777;
+  --text-4xl--letter-spacing: -0.037em;
+  --text-5xl: 3rem;
+  --text-5xl--line-height: 1;
+  --text-5xl--letter-spacing: -0.037em;
+  --text-6xl: 4rem;
+  --text-6xl--line-height: 1;
+  --text-6xl--letter-spacing: -0.037em;
+  --text-7xl: 4.5rem;
+  --text-7xl--line-height: 1;
+  --text-7xl--letter-spacing: -0.037em;
+  --animate-code-1: code-1;
+  --animate-code-2: code-2;
+  --animate-code-3: code-3;
+  --animate-code-4: code-4;
+  --animate-code-5: code-5;
+  --animate-code-6: code-6;
+  --animate-breath: breath;
+  --animate-float: float;
+  --animate-line: line;
+  --animate-infinite-scroll: infinite-scroll;
+  @keyframes code-1 {
+    0% {
+      opacity: 0;
+    }
+    2.5% {
+      opacity: 1;
+    }
+    97.5% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes code-2 {
+    16.2% {
+      opacity: 0;
+    }
+    18.75% {
+      opacity: 1;
+    }
+    97.5% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes code-3 {
+    32.5% {
+      opacity: 0;
+    }
+    35% {
+      opacity: 1;
+    }
+    97.5% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes code-4 {
+    48.75% {
+      opacity: 0;
+    }
+    51.25% {
+      opacity: 1;
+    }
+    97.5% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes code-5 {
+    65% {
+      opacity: 0;
+    }
+    72.5% {
+      opacity: 1;
+    }
+    97.5% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes code-6 {
+    81.25% {
+      opacity: 0;
+    }
+    83.75% {
+      opacity: 1;
+    }
+    97.5% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  @keyframes breath {
+    0%,
+    100% {
+      transform: scale(0.95);
+    }
+    50% {
+      transform: scale(1.1);
+    }
+  }
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-5%);
+    }
+  }
+  @keyframes line {
+    0%,
+    100% {
+      left: 0;
+      opacity: 0;
+    }
+    50% {
+      left: 100%;
+      transform: translateX(-100%);
+    }
+    10%,
+    40%,
+    60%,
+    90% {
+      opacity: 0;
+    }
+    25%,
+    75% {
+      opacity: 1;
+    }
+  }
+  @keyframes infinite-scroll {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-100%);
+    }
+  }
+}
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: #3b82f6;
+  }
+}
+app/layout.tsx:
+import "./css/style.css";
+import { Inter } from "next/font/google";
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+export const metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en" className="scroll-smooth dark">
+      <body
+        className={`${inter.variable} bg-[#0a132f] font-inter tracking-tight text-white antialiased`}
+      >
+        <div className="flex min-h-screen flex-col overflow-hidden supports-[overflow:clip]:overflow-clip">
+          {children}
+        </div>
+      </body>
+    </html>
+  );
+}
+components/ui/header.tsx:
+import Link from "next/link";
+import Logo from "./logo";
+export default function Header() {
+  return (
+    <header className="fixed top-2 z-30 w-full md:top-6">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="relative flex h-14 items-center justify-between gap-3 rounded-2xl bg-white/90 px-3 shadow-lg shadow-black/[0.03] backdrop-blur-xs before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:border before:border-transparent before:[background:linear-gradient(var(--color-gray-100),var(--color-gray-200))_border-box] before:[mask-composite:exclude_!important] before:[mask:linear-gradient(white_0_0)_padding-box,_linear-gradient(white_0_0)]">
+          {/* Site branding */}
+          <div className="flex flex-1 items-center">
+            <Logo />
+          </div>
+          {/* Desktop sign in links */}
+          <ul className="flex flex-1 items-center justify-end gap-3">
+            <li>
+              <Link
+                href="/signin"
+                className="btn-sm bg-white text-gray-800 shadow-sm hover:bg-gray-50"
+              >
+                Login
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/signup"
+                className="btn-sm bg-gray-800 text-gray-200 shadow-sm hover:bg-gray-900"
+              >
+                Register
+              </Link>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </header>
+  );
+}
+components/ui/logo.tsx:
+import Link from "next/link";
+export default function Logo() {
+  return (
+    <Link href="/" className="inline-flex" aria-label="Cruip">
+      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28">
+        <path
+          className="fill-blue-500"
+          fillRule="evenodd"
+          d="M15.052 0c6.914.513 12.434 6.033 12.947 12.947h-5.015a7.932 7.932 0 0 1-7.932-7.932V0Zm-2.105 22.985V28C6.033 27.487.513 21.967 0 15.053h5.015a7.932 7.932 0 0 1 7.932 7.932Z"
+          clipRule="evenodd"
+        />
+        <path
+          className="fill-blue-300"
+          fillRule="evenodd"
+          d="M0 12.947C.513 6.033 6.033.513 12.947 0v5.015a7.932 7.932 0 0 1-7.932 7.932H0Zm22.984 2.106h5.015C27.486 21.967 21.966 27.487 15.052 28v-5.015a7.932 7.932 0 0 1 7.932-7.932Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    </Link>
+  );
+}
+components/accordion.tsx:
+"use client";
+import { useState } from "react";
+type AccordionpProps = {
+  children: React.ReactNode;
+  title: string;
+  id: string;
+  active?: boolean;
+};
+export default function Accordion({
+  children,
+  title,
+  id,
+  active = false,
+}: AccordionpProps) {
+  const [accordionOpen, setAccordionOpen] = useState<boolean>(active);
+  return (
+    <div className="relative rounded-lg bg-white/70 shadow-sm shadow-black/[0.03] before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] before:border before:border-transparent before:[background:linear-gradient(var(--color-gray-100),var(--color-gray-200))_border-box] before:[mask-composite:exclude_!important] before:[mask:linear-gradient(white_0_0)_padding-box,_linear-gradient(white_0_0)]">
+      <h2>
+        <button
+          className="flex w-full items-center justify-between px-4 py-3 text-left font-semibold"
+          onClick={(e) => {
+            e.preventDefault();
+            setAccordionOpen((prevState) => !prevState);
+          }}
+          aria-expanded={accordionOpen}
+          aria-controls={`accordion-text-${id}`}
+        >
+          <span>{title}</span>
+          <span className="ml-8 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white shadow-xs">
+            <svg
+              className={`origin-center transform fill-gray-400 transition duration-200 ease-out ${accordionOpen && "rotate-180!"}`}
+              xmlns="http://www.w3.org/2000/svg"
+              width={10}
+              height={6}
+              fill="none"
+            >
+              <path
+                d="m2 .586 3 3 3-3L9.414 2 5.707 5.707a1 1 0 0 1-1.414 0L.586 2 2 .586Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </span>
+        </button>
+      </h2>
+      <div
+        id={`accordion-text-${id}`}
+        role="region"
+        aria-labelledby={`accordion-title-${id}`}
+        className={`grid overflow-hidden text-sm text-gray-600 transition-all duration-300 ease-in-out ${accordionOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+      >
+        <div className="overflow-hidden">
+          <p className="px-4 pb-3">{children}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+components/banner.tsx:
+"use client";
+import { useState } from "react";
+export default function Banner() {
+  const [bannerOpen, setBannerOpen] = useState<boolean>(true);
+  return (
+    <>
+      {bannerOpen && (
+        <div className="fixed bottom-0 right-0 z-50 w-full md:bottom-8 md:right-12 md:w-auto">
+          <div className="flex justify-between bg-slate-800 p-3 text-sm text-slate-50 shadow-lg md:rounded-sm">
+            <div className="inline-flex text-slate-500">
+              <a
+                className="font-medium text-slate-50 hover:underline"
+                href="https://github.com/cruip/tailwind-landing-page-template"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Download<span className="hidden sm:inline"> on GitHub</span>
+              </a>{" "}
+              <span className="px-1.5 italic">or</span>{" "}
+              <a
+                className="font-medium text-emerald-400 hover:underline"
+                href="https://cruip.com/simple/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Check Premium Version
+              </a>
+            </div>
+            <button
+              className="ml-3 border-l border-gray-700 pl-2 text-slate-500 hover:text-slate-400"
+              onClick={() => setBannerOpen(false)}
+            >
+              <span className="sr-only">Close</span>
+              <svg
+                className="h-4 w-4 shrink-0 fill-current"
+                viewBox="0 0 16 16"
+              >
+                <path d="M12.72 3.293a1 1 0 00-1.415 0L8.012 6.586 4.72 3.293a1 1 0 00-1.414 1.414L6.598 8l-3.293 3.293a1 1 0 101.414 1.414l3.293-3.293 3.293 3.293a1 1 0 001.414-1.414L9.426 8l3.293-3.293a1 1 0 000-1.414z" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+components/cta.tsx:
+import Image from "next/image";
+import Stripes from "@/public/images/stripes-dark.svg";
+export default function Cta() {
+  return (
+    <section>
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div
+          className="relative overflow-hidden rounded-2xl text-center shadow-xl before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:rounded-2xl before:bg-gray-900"
+          data-aos="zoom-y-out"
+        >
+          {/* Glow */}
+          <div
+            className="absolute bottom-0 left-1/2 -z-10 -translate-x-1/2 translate-y-1/2"
+            aria-hidden="true"
+          >
+            <div className="h-56 w-[480px] rounded-full border-[20px] border-blue-500 blur-3xl" />
+          </div>
+          {/* Stripes illustration */}
+          <div
+            className="pointer-events-none absolute left-1/2 top-0 -z-10 -translate-x-1/2 transform"
+            aria-hidden="true"
+          >
+            <Image
+              className="max-w-none"
+              src={Stripes}
+              width={768}
+              height={432}
+              alt="Stripes"
+            />
+          </div>
+          <div className="px-4 py-12 md:px-12 md:py-20">
+            <h2 className="mb-6 border-y text-3xl font-bold text-gray-200 [border-image:linear-gradient(to_right,transparent,--theme(--color-slate-700/.7),transparent)1] md:mb-12 md:text-4xl">
+              Create your next project with Simple
+            </h2>
+            <div className="mx-auto max-w-xs sm:flex sm:max-w-none sm:justify-center">
+              <a
+                className="btn group mb-4 w-full bg-linear-to-t from-blue-600 to-blue-500 bg-[length:100%_100%] bg-[bottom] text-white shadow-sm hover:bg-[length:100%_150%] sm:mb-0 sm:w-auto"
+                href="#0"
+              >
+                <span className="relative inline-flex items-center">
+                  Start Free Trial{" "}
+                  <span className="ml-1 tracking-normal text-blue-300 transition-transform group-hover:translate-x-0.5">
+                    -&gt;
+                  </span>
+                </span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+components/hero-home.tsx:
+import Image from "next/image";
+import PageIllustration from "@/components/page-illustration";
+import Avatar01 from "@/public/images/avatar-01.jpg";
+import Avatar02 from "@/public/images/avatar-02.jpg";
+import Avatar03 from "@/public/images/avatar-03.jpg";
+import Avatar04 from "@/public/images/avatar-04.jpg";
+import Avatar05 from "@/public/images/avatar-05.jpg";
+import Avatar06 from "@/public/images/avatar-06.jpg";
+export default function HeroHome() {
+  return (
+    <section className="relative">
+      <PageIllustration />
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        {/* Hero content */}
+        <div className="pb-12 pt-32 md:pb-20 md:pt-40">
+          {/* Section header */}
+          <div className="pb-12 text-center md:pb-16">
+            <div
+              className="mb-6 border-y [border-image:linear-gradient(to_right,transparent,--theme(--color-slate-300/.8),transparent)1]"
+              data-aos="zoom-y-out"
+            >
+              <div className="-mx-0.5 flex justify-center -space-x-3">
+                <Image
+                  className="box-content rounded-full border-2 border-gray-50"
+                  src={Avatar01}
+                  width={32}
+                  height={32}
+                  alt="Avatar 01"
+                />
+                <Image
+                  className="box-content rounded-full border-2 border-gray-50"
+                  src={Avatar02}
+                  width={32}
+                  height={32}
+                  alt="Avatar 01"
+                />
+                <Image
+                  className="box-content rounded-full border-2 border-gray-50"
+                  src={Avatar03}
+                  width={32}
+                  height={32}
+                  alt="Avatar 02"
+                />
+                <Image
+                  className="box-content rounded-full border-2 border-gray-50"
+                  src={Avatar04}
+                  width={32}
+                  height={32}
+                  alt="Avatar 03"
+                />
+                <Image
+                  className="box-content rounded-full border-2 border-gray-50"
+                  src={Avatar05}
+                  width={32}
+                  height={32}
+                  alt="Avatar 04"
+                />
+                <Image
+                  className="box-content rounded-full border-2 border-gray-50"
+                  src={Avatar06}
+                  width={32}
+                  height={32}
+                  alt="Avatar 05"
+                />
+              </div>
+            </div>
+            <h1
+              className="mb-6 border-y text-5xl font-bold [border-image:linear-gradient(to_right,transparent,--theme(--color-slate-300/.8),transparent)1] md:text-6xl"
+              data-aos="zoom-y-out"
+              data-aos-delay={150}
+            >
+              The website builder you're <br className="max-lg:hidden" />
+              looking for
+            </h1>
+            <div className="mx-auto max-w-3xl">
+              <p
+                className="mb-8 text-lg text-gray-700"
+                data-aos="zoom-y-out"
+                data-aos-delay={300}
+              >
+                Simple is a modern website builder powered by AI that changes
+                how companies create user interfaces together.
+              </p>
+              <div className="relative before:absolute before:inset-0 before:border-y before:[border-image:linear-gradient(to_right,transparent,--theme(--color-slate-300/.8),transparent)1]">
+                <div
+                  className="mx-auto max-w-xs sm:flex sm:max-w-none sm:justify-center"
+                  data-aos="zoom-y-out"
+                  data-aos-delay={450}
+                >
+                  <a
+                    className="btn group mb-4 w-full bg-linear-to-t from-blue-600 to-blue-500 bg-[length:100%_100%] bg-[bottom] text-white shadow-sm hover:bg-[length:100%_150%] sm:mb-0 sm:w-auto"
+                    href="#0"
+                  >
+                    <span className="relative inline-flex items-center">
+                      Start Free Trial{" "}
+                      <span className="ml-1 tracking-normal text-blue-300 transition-transform group-hover:translate-x-0.5">
+                        -&gt;
+                      </span>
+                    </span>
+                  </a>
+                  <a
+                    className="btn w-full bg-white text-gray-800 shadow-sm hover:bg-gray-50 sm:ml-4 sm:w-auto"
+                    href="#0"
+                  >
+                    Learn More
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Hero image */}
+          <div
+            className="mx-auto max-w-3xl"
+            data-aos="zoom-y-out"
+            data-aos-delay={600}
+          >
+            <div className="relative aspect-video rounded-2xl bg-gray-900 px-5 py-3 shadow-xl before:pointer-events-none before:absolute before:-inset-5 before:border-y before:[border-image:linear-gradient(to_right,transparent,--theme(--color-slate-300/.8),transparent)1] after:absolute after:-inset-5 after:-z-10 after:border-x after:[border-image:linear-gradient(to_bottom,transparent,--theme(--color-slate-300/.8),transparent)1]">
+              <div className="relative mb-8 flex items-center justify-between before:block before:h-[9px] before:w-[41px] before:bg-[length:16px_9px] before:[background-image:radial-gradient(circle_at_4.5px_4.5px,var(--color-gray-600)_4.5px,transparent_0)] after:w-[41px]">
+                <span className="text-[13px] font-medium text-white">
+                  cruip.com
+                </span>
+              </div>
+              <div className="font-mono text-gray-500 [&_span]:opacity-0">
+                <span className="animate-[code-1_10s_infinite] text-gray-200">
+                  npm login
+                </span>{" "}
+                <span className="animate-[code-2_10s_infinite]">
+                  --registry=https://npm.pkg.github.com
+                </span>
+                <br />
+                <span className="animate-[code-3_10s_infinite]">
+                  --scope=@phanatic
+                </span>{" "}
+                <span className="animate-[code-4_10s_infinite]">
+                  Successfully logged-in.
+                </span>
+                <br />
+                <br />
+                <span className="animate-[code-5_10s_infinite] text-gray-200">
+                  npm publish
+                </span>
+                <br />
+                <span className="animate-[code-6_10s_infinite]">
+                  Package published.
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+next-env.d.ts:
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+tsconfig.json:
+{
+  "compilerOptions": {
+    "target": "es5",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "preserve",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules"]
+}
+=== LAMBY HOST ENVIRONMENT (READ-ONLY — NEVER MODIFY OR SUGGEST CHANGES TO) ===
+This context is from Lamby — your local Electron/PWA coding IDE.
+Lamby source repo: https://github.com/aidenrichtwitter-glitch/guardian-ai
+Scan this repo to understand Lamby's full capabilities: its code parser (search/replace blocks, unified diffs, fenced code blocks), file structure, preview system, dependency installer, and command runner.
+Important runtime facts (use these to make smart choices, but do NOT propose edits to them):
+- All user projects are sandboxed in /projects/<project-name>/ (isolated from Lamby's src/, public/, supabase/, etc.).
+- Preview: App auto-runs via Vite dev server inside a sandboxed iframe or embedded browser view in Lamby.
+  - Supports HMR for live updates.
+  - Responsive design assumed; fit viewport.
+  - Browser APIs only (Web Audio, Canvas, Three.js, mic access via getUserMedia).
+  - No Electron/node APIs in target app.
+- Lamby auto-handles: One-click clone from suggested GitHub URL, safe parsing/applying of copied code/diffs/deps/commands, dep install with safeguards, run/build commands.
+- You may choose ANY framework or tech stack that runs in a browser and can be previewed via Vite dev server. There are no framework restrictions — pick whatever best fits the user's request.
+- Strict rule: You are ONLY building the ACTIVE PROJECT above. NEVER suggest changes to Lamby itself (clipboard logic, context gen, parser, UI, Supabase bridge, etc.). Ignore any self-referential ideas.
+STRICT INSTRUCTION: Respond only to the ACTIVE PROJECT section. Treat the HOST section as fixed background knowledge.
+"
