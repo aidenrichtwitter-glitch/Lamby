@@ -133,10 +133,10 @@ EXECUTE COMMANDS via GET proxy (write files, run shell, install deps, git, etc.)
   ── VISUAL & PREVIEW ──
     { type: "get_preview_url", project: "P" }  → returns running dev server URL/port
     { type: "capture_preview", project: "P" }  → preview URL + screenshot (requires puppeteer/playwright)
-    { type: "screenshot_preview", project: "P" }  → take PNG screenshot, uploads to Imgur, returns { imgurUrl: "https://i.imgur.com/xxx.png" }
+    { type: "screenshot_preview", project: "P" }  → take PNG screenshot, uploads to Catbox.moe, returns { screenshotUrl: "https://files.catbox.moe/abc123.png" }
     { type: "screenshot_preview", project: "P", selector: "#hero", width: 1280, height: 720 }  → screenshot a specific element
     { type: "screenshot_preview", project: "P", fullPage: true, waitMs: 3000 }  → full-page capture with delay
-    Screenshots are automatically uploaded to Imgur. Browse the imgurUrl to view/share. Requires IMGUR_CLIENT_ID env var.
+    Screenshots auto-upload to Catbox.moe (anonymous, no account needed). Browse the screenshotUrl to view/share.
     { type: "visual_diff", project: "P", beforeUrl: "...", afterUrl: "..." }  → visual comparison stub
     { type: "capture_component", project: "P", componentName: "Header" }  → component screenshot stub
     { type: "record_video", project: "P", duration: 5 }  → video recording stub (requires puppeteer/playwright)

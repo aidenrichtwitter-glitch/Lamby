@@ -3,41 +3,46 @@ const path = require("path");
 const childProcess = require("child_process");
 const https = require("https");
 
-function uploadToImgur(base64Data) {
-  const clientId = process.env.IMGUR_CLIENT_ID || "";
-  if (!clientId) return Promise.resolve({ uploaded: false, reason: "IMGUR_CLIENT_ID env var not set" });
-  const postData = `image=${encodeURIComponent(base64Data)}&type=base64`;
+function uploadScreenshot(filePath) {
   return new Promise((resolve) => {
-    const req = https.request({
-      hostname: "api.imgur.com",
-      path: "/3/image",
-      method: "POST",
-      headers: {
-        "Authorization": `Client-ID ${clientId}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Content-Length": Buffer.byteLength(postData),
-      },
-      timeout: 30000,
-    }, (res) => {
-      let body = "";
-      res.on("data", (chunk) => { body += chunk; });
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(body);
-          if (json.success && json.data && json.data.link) {
-            resolve({ uploaded: true, url: json.data.link, deleteHash: json.data.deletehash || null });
+    try {
+      const boundary = "----CatboxBoundary" + Date.now();
+      const fileData = fs.readFileSync(filePath);
+      const fileName = path.basename(filePath);
+      const parts = [];
+      parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="reqtype"\r\n\r\nfileupload\r\n`);
+      parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="fileToUpload"; filename="${fileName}"\r\nContent-Type: image/png\r\n\r\n`);
+      const header = Buffer.from(parts[0] + parts[1], "utf-8");
+      const footer = Buffer.from(`\r\n--${boundary}--\r\n`, "utf-8");
+      const body = Buffer.concat([header, fileData, footer]);
+      const req = https.request({
+        hostname: "catbox.moe",
+        path: "/user/api.php",
+        method: "POST",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": body.length,
+        },
+        timeout: 60000,
+      }, (res) => {
+        let responseBody = "";
+        res.on("data", (chunk) => { responseBody += chunk; });
+        res.on("end", () => {
+          const url = responseBody.trim();
+          if (url.startsWith("https://")) {
+            resolve({ uploaded: true, url });
           } else {
-            resolve({ uploaded: false, reason: json.data?.error || "Imgur upload failed", status: json.status });
+            resolve({ uploaded: false, reason: responseBody.slice(0, 300) });
           }
-        } catch (e) {
-          resolve({ uploaded: false, reason: `Parse error: ${e.message}` });
-        }
+        });
       });
-    });
-    req.on("error", (e) => { resolve({ uploaded: false, reason: e.message }); });
-    req.on("timeout", () => { req.destroy(); resolve({ uploaded: false, reason: "Imgur upload timeout" }); });
-    req.write(postData);
-    req.end();
+      req.on("error", (e) => { resolve({ uploaded: false, reason: e.message }); });
+      req.on("timeout", () => { req.destroy(); resolve({ uploaded: false, reason: "Upload timeout" }); });
+      req.write(body);
+      req.end();
+    } catch (e) {
+      resolve({ uploaded: false, reason: e.message });
+    }
   });
 }
 
@@ -1310,16 +1315,15 @@ function executeSandboxAction(action, projectsDir, options) {
           try {
             childProcess.execSync(`node -e "${captureScript.replace(/"/g, '\\"')}"`, { cwd: dir, timeout: 45000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
             if (fs.existsSync(screenshotPath)) {
-              const imgData = fs.readFileSync(screenshotPath);
-              const base64 = imgData.toString("base64");
               const screenshotRelPath = `_screenshots/${screenshotName}`;
-              const imgur = await uploadToImgur(base64);
+              const upload = await uploadScreenshot(screenshotPath);
+              const fileSize = fs.statSync(screenshotPath).size;
               resolve({ status: "success", type: t, data: {
                 url: previewUrl, port: previewPort, captured: true,
                 screenshotPath: screenshotRelPath,
-                imgurUrl: imgur.uploaded ? imgur.url : null,
-                imgurError: imgur.uploaded ? undefined : imgur.reason,
-                base64Length: base64.length,
+                screenshotUrl: upload.uploaded ? upload.url : null,
+                uploadError: upload.uploaded ? undefined : upload.reason,
+                fileSize,
                 width: viewportW, height: viewportH
               }});
             } else {
@@ -1459,13 +1463,11 @@ function executeSandboxAction(action, projectsDir, options) {
               try { fs.unlinkSync(resultFile); } catch {}
             }
             if (doScreenshot && fs.existsSync(ssPath)) {
-              const imgData = fs.readFileSync(ssPath);
-              const base64 = imgData.toString("base64");
               result.screenshotPath = `_screenshots/${ssName}`;
-              result.base64Length = base64.length;
-              const imgur = await uploadToImgur(base64);
-              result.imgurUrl = imgur.uploaded ? imgur.url : null;
-              if (!imgur.uploaded) result.imgurError = imgur.reason;
+              result.fileSize = fs.statSync(ssPath).size;
+              const upload = await uploadScreenshot(ssPath);
+              result.screenshotUrl = upload.uploaded ? upload.url : null;
+              if (!upload.uploaded) result.uploadError = upload.reason;
             }
             result.url = previewUrl;
             result.port = previewPort;

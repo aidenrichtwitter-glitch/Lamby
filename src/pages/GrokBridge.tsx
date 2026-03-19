@@ -331,8 +331,8 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    { type: "screenshot_preview", project: "${proj}" }  → returns base64 PNG of the running app\n`;
     section += `    { type: "screenshot_preview", project: "${proj}", selector: "#hero", width: 1280, height: 720 }  → screenshot a specific element\n`;
     section += `    { type: "screenshot_preview", project: "${proj}", fullPage: true, waitMs: 3000 }  → full-page capture with delay\n`;
-    section += `    Response includes: { captured: true, imgurUrl: "https://i.imgur.com/xxx.png", base64Length: 12345 }\n`;
-    section += `    The imgurUrl is a public link you can browse and show to the user. Requires IMGUR_CLIENT_ID env var.\n`;
+    section += `    Response includes: { captured: true, screenshotUrl: "https://files.catbox.moe/abc123.png" }\n`;
+    section += `    The screenshotUrl is a public direct link — browse it to view the screenshot, or share it with the user.\n`;
     section += `  BROWSER INTERACTION (click buttons, type text, run JS in the live preview):\n`;
     section += `    { type: "browser_interact", project: "${proj}", action: "click", selector: "#submit-btn" }  → click an element\n`;
     section += `    { type: "browser_interact", project: "${proj}", action: "click", selector: "#submit-btn", screenshot: true }  → click + capture screenshot after\n`;
