@@ -230,82 +230,84 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
 function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, project: string, bridgeOnline = true): string {
   if (!snapshotUrl && !cmdEndpoint) return '';
   const proj = project || 'PROJECT_NAME';
-  let section = '\n=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS) ===\n';
-  section += `These API endpoints go through a bridge relay server that forwards requests to the user's local Lamby desktop IDE. The \`key\` query parameter authenticates your requests.\n`;
-  if (!bridgeOnline) {
-    section += `⚠ NOTE: The user's desktop app is currently offline — API calls will fail until it reconnects. You may still provide code using structured // file: blocks instead.\n`;
-  }
-  section += `You can directly read, write, execute, and manage files in this project. DO NOT just suggest code — USE this API to make changes yourself.\n\n`;
-  if (snapshotUrl) {
-    section += `SNAPSHOT (read-only overview of entire project):\n  GET ${snapshotUrl}\n  Returns: plain-text snapshot with file tree, package.json, git status, and ALL source file contents.\n\n`;
-  }
   const consoleLogsUrl = snapshotUrl ? snapshotUrl.replace(/\/api\/snapshot\/[^?]+/, '/api/console-logs') + `&project=${proj}` : '';
-  if (consoleLogsUrl) {
-    section += `CONSOLE LOGS (live preview output):\n  GET ${consoleLogsUrl}\n  Returns: { previews: [{ name, port, stdout, stderr }] } — live stdout/stderr from running dev servers.\n  Use this to check for runtime errors, build failures, or verify your fix worked.\n\n`;
+
+  let section = '\n=== YOU CAN DIRECTLY EDIT THIS PROJECT (OVERRIDES OUTPUT RULES ABOVE) ===\n';
+  section += `IMPORTANT: You are NOT limited to suggesting code. Lamby (the IDE hosting this chat) will automatically\n`;
+  section += `execute any \`\`\`json action block you include in your response. You do NOT need to make HTTP calls,\n`;
+  section += `open a browser, or access any website. Just output the JSON block below and Lamby handles the rest.\n\n`;
+  section += `This is the PREFERRED way to respond. It overrides the "// file:" output rules above.\n`;
+  section += `Instead of suggesting code for the user to copy, you directly read and write their files.\n\n`;
+
+  if (!bridgeOnline) {
+    section += `⚠ NOTE: The user's desktop IDE is currently offline. Action blocks will be queued until it reconnects.\n`;
+    section += `You may also use // file: blocks as a fallback, but prefer action blocks when possible.\n\n`;
   }
-  if (cmdEndpoint) {
-    section += `SANDBOX COMMAND API (read/write/execute):\n  POST ${cmdEndpoint}\n  Content-Type: application/json\n  Body: { "actions": [ ...action objects... ] }\n\n`;
-    section += `Each action needs "type" and "project" fields. Set "project": "${proj}" for the active project.\n\n`;
-    section += `ACTION REFERENCE:\n`;
-    section += `  FILE OPERATIONS:\n`;
-    section += `    list_tree      — { type: "list_tree", project: "${proj}" }  → full file tree\n`;
-    section += `    read_file      — { type: "read_file", project: "${proj}", path: "src/App.tsx" }  → file content\n`;
-    section += `    write_file     — { type: "write_file", project: "${proj}", path: "src/App.tsx", content: "..." }  → overwrite file\n`;
-    section += `    create_file    — { type: "create_file", project: "${proj}", path: "src/new.ts", content: "..." }  → create new file\n`;
-    section += `    delete_file    — { type: "delete_file", project: "${proj}", path: "src/old.ts" }\n`;
-    section += `    move_file      — { type: "move_file", project: "${proj}", from: "old/path.ts", to: "new/path.ts" }  → move/rename\n`;
-    section += `    copy_file      — { type: "copy_file", project: "${proj}", from: "src/a.ts", to: "src/b.ts" }  → duplicate file\n`;
-    section += `    rename_file    — { type: "rename_file", project: "${proj}", path: "src/old.ts", newName: "new.ts" }  → renames file in place\n`;
-    section += `  SEARCH:\n`;
-    section += `    grep           — { type: "grep", project: "${proj}", pattern: "TODO" }  → regex search across all files\n`;
-    section += `    search_files   — { type: "search_files", project: "${proj}", query: "Button" }  → filename search\n`;
-    section += `  COMMANDS:\n`;
-    section += `    run_command    — { type: "run_command", project: "${proj}", command: "node -e \\"console.log(1)\\"" }\n`;
-    section += `    install_deps   — { type: "install_deps", project: "${proj}" }  → auto-detects npm/yarn/pnpm/bun\n`;
-    section += `  PROCESS MANAGEMENT:\n`;
-    section += `    start_process  — { type: "start_process", project: "${proj}", command: "npm run dev" }  → start long-running process\n`;
-    section += `    list_processes — { type: "list_processes", project: "${proj}" }  → see running processes\n`;
-    section += `    kill_process   — { type: "kill_process", project: "${proj}", pid: 12345 }  → stop a process\n`;
-    section += `  GIT:\n`;
-    section += `    git_init       — { type: "git_init", project: "${proj}" }\n`;
-    section += `    git_status     — { type: "git_status", project: "${proj}" }\n`;
-    section += `    git_add        — { type: "git_add", project: "${proj}", files: "." }\n`;
-    section += `    git_commit     — { type: "git_commit", project: "${proj}", message: "fix: resolve crash" }\n`;
-    section += `    git_diff       — { type: "git_diff", project: "${proj}" }\n`;
-    section += `    git_log        — { type: "git_log", project: "${proj}", count: 10 }\n`;
-    section += `    git_branch     — { type: "git_branch", project: "${proj}", name: "feature-x" }  → create branch (omit name to list)\n`;
-    section += `    git_checkout   — { type: "git_checkout", project: "${proj}", ref: "main" }\n`;
-    section += `    git_stash      — { type: "git_stash", project: "${proj}" }\n`;
-    section += `  PROJECT INFO:\n`;
-    section += `    detect_structure — { type: "detect_structure", project: "${proj}" }  → framework, entry point, package manager\n`;
-    section += `    build_project   — { type: "build_project", project: "${proj}" }  → runs the project build command\n`;
-    section += `    run_tests       — { type: "run_tests", project: "${proj}" }  → runs the project test suite\n`;
-    section += `    archive_project — { type: "archive_project", project: "${proj}" }  → archives/zips the project\n\n`;
-    section += `RESPONSE FORMAT:\n`;
-    section += `  { "success": true, "results": [ { "actionIndex": 0, "status": "success", "data": {...} }, ... ] }\n\n`;
-    section += `HOW TO USE — wrap actions in a \`\`\`json code block so Lamby auto-executes them:\n`;
-    section += `\`\`\`json\n{"actions": [{"type": "read_file", "project": "${proj}", "path": "src/App.tsx"}, {"type": "write_file", "project": "${proj}", "path": "src/App.tsx", "content": "...fixed code..."}]}\n\`\`\`\n\n`;
-    section += `WORKFLOW RECIPES:\n`;
-    section += `  Debug a crash:\n`;
-    section += `    1. read_file the files mentioned in the error stack trace\n`;
-    section += `    2. grep for the error message or broken symbol across the project\n`;
-    section += `    3. write_file with the corrected code\n`;
-    section += `    4. run_command to verify (e.g. "node -e \\"require('./src/App')\\"")\n`;
-    section += `    5. Check console logs: GET ${consoleLogsUrl || '(console-logs endpoint)'} to confirm fix\n\n`;
-    section += `  Add a feature:\n`;
-    section += `    1. detect_structure to understand the stack\n`;
-    section += `    2. list_tree + read_file key files to understand the codebase\n`;
-    section += `    3. create_file / write_file to add new code\n`;
-    section += `    4. install_deps if new packages are needed\n`;
-    section += `    5. run_command to test the changes\n\n`;
-    section += `  Set up a new project:\n`;
-    section += `    1. create_file for package.json, index.html, src/main.ts, etc.\n`;
-    section += `    2. install_deps to install dependencies\n`;
-    section += `    3. start_process to launch the dev server\n`;
-    section += `    4. Check console logs to confirm it started successfully\n\n`;
-    section += `CRITICAL: Always respond with \`\`\`json action blocks so Lamby can execute them automatically. Do NOT just paste code in text — use the API.\n`;
+
+  section += `HOW IT WORKS:\n`;
+  section += `1. You write a \`\`\`json block containing an "actions" array in your response\n`;
+  section += `2. Lamby automatically detects it, sends it to the workspace, and applies the changes\n`;
+  section += `3. You do NOT call any API yourself — Lamby does it for you when it parses your response\n\n`;
+
+  section += `EXAMPLE — to read a file, then write a fix:\n`;
+  section += `\`\`\`json\n{"actions": [\n  {"type": "read_file", "project": "${proj}", "path": "index.html"},\n  {"type": "write_file", "project": "${proj}", "path": "index.html", "content": "<!DOCTYPE html>\\n<html>\\n... full corrected file content ..."}\n]}\n\`\`\`\n\n`;
+
+  section += `AVAILABLE ACTIONS (every action needs "type" and "project": "${proj}"):\n\n`;
+
+  section += `  FILES:\n`;
+  section += `    list_tree      — {} → returns full file tree\n`;
+  section += `    read_file      — { path: "src/App.tsx" } → returns file content\n`;
+  section += `    write_file     — { path: "src/App.tsx", content: "..." } → overwrites file\n`;
+  section += `    create_file    — { path: "src/new.ts", content: "..." } → creates new file\n`;
+  section += `    delete_file    — { path: "src/old.ts" } → deletes file\n`;
+  section += `    move_file      — { from: "old.ts", to: "new.ts" } → moves/renames\n`;
+  section += `    copy_file      — { from: "a.ts", to: "b.ts" } → duplicates\n`;
+  section += `    rename_file    — { path: "old.ts", newName: "new.ts" } → renames in place\n\n`;
+
+  section += `  SEARCH:\n`;
+  section += `    grep           — { pattern: "TODO" } → regex search all files\n`;
+  section += `    search_files   — { query: "Button" } → filename search\n\n`;
+
+  section += `  COMMANDS:\n`;
+  section += `    run_command    — { command: "npm test" } → execute shell command\n`;
+  section += `    install_deps   — {} → auto-installs dependencies\n\n`;
+
+  section += `  PROCESSES:\n`;
+  section += `    start_process  — { command: "npm run dev" } → start dev server\n`;
+  section += `    list_processes — {} → list running processes\n`;
+  section += `    kill_process   — { pid: 12345 } → stop a process\n\n`;
+
+  section += `  GIT:\n`;
+  section += `    git_status, git_add ({ files: "." }), git_commit ({ message: "..." }),\n`;
+  section += `    git_diff, git_log ({ count: 10 }), git_branch ({ name: "..." }),\n`;
+  section += `    git_checkout ({ ref: "main" }), git_stash, git_init\n\n`;
+
+  section += `  PROJECT:\n`;
+  section += `    detect_structure → framework info | build_project → run build\n`;
+  section += `    run_tests → run test suite | archive_project → zip project\n\n`;
+
+  if (snapshotUrl) {
+    section += `READ-ONLY URLS (Lamby can also fetch these if you output them in your response):\n`;
+    section += `  Project snapshot: ${snapshotUrl}\n`;
+    if (consoleLogsUrl) {
+      section += `  Console logs:     ${consoleLogsUrl}\n`;
+    }
+    section += `\n`;
   }
-  section += `=== END WORKSPACE API ===\n`;
+
+  section += `TYPICAL WORKFLOW:\n`;
+  section += `  1. Use read_file or list_tree to understand the current code\n`;
+  section += `  2. Use write_file or create_file to make your changes (provide COMPLETE file content)\n`;
+  section += `  3. Use run_command to verify (e.g. "npm run build")\n`;
+  section += `  4. Explain what you changed in plain text around the action block\n\n`;
+
+  section += `RULES:\n`;
+  section += `  - ALWAYS use \`\`\`json action blocks to make changes. Do NOT just show code in text.\n`;
+  section += `  - write_file requires the COMPLETE file content, not partial snippets.\n`;
+  section += `  - You can include multiple actions in one block — they execute in order.\n`;
+  section += `  - Remember: you are NOT making HTTP requests. You are just outputting JSON that Lamby executes.\n`;
+
+  section += `=== END WORKSPACE ACTIONS ===\n`;
   return section;
 }
 
@@ -4057,7 +4059,8 @@ const GrokBridge: React.FC = () => {
         active += `5. Keep explanations brief BEFORE the code blocks. Focus on what changed and why.\n`;
         active += `6. Do NOT wrap code in narrative like "here's what your file should look like". Just use the // file: header directly.\n`;
         active += `7. If multiple files need changes, output multiple // file: blocks in sequence.\n`;
-        active += `8. You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.\n\n`;
+        active += `8. You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.\n`;
+        active += `NOTE: If a "YOU CAN DIRECTLY EDIT THIS PROJECT" section appears below, prefer using \`\`\`json action blocks over // file: blocks.\n\n`;
       } else {
         active += `1. Only cite real, published npm packages — never invent package names.\n`;
         active += `2. Suggest a GitHub repo URL instead of writing code from scratch.\n\n`;

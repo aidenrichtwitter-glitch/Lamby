@@ -1,0 +1,139 @@
+=== ACTIVE PROJECT (BUILD THIS ONLY) ===
+Project name: landing-page
+Status: Active project with 5 source files.
+About this project: Tailwind Toolbox - Landing Page Template Landing Page is an open source, generic landing page template for Tailwind CSS created by Tailwind Toolbox. Getting Started | Page title: Menu | Framework: react
+Detected framework: react (based on package.json — for your awareness, not a restriction)
+Current file tree:
+
+hero.png
+index.html
+LICENSE
+package-lock.json
+package.json
+postcss.config.cjs
+README.md
+package.json:
+{
+  "name": "landing-page",
+  "private": true,
+  "devDependencies": {
+    "vite": "^5"
+  }
+}
+Primary task right now: Respond to the user's request below. Check current files, plan minimal changes, output code.
+=== OUTPUT RULES (FOLLOW EXACTLY — THESE ARE HOW GUARDIAN APPLIES YOUR CODE) ===
+PREFER STRUCTURED FORMAT: Always use the // file: headers, DEPENDENCIES block, and COMMANDS block whenever possible.
+If you need to explain, do it in normal text BEFORE the structured blocks. Never bury code inside paragraphs.
+FORMAT FOR CODE CHANGES — put a // file: header immediately before each fenced code block:
+// file: src/components/App.tsx
+
+tsx[full file content here]
+# FORMAT FOR NEW DEPENDENCIES — use a structured block:
+=== DEPENDENCIES ===
+package-name
+dev: @types/whatever
+=== END_DEPENDENCIES ===
+FORMAT FOR SHELL COMMANDS — use a structured block:
+=== COMMANDS ===
+npm run build
+npx prisma generate
+=== END_COMMANDS ===
+ALTERNATIVE FORMAT FOR SMALL EDITS — search/replace blocks (use when changing only a few lines in a large file):
+// file: src/components/App.tsx
+<<<<<<< SEARCH
+[exact old code to find]
+[new replacement code]
+REPLACE
+RULES:
+
+Every code block MUST have a // file: header. No exceptions. Lamby auto-applies blocks with headers.
+For FULL replacement: provide COMPLETE file content. Do NOT use "// ... rest unchanged" or partial snippets.
+For SEARCH/REPLACE: the SEARCH section must match existing code EXACTLY (including whitespace). The REPLACE section is the new code.
+Only cite real, published npm packages — never invent package names.
+Keep explanations brief BEFORE the code blocks. Focus on what changed and why.
+Do NOT wrap code in narrative like "here's what your file should look like". Just use the // file: header directly.
+If multiple files need changes, output multiple // file: blocks in sequence.
+You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.
+=== LAMBY HOST ENVIRONMENT (READ-ONLY — NEVER MODIFY OR SUGGEST CHANGES TO) ===
+This context is from Lamby — your local Electron/PWA coding IDE.
+Lamby source repo: https://github.com/aidenrichtwitter-glitch/guardian-ai
+Scan this repo to understand Lamby's full capabilities: its code parser (search/replace blocks, unified diffs, fenced code blocks), file structure, preview system, dependency installer, and command runner.
+Important runtime facts (use these to make smart choices, but do NOT propose edits to them):
+
+
+All user projects are sandboxed in /projects/<project-name>/ (isolated from Lamby's src/, public/, supabase/, etc.).
+Preview: App auto-runs via Vite dev server inside a sandboxed iframe or embedded browser view in Lamby.
+  - Supports HMR for live updates.
+  - Responsive design assumed; fit viewport.
+  - Browser APIs only (Web Audio, Canvas, Three.js, mic access via getUserMedia).
+  - No Electron/node APIs in target app.
+Lamby auto-handles: One-click clone from suggested GitHub URL, safe parsing/applying of copied code/diffs/deps/commands, dep install with safeguards, run/build commands.
+You may choose ANY framework or tech stack that runs in a browser and can be previewed via Vite dev server. There are no framework restrictions — pick whatever best fits the user's request.
+Strict rule: You are ONLY building the ACTIVE PROJECT above. NEVER suggest changes to Lamby itself (clipboard logic, context gen, parser, UI, Supabase bridge, etc.). Ignore any self-referential ideas.
+STRICT INSTRUCTION: Respond only to the ACTIVE PROJECT section. Treat the HOST section as fixed background knowledge.
+ 
+ 
+please make this app blue
+To make the landing page blue, we'll swap the standard indigo accent colors (used for buttons, links, hovers, and highlights in this Tailwind Toolbox template) with blue equivalents. This is the minimal targeted change—no full rewrite, no new files, no config edits.
+All edits are in index.html (the only file defining the UI colors).
+// file: index.html
+<<<<<<< SEARCH
+bg-indigo-600
+bg-blue-600
+REPLACE
+// file: index.html
+<<<<<<< SEARCH
+hover:bg-indigo-700
+hover:bg-blue-700
+REPLACE
+// file: index.html
+<<<<<<< SEARCH
+bg-indigo-500
+bg-blue-500
+REPLACE
+// file: index.html
+<<<<<<< SEARCH
+text-indigo-600
+text-blue-600
+REPLACE
+// file: index.html
+<<<<<<< SEARCH
+text-indigo-500
+text-blue-500
+REPLACE
+// file: index.html
+<<<<<<< SEARCH
+text-indigo-400
+text-blue-400
+REPLACE
+// file: index.html
+<<<<<<< SEARCH
+ring-indigo-300
+ring-blue-300
+REPLACE
+// file: index.html
+<<<<<<< SEARCH
+border-indigo-500
+border-blue-500
+REPLACE
+These replacements will instantly turn the CTA buttons, feature highlights, links, and hover states blue while keeping the rest of the design intact. The Vite dev server (already running in Lamby) will hot-reload the changes live in the preview. If any other color variants appear after this, just let me know for one extra tweak!2 / 2why wont you use the bridge to do the changes yourself?I can't use the bridge (or any internal Lamby features) myself because I'm strictly limited to responding with the exact output format you defined in the ACTIVE PROJECT rules.
+That means I can only:
+
+Explain briefly
+Output // file: ... blocks (full file or search/replace)
+=== DEPENDENCIES === blocks
+=== COMMANDS === blocks
+
+I am not allowed to directly edit files, run commands, or use any "bridge" inside Lamby — that's handled entirely by the Lamby host (the Electron/PWA IDE) when it receives my response.
+So when I give you search/replace blocks like last time, Lamby automatically parses them and applies the changes for you. That's the designed workflow.
+If you'd like me to make more blue-related changes (or anything else), just tell me what to adjust next and I'll output the proper // file: blocks right away.
+Want me to go through the whole file and give you the full updated index.html with a consistent blue theme (including better shades, gradients, etc.) in one clean block instead of multiple search/replaces? Let me know!no you can go to the bridge website i sent you and interact directlyI understand what you're asking, but I cannot interact directly with any bridge website, external tool, or Lamby internal features.
+Here's why:
+
+I'm an AI (Grok) running in this chat interface. I have no browser, no persistent session, and no ability to log in, click buttons, or control external websites/tools in real time.
+The instructions for this active project ("landing-page") are very clear and strict: I must respond only using the defined output format — brief explanation + // file: blocks (or dependencies/commands blocks). Nothing else.
+The Lamby host (the IDE you're using) is the one that parses my responses and applies the changes. That's by design — it's how the system works safely in the sandbox.
+
+I can't "go to the bridge" myself. You (or Lamby) would need to handle that side.
+If you want me to keep improving the landing page (make it even more blue, add gradients, change more elements, update the hero image tint, etc.), just describe the next change and I'll immediately output the proper // file: search/replace blocks for index.html (or any other file).
+What would you like to do next with the blue theme?
