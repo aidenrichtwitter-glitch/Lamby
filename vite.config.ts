@@ -378,7 +378,7 @@ function projectManagementPlugin(): Plugin {
         const host = req.headers.host || "localhost:5000";
         const protocol = req.headers["x-forwarded-proto"] || "http";
         const baseUrl = `${protocol}://${host}`;
-        res.end(JSON.stringify({ key: snapshotKey, baseUrl, exampleUrl: `${baseUrl}/api/snapshot/PROJECT_NAME?key=${snapshotKey}`, commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`, commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, write_file, create_file, delete_file, move_file, copy_file, rename_file, grep, run_command, install_deps, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, search_files" }));
+        res.end(JSON.stringify({ key: snapshotKey, baseUrl, exampleUrl: `${baseUrl}/api/snapshot/PROJECT_NAME?key=${snapshotKey}`, commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`, commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, write_file, create_file, delete_file, move_file, copy_file, rename_file, grep, run_command, install_deps, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, search_files, screenshot_preview, browser_interact, interact_preview" }));
       });
 
       const bridgeClients = new Map<string, { ws: any; snapshotKey: string; lastPing: number }>();
@@ -5159,6 +5159,37 @@ function projectManagementPlugin(): Plugin {
             } catch (err: any) {
               console.error(`[Bridge] sandbox-execute error: ${err.message}`);
               bridgeRelaySend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result: { error: err.message } }));
+            }
+          } else if (parsed.type === "browser-interact-request" && parsed.requestId) {
+            console.log(`[Bridge] Received browser-interact-request (reqId: ${parsed.requestId.slice(0, 8)}, action: ${parsed.action || "?"})`);
+            try {
+              const projectsDir = path.resolve(process.cwd(), "projects");
+              const interactAction = {
+                type: "browser_interact",
+                project: parsed.project || parsed.projectName || "",
+                action: parsed.action,
+                selector: parsed.selector,
+                functionName: parsed.functionName,
+                script: parsed.script || parsed.functionName,
+                args: parsed.args,
+                value: parsed.value,
+                screenshot: parsed.screenshot === true,
+                fullPage: parsed.fullPage,
+                timeout: parsed.timeout,
+                waitAfter: parsed.waitAfter,
+                extractText: parsed.extractText,
+                extractSelector: parsed.extractSelector,
+                width: parsed.width,
+                height: parsed.height,
+                waitMs: parsed.waitMs,
+                url: parsed.url,
+              };
+              const result = await executeSandboxActions([interactAction], projectsDir, { auditLog: sandboxAuditLog, previewProcesses });
+              bridgeRelaySend(JSON.stringify({ type: "browser-interact-response", requestId: parsed.requestId, result }));
+              console.log(`[Bridge] Sent browser-interact-response (reqId: ${parsed.requestId.slice(0, 8)})`);
+            } catch (err: any) {
+              console.error(`[Bridge] browser-interact error: ${err.message}`);
+              bridgeRelaySend(JSON.stringify({ type: "browser-interact-response", requestId: parsed.requestId, result: { error: err.message } }));
             }
           } else if (parsed.type === "console-logs-request" && parsed.requestId) {
             console.log(`[Bridge] Received console-logs-request for "${parsed.projectName || ""}" (reqId: ${parsed.requestId.slice(0, 8)})`);

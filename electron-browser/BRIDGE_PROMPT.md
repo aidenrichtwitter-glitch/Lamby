@@ -133,11 +133,26 @@ EXECUTE COMMANDS via GET proxy (write files, run shell, install deps, git, etc.)
   ── VISUAL & PREVIEW ──
     { type: "get_preview_url", project: "P" }  → returns running dev server URL/port
     { type: "capture_preview", project: "P" }  → preview URL + screenshot (requires puppeteer/playwright)
+    { type: "screenshot_preview", project: "P" }  → take PNG screenshot, uploads to Imgur, returns { imgurUrl: "https://i.imgur.com/xxx.png" }
+    { type: "screenshot_preview", project: "P", selector: "#hero", width: 1280, height: 720 }  → screenshot a specific element
+    { type: "screenshot_preview", project: "P", fullPage: true, waitMs: 3000 }  → full-page capture with delay
+    Screenshots are automatically uploaded to Imgur. Browse the imgurUrl to view/share. Requires IMGUR_CLIENT_ID env var.
     { type: "visual_diff", project: "P", beforeUrl: "...", afterUrl: "..." }  → visual comparison stub
     { type: "capture_component", project: "P", componentName: "Header" }  → component screenshot stub
     { type: "record_video", project: "P", duration: 5 }  → video recording stub (requires puppeteer/playwright)
     { type: "get_dom_snapshot", project: "P" }  → fetch HTML of running preview server
     { type: "get_console_errors", project: "P" }  → extract errors from all running processes
+
+  ── BROWSER INTERACTION (click buttons, type text, run JS in the live preview) ──
+    { type: "browser_interact", project: "P", action: "click", selector: "#submit-btn" }  → click an element
+    { type: "browser_interact", project: "P", action: "click", selector: "#btn", screenshot: true }  → click + capture screenshot after
+    { type: "browser_interact", project: "P", action: "type", selector: "#input", value: "hello" }  → type into input field
+    { type: "browser_interact", project: "P", action: "select", selector: "#dropdown", value: "option1" }  → select dropdown value
+    { type: "browser_interact", project: "P", action: "evaluate", script: "return document.title" }  → run JS, get return value
+    { type: "browser_interact", project: "P", action: "runFunction", functionName: "window.myFunc", args: ["a"] }  → call window function
+    { type: "browser_interact", project: "P", action: "waitFor", selector: ".loaded", timeout: 10000 }  → wait for element
+    Options: screenshot: true, waitAfter: 2000 (ms), extractText: true + extractSelector: "#result"
+    Requires puppeteer or playwright installed in the project.
 
   ── ANALYSIS ──
     { type: "project_analyze", project: "P" }  → routes, components, deps, file stats, CSS vars

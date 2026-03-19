@@ -1,6 +1,45 @@
 const fs = require("fs");
 const path = require("path");
 const childProcess = require("child_process");
+const https = require("https");
+
+function uploadToImgur(base64Data) {
+  const clientId = process.env.IMGUR_CLIENT_ID || "";
+  if (!clientId) return Promise.resolve({ uploaded: false, reason: "IMGUR_CLIENT_ID env var not set" });
+  const postData = `image=${encodeURIComponent(base64Data)}&type=base64`;
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: "api.imgur.com",
+      path: "/3/image",
+      method: "POST",
+      headers: {
+        "Authorization": `Client-ID ${clientId}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": Buffer.byteLength(postData),
+      },
+      timeout: 30000,
+    }, (res) => {
+      let body = "";
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => {
+        try {
+          const json = JSON.parse(body);
+          if (json.success && json.data && json.data.link) {
+            resolve({ uploaded: true, url: json.data.link, deleteHash: json.data.deletehash || null });
+          } else {
+            resolve({ uploaded: false, reason: json.data?.error || "Imgur upload failed", status: json.status });
+          }
+        } catch (e) {
+          resolve({ uploaded: false, reason: `Parse error: ${e.message}` });
+        }
+      });
+    });
+    req.on("error", (e) => { resolve({ uploaded: false, reason: e.message }); });
+    req.on("timeout", () => { req.destroy(); resolve({ uploaded: false, reason: "Imgur upload timeout" }); });
+    req.write(postData);
+    req.end();
+  });
+}
 
 function detectPmForDir(projDir) {
   if (fs.existsSync(path.join(projDir, "bun.lockb")) || fs.existsSync(path.join(projDir, "bun.lock"))) return "bun";
@@ -1204,6 +1243,238 @@ function executeSandboxAction(action, projectsDir, options) {
           });
         }
         return { status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, note: "Install puppeteer or playwright for automated screenshots. Use the URL to view the preview manually." } };
+      }
+      case "screenshot_preview": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        let previewPort = null;
+        let previewUrl = null;
+        const extPreviews = _opts.previewProcesses;
+        if (extPreviews && extPreviews.size > 0) {
+          if (projectName && extPreviews.has(projectName)) {
+            const entry = extPreviews.get(projectName);
+            previewPort = entry.port;
+            if (entry.url) previewUrl = entry.url;
+          } else {
+            for (const [, entry] of extPreviews) {
+              if (entry.port) { previewPort = entry.port; if (entry.url) previewUrl = entry.url; break; }
+            }
+          }
+        }
+        if (!previewPort && sandboxProcesses.size > 0) {
+          for (const [, entry] of sandboxProcesses) {
+            if (entry.cmd && /dev|start|serve/.test(entry.cmd)) {
+              const portMatch = (entry.logs?.stdout || "").match(/localhost:(\d+)|port\s+(\d+)/i);
+              if (portMatch) { previewPort = parseInt(portMatch[1] || portMatch[2]); break; }
+            }
+          }
+        }
+        if (!previewPort) {
+          try {
+            const ssOut = childProcess.execSync("ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo none", { cwd: dir, timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            const portMatches = ssOut.match(/:(\d{4,5})\s/g);
+            if (portMatches) {
+              const devPorts = portMatches.map(m => parseInt(m.slice(1))).filter(p => p >= 3000 && p <= 9999);
+              if (devPorts.length > 0) previewPort = devPorts[0];
+            }
+          } catch {}
+        }
+        if (!previewUrl) previewUrl = previewPort ? `http://localhost:${previewPort}` : null;
+        if (!previewUrl) return { status: "error", type: t, error: "No preview server detected. Start a dev server first." };
+        const screenshotsDir = path.join(dir, "_screenshots");
+        if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true });
+        const screenshotName = `screenshot-${Date.now()}.png`;
+        const screenshotPath = path.join(screenshotsDir, screenshotName);
+        const targetUrl = action.url || previewUrl;
+        const viewportW = action.width || 1280;
+        const viewportH = action.height || 720;
+        const waitMs = action.waitMs || 2000;
+        let puppeteerPath = null;
+        try { puppeteerPath = require.resolve("puppeteer"); } catch {}
+        if (!puppeteerPath) { try { puppeteerPath = require.resolve("puppeteer-core"); } catch {} }
+        const playwrightBin = path.join(dir, "node_modules/playwright");
+        const puppeteerBin = path.join(dir, "node_modules/puppeteer");
+        const hasPlaywright = fs.existsSync(playwrightBin);
+        const hasPuppeteer = fs.existsSync(puppeteerBin) || puppeteerPath;
+        if (!hasPlaywright && !hasPuppeteer) {
+          return { status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, note: "No headless browser available. Install puppeteer globally or in the project: npm i puppeteer" } };
+        }
+        const selectorSnippet = action.selector ? (hasPlaywright
+          ? `const el=await p.$(${JSON.stringify(action.selector)});if(el){await el.screenshot({path:ss})}else{await p.screenshot({path:ss,fullPage:${!!action.fullPage}})}`
+          : `const el=await p.$(${JSON.stringify(action.selector)});if(el){await el.screenshot({path:ss})}else{await p.screenshot({path:ss,fullPage:${!!action.fullPage}})}`
+        ) : `await p.screenshot({path:ss,fullPage:${!!action.fullPage}})`;
+        const captureScript = hasPlaywright
+          ? `const{chromium}=require('playwright');(async()=>{const b=await chromium.launch({headless:true});const p=await b.newPage();await p.setViewportSize({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle',timeout:15000}).catch(()=>{});await p.waitForTimeout(${waitMs});const ss=${JSON.stringify(screenshotPath)};${selectorSnippet};await b.close()})();`
+          : `const pup=require(${JSON.stringify(puppeteerPath || "puppeteer")});(async()=>{const b=await pup.launch({headless:'new',args:['--no-sandbox']});const p=await b.newPage();await p.setViewport({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle0',timeout:15000}).catch(()=>{});await new Promise(r=>setTimeout(r,${waitMs}));const ss=${JSON.stringify(screenshotPath)};${selectorSnippet};await b.close()})();`;
+        return new Promise(async (resolve) => {
+          try {
+            childProcess.execSync(`node -e "${captureScript.replace(/"/g, '\\"')}"`, { cwd: dir, timeout: 45000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            if (fs.existsSync(screenshotPath)) {
+              const imgData = fs.readFileSync(screenshotPath);
+              const base64 = imgData.toString("base64");
+              const screenshotRelPath = `_screenshots/${screenshotName}`;
+              const imgur = await uploadToImgur(base64);
+              resolve({ status: "success", type: t, data: {
+                url: previewUrl, port: previewPort, captured: true,
+                screenshotPath: screenshotRelPath,
+                imgurUrl: imgur.uploaded ? imgur.url : null,
+                imgurError: imgur.uploaded ? undefined : imgur.reason,
+                base64Length: base64.length,
+                width: viewportW, height: viewportH
+              }});
+            } else {
+              resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: "Screenshot file not created" } });
+            }
+          } catch (e) {
+            resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: `Screenshot failed: ${e.message}`.slice(0, 500) } });
+          }
+        });
+      }
+      case "browser_interact":
+      case "interact_preview": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const interactAction = action.action;
+        if (!interactAction) return { status: "error", type: t, error: "Missing 'action' field. Use: click, type, evaluate, runFunction, select, waitFor" };
+        let previewPort = null;
+        let previewUrl = null;
+        const extPreviews = _opts.previewProcesses;
+        if (extPreviews && extPreviews.size > 0) {
+          if (projectName && extPreviews.has(projectName)) {
+            const entry = extPreviews.get(projectName);
+            previewPort = entry.port;
+            if (entry.url) previewUrl = entry.url;
+          } else {
+            for (const [, entry] of extPreviews) {
+              if (entry.port) { previewPort = entry.port; if (entry.url) previewUrl = entry.url; break; }
+            }
+          }
+        }
+        if (!previewPort && sandboxProcesses.size > 0) {
+          for (const [, entry] of sandboxProcesses) {
+            if (entry.cmd && /dev|start|serve/.test(entry.cmd)) {
+              const portMatch = (entry.logs?.stdout || "").match(/localhost:(\d+)|port\s+(\d+)/i);
+              if (portMatch) { previewPort = parseInt(portMatch[1] || portMatch[2]); break; }
+            }
+          }
+        }
+        if (!previewPort) {
+          try {
+            const ssOut = childProcess.execSync("ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo none", { cwd: dir, timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            const portMatches = ssOut.match(/:(\d{4,5})\s/g);
+            if (portMatches) {
+              const devPorts = portMatches.map(m => parseInt(m.slice(1))).filter(p => p >= 3000 && p <= 9999);
+              if (devPorts.length > 0) previewPort = devPorts[0];
+            }
+          } catch {}
+        }
+        if (!previewUrl) previewUrl = previewPort ? `http://localhost:${previewPort}` : null;
+        if (!previewUrl) return { status: "error", type: t, error: "No preview server detected. Start a dev server first." };
+        let puppeteerPath = null;
+        try { puppeteerPath = require.resolve("puppeteer"); } catch {}
+        if (!puppeteerPath) { try { puppeteerPath = require.resolve("puppeteer-core"); } catch {} }
+        const playwrightBin2 = path.join(dir, "node_modules/playwright");
+        const puppeteerBin2 = path.join(dir, "node_modules/puppeteer");
+        const hasPlaywright2 = fs.existsSync(playwrightBin2);
+        const hasPuppeteer2 = fs.existsSync(puppeteerBin2) || puppeteerPath;
+        if (!hasPlaywright2 && !hasPuppeteer2) {
+          return { status: "error", type: t, error: "No headless browser available. Install puppeteer: npm i puppeteer" };
+        }
+        const targetUrl = action.url || previewUrl;
+        const viewportW = action.width || 1280;
+        const viewportH = action.height || 720;
+        const waitMs = action.waitMs || 1000;
+        const doScreenshot = !!action.screenshot;
+        const screenshotsDir2 = path.join(dir, "_screenshots");
+        if (doScreenshot && !fs.existsSync(screenshotsDir2)) fs.mkdirSync(screenshotsDir2, { recursive: true });
+        const ssName = `interact-${Date.now()}.png`;
+        const ssPath = path.join(screenshotsDir2, ssName);
+        const resultFile = path.join(dir, `_interact_result_${Date.now()}.json`);
+        let actionCode = "";
+        switch (interactAction) {
+          case "click":
+            if (!action.selector) return { status: "error", type: t, error: "Missing 'selector' for click action" };
+            actionCode = hasPlaywright2
+              ? `await p.click(${JSON.stringify(action.selector)},{timeout:10000}).catch(e=>{result.error=e.message});`
+              : `await p.click(${JSON.stringify(action.selector)}).catch(e=>{result.error=e.message});`;
+            break;
+          case "type":
+            if (!action.selector) return { status: "error", type: t, error: "Missing 'selector' for type action" };
+            if (action.value === undefined) return { status: "error", type: t, error: "Missing 'value' for type action" };
+            actionCode = hasPlaywright2
+              ? `await p.fill(${JSON.stringify(action.selector)},${JSON.stringify(action.value)}).catch(e=>{result.error=e.message});`
+              : `await p.type(${JSON.stringify(action.selector)},${JSON.stringify(action.value)}).catch(e=>{result.error=e.message});`;
+            break;
+          case "select":
+            if (!action.selector) return { status: "error", type: t, error: "Missing 'selector' for select action" };
+            if (!action.value) return { status: "error", type: t, error: "Missing 'value' for select action" };
+            actionCode = hasPlaywright2
+              ? `await p.selectOption(${JSON.stringify(action.selector)},${JSON.stringify(action.value)}).catch(e=>{result.error=e.message});`
+              : `await p.select(${JSON.stringify(action.selector)},${JSON.stringify(action.value)}).catch(e=>{result.error=e.message});`;
+            break;
+          case "evaluate":
+            if (!action.script) return { status: "error", type: t, error: "Missing 'script' for evaluate action" };
+            actionCode = hasPlaywright2
+              ? `try{const r=await p.evaluate(()=>{${action.script}});result.returnValue=r}catch(e){result.error=e.message}`
+              : `try{const r=await p.evaluate(()=>{${action.script}});result.returnValue=r}catch(e){result.error=e.message}`;
+            break;
+          case "runFunction": {
+            const fnName = action.functionName || action.script;
+            if (!fnName) return { status: "error", type: t, error: "Missing 'functionName' for runFunction action" };
+            const fnArgs = action.args ? JSON.stringify(action.args) : "[]";
+            actionCode = hasPlaywright2
+              ? `try{const r=await p.evaluate(([fn,a])=>{const f=fn.split('.').reduce((o,k)=>o&&o[k],window);if(typeof f!=='function')throw new Error(fn+' is not a function');return f(...a)},[${JSON.stringify(fnName)},${fnArgs}]);result.returnValue=r}catch(e){result.error=e.message}`
+              : `try{const r=await p.evaluate(([fn,a])=>{const f=fn.split('.').reduce((o,k)=>o&&o[k],window);if(typeof f!=='function')throw new Error(fn+' is not a function');return f(...a)},[${JSON.stringify(fnName)},${fnArgs}]);result.returnValue=r}catch(e){result.error=e.message}`;
+            break;
+          }
+          case "waitFor":
+            if (!action.selector) return { status: "error", type: t, error: "Missing 'selector' for waitFor action" };
+            actionCode = hasPlaywright2
+              ? `await p.waitForSelector(${JSON.stringify(action.selector)},{timeout:${action.timeout||10000}}).catch(e=>{result.error=e.message});`
+              : `await p.waitForSelector(${JSON.stringify(action.selector)},{timeout:${action.timeout||10000}}).catch(e=>{result.error=e.message});`;
+            break;
+          default:
+            return { status: "error", type: t, error: `Unknown interact action: ${interactAction}. Use: click, type, evaluate, select, waitFor` };
+        }
+        if (action.waitAfter) {
+          actionCode += hasPlaywright2
+            ? `await p.waitForTimeout(${parseInt(action.waitAfter)||1000});`
+            : `await new Promise(r=>setTimeout(r,${parseInt(action.waitAfter)||1000}));`;
+        }
+        const ssCode = doScreenshot ? `await p.screenshot({path:${JSON.stringify(ssPath)},fullPage:${!!action.fullPage}});result.screenshotCaptured=true;` : "";
+        const getTextCode = action.extractText && action.extractSelector
+          ? (hasPlaywright2
+            ? `try{const el=await p.$(${JSON.stringify(action.extractSelector)});if(el){result.extractedText=await el.textContent()}}catch(e){result.extractError=e.message}`
+            : `try{const el=await p.$(${JSON.stringify(action.extractSelector)});if(el){result.extractedText=await p.evaluate(e=>e.textContent,el)}}catch(e){result.extractError=e.message}`)
+          : "";
+        const script = hasPlaywright2
+          ? `const{chromium}=require('playwright');const fs=require('fs');(async()=>{const b=await chromium.launch({headless:true});const p=await b.newPage();await p.setViewportSize({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle',timeout:15000}).catch(()=>{});await p.waitForTimeout(${waitMs});const result={action:${JSON.stringify(interactAction)},success:true};${actionCode}${ssCode}${getTextCode}fs.writeFileSync(${JSON.stringify(resultFile)},JSON.stringify(result));await b.close()})().catch(e=>{require('fs').writeFileSync(${JSON.stringify(resultFile)},JSON.stringify({error:e.message}))});`
+          : `const pup=require(${JSON.stringify(puppeteerPath||"puppeteer")});const fs=require('fs');(async()=>{const b=await pup.launch({headless:'new',args:['--no-sandbox']});const p=await b.newPage();await p.setViewport({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle0',timeout:15000}).catch(()=>{});await new Promise(r=>setTimeout(r,${waitMs}));const result={action:${JSON.stringify(interactAction)},success:true};${actionCode}${ssCode}${getTextCode}fs.writeFileSync(${JSON.stringify(resultFile)},JSON.stringify(result));await b.close()})().catch(e=>{require('fs').writeFileSync(${JSON.stringify(resultFile)},JSON.stringify({error:e.message}))});`;
+        return new Promise(async (resolve) => {
+          try {
+            childProcess.execSync(`node -e "${script.replace(/"/g, '\\"')}"`, { cwd: dir, timeout: 60000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            let result = { action: interactAction, success: true };
+            if (fs.existsSync(resultFile)) {
+              try { result = { ...result, ...JSON.parse(fs.readFileSync(resultFile, "utf-8")) }; } catch {}
+              try { fs.unlinkSync(resultFile); } catch {}
+            }
+            if (doScreenshot && fs.existsSync(ssPath)) {
+              const imgData = fs.readFileSync(ssPath);
+              const base64 = imgData.toString("base64");
+              result.screenshotPath = `_screenshots/${ssName}`;
+              result.base64Length = base64.length;
+              const imgur = await uploadToImgur(base64);
+              result.imgurUrl = imgur.uploaded ? imgur.url : null;
+              if (!imgur.uploaded) result.imgurError = imgur.reason;
+            }
+            result.url = previewUrl;
+            result.port = previewPort;
+            resolve({ status: "success", type: t, data: result });
+          } catch (e) {
+            if (fs.existsSync(resultFile)) try { fs.unlinkSync(resultFile); } catch {}
+            resolve({ status: "error", type: t, error: `Interaction failed: ${e.message}`.slice(0, 500) });
+          }
+        });
       }
       case "generate_component":
       case "generate_page":
