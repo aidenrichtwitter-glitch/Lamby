@@ -5356,6 +5356,31 @@ const GrokBridge: React.FC = () => {
               Context
             </button>
             <button
+              onClick={async () => {
+                const keySource = bridgeKeyInput || (externalSnapshotUrl || snapshotUrl || '').match(/key=([^&]+)/)?.[1] || '';
+                if (keySource) {
+                  try {
+                    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                      await navigator.clipboard.writeText(keySource);
+                    } else if (typeof window !== 'undefined' && (window as any).require) {
+                      (window as any).require('electron').clipboard.writeText(keySource);
+                    }
+                    setStatusMessage(`Key copied: ${keySource.substring(0, 8)}...`);
+                    setTimeout(() => setStatusMessage(null), 2000);
+                  } catch { setStatusMessage('Failed to copy key'); setTimeout(() => setStatusMessage(null), 2000); }
+                } else {
+                  setStatusMessage('No key available — connect bridge first');
+                  setTimeout(() => setStatusMessage(null), 2000);
+                }
+              }}
+              data-testid="button-copy-key"
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors border border-amber-500/20"
+              title="Copy the current bridge/app key to clipboard"
+            >
+              <Key className="w-3 h-3" />
+              Key
+            </button>
+            <button
               onClick={copyEvolutionContext}
               disabled={evolutionLoading}
               data-testid="button-evolution-context"
