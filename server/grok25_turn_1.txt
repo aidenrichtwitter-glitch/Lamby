@@ -1,0 +1,15 @@
+{
+  "actions": [
+    {
+      "type": "read_file",
+      "project": "landing-page",
+      "path": "components/hero-home.tsx"
+    },
+    {
+      "type": "write_file",
+      "project": "landing-page",
+      "path": "components/hero-home.tsx",
+      "content": "import React from 'react';\n\nconst HeroHome = () => {\n  return (\n    <section className=\"bg-violet-500\">\n      <h1 className=\"text-violet-600\">Build Anything with Lamby</h1>\n      <p className=\"text-purple-700\">AI-powered autonomous development</p>\n    </section>\n  );\n};\n\nexport default HeroHome;"
+    }
+  ]
+}
