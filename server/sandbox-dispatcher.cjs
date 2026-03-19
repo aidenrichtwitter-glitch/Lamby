@@ -127,9 +127,10 @@ const ALLOWED_CMD_PREFIXES = [
 
 const sandboxProcesses = new Map();
 
-function executeSandboxAction(action, projectsDir) {
+function executeSandboxAction(action, projectsDir, options) {
   const t = action.type;
   const projectName = action.project || "";
+  const _opts = options || {};
 
   try {
     switch (t) {
@@ -1123,7 +1124,20 @@ function executeSandboxAction(action, projectsDir) {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
         let previewPort = null;
-        if (sandboxProcesses.size > 0) {
+        let previewUrl = null;
+        const extPreviews = _opts.previewProcesses;
+        if (extPreviews && extPreviews.size > 0) {
+          if (projectName && extPreviews.has(projectName)) {
+            const entry = extPreviews.get(projectName);
+            previewPort = entry.port;
+            if (entry.url) previewUrl = entry.url;
+          } else {
+            for (const [name, entry] of extPreviews) {
+              if (entry.port) { previewPort = entry.port; if (entry.url) previewUrl = entry.url; break; }
+            }
+          }
+        }
+        if (!previewPort && sandboxProcesses.size > 0) {
           for (const [, entry] of sandboxProcesses) {
             if (entry.cmd && /dev|start|serve/.test(entry.cmd)) {
               const portMatch = (entry.logs?.stdout || "").match(/localhost:(\d+)|port\s+(\d+)/i);
@@ -1141,7 +1155,7 @@ function executeSandboxAction(action, projectsDir) {
             }
           } catch {}
         }
-        const previewUrl = previewPort ? `http://localhost:${previewPort}` : null;
+        if (!previewUrl) previewUrl = previewPort ? `http://localhost:${previewPort}` : null;
         if (t === "get_preview_url") {
           return { status: "success", type: t, data: { url: previewUrl, port: previewPort } };
         }
@@ -1362,7 +1376,7 @@ async function executeSandboxActions(actions, projectsDir, options = {}) {
   const results = [];
   for (let i = 0; i < actions.length; i++) {
     const action = actions[i];
-    const result = await Promise.resolve(executeSandboxAction(action, projectsDir));
+    const result = await Promise.resolve(executeSandboxAction(action, projectsDir, options));
     results.push({ actionIndex: i, ...result });
     auditLog.push({ ts: Date.now(), action: action.type, project: action.project || "", status: result.status, detail: result.error || undefined });
     if (auditLog.length > 1000) auditLog.splice(0, auditLog.length - 500);

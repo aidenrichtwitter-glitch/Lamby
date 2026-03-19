@@ -160,7 +160,7 @@ async function handleBridgeMessage(msg) {
     } else if (parsed.type === "sandbox-execute-request" && parsed.requestId) {
       console.log(`[Bridge] Received sandbox-execute-request (reqId: ${parsed.requestId.slice(0, 8)}, actions: ${(parsed.actions || []).length})`);
       try {
-        const result = await executeSandboxActions(parsed.actions || [], PROJECTS_DIR, { auditLog: sandboxAuditLog });
+        const result = await executeSandboxActions(parsed.actions || [], PROJECTS_DIR, { auditLog: sandboxAuditLog, previewProcesses });
         bridgeSend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result }));
         console.log(`[Bridge] Sent sandbox-execute-response (reqId: ${parsed.requestId.slice(0, 8)})`);
       } catch (err) {
@@ -503,7 +503,7 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, { error: "Max 50 actions per request" }, 400);
         return;
       }
-      const result = await executeSandboxActions(actions, PROJECTS_DIR, { auditLog: sandboxAuditLog });
+      const result = await executeSandboxActions(actions, PROJECTS_DIR, { auditLog: sandboxAuditLog, previewProcesses });
       sendJson(res, result);
     } catch (err) {
       sendJson(res, { error: err.message }, 500);
@@ -1078,7 +1078,7 @@ if (WebSocketServer) {
           const onActionResult = msg.stream ? (i, result) => {
             try { ws.send(JSON.stringify({ type: "action-result", requestId: msg.requestId, actionIndex: i, actionType: result.type, status: result.status, data: result.data, error: result.error })); } catch {}
           } : undefined;
-          const result = await executeSandboxActions(actions, PROJECTS_DIR, { auditLog: sandboxAuditLog, onActionResult });
+          const result = await executeSandboxActions(actions, PROJECTS_DIR, { auditLog: sandboxAuditLog, onActionResult, previewProcesses });
           ws.send(JSON.stringify({ type: "result", requestId: msg.requestId, ...result }));
         } else if (msg.type === "ping") {
           ws.send(JSON.stringify({ type: "pong" }));
