@@ -118,4 +118,11 @@ export default function HeroHome() {
                 <span className="text-[13px] font-medium text-white">
                   cruip.com
                 </span>
-          
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
