@@ -1,0 +1,332 @@
+const http = require("http");
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+const { WebSocketServer } = require("ws");
+
+const PORT = parseInt(process.env.PORT || "5000", 10);
+const DIST_DIR = path.resolve(__dirname, "..", "dist");
+const snapshotKey = crypto.randomBytes(16).toString("hex");
+
+const bridgeClients = new Map();
+const pendingRelayRequests = new Map();
+const pendingSandboxRelayRequests = new Map();
+const sandboxAuditLog = [];
+
+const MIME_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".webmanifest": "application/manifest+json",
+  ".map": "application/json",
+  ".txt": "text/plain; charset=utf-8",
+};
+
+function getMime(filePath) {
+  return MIME_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream";
+}
+
+function sendJson(res, obj, status) {
+  res.writeHead(status || 200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(obj));
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString()));
+    req.on("error", reject);
+  });
+}
+
+function getKey(req, url) {
+  return url.searchParams.get("key") || (req.headers.authorization || "").replace("Bearer ", "");
+}
+
+function findBridgeClient(key) {
+  if (key !== snapshotKey) return null;
+  for (const [, client] of bridgeClients) {
+    if (client.ws.readyState === 1) return client;
+  }
+  return null;
+}
+
+function serveStatic(req, res) {
+  let filePath = path.join(DIST_DIR, req.url === "/" ? "index.html" : req.url.split("?")[0]);
+  filePath = path.normalize(filePath);
+  if (!filePath.startsWith(DIST_DIR)) {
+    res.writeHead(403);
+    res.end("Forbidden");
+    return;
+  }
+
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+    const ext = path.extname(filePath);
+    const headers = { "Content-Type": getMime(filePath) };
+    if (ext !== ".html") {
+      headers["Cache-Control"] = "public, max-age=31536000, immutable";
+    }
+    res.writeHead(200, headers);
+    fs.createReadStream(filePath).pipe(res);
+  } else {
+    const indexPath = path.join(DIST_DIR, "index.html");
+    if (fs.existsSync(indexPath)) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      fs.createReadStream(indexPath).pipe(res);
+    } else {
+      res.writeHead(404);
+      res.end("Not found");
+    }
+  }
+}
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  const pathname = url.pathname;
+
+  if (pathname === "/api/snapshot-key") {
+    const host = req.headers.host || `localhost:${PORT}`;
+    const protocol = req.headers["x-forwarded-proto"] || "https";
+    const baseUrl = `${protocol}://${host}`;
+    sendJson(res, {
+      key: snapshotKey,
+      baseUrl,
+      exampleUrl: `${baseUrl}/api/snapshot/PROJECT_NAME?key=${snapshotKey}`,
+      commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`,
+      commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Relay-only in production — requests forwarded to connected desktop client via bridge.",
+    });
+    return;
+  }
+
+  if (pathname === "/api/bridge-status") {
+    const providedKey = getKey(req, url);
+    if (providedKey !== snapshotKey) {
+      sendJson(res, { error: "Invalid key" }, 403);
+      return;
+    }
+    const clients = Array.from(bridgeClients.entries()).map(([key, c]) => ({
+      key: key.substring(0, 8) + "...",
+      snapshotKey: c.snapshotKey.substring(0, 8) + "...",
+      connected: c.ws.readyState === 1,
+      lastPing: c.lastPing,
+    }));
+    sendJson(res, { connectedClients: clients.length, clients });
+    return;
+  }
+
+  if (pathname.startsWith("/api/snapshot/")) {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const pathParts = pathname.replace("/api/snapshot/", "").split("/").filter(Boolean);
+    const projectName = pathParts[0] || "";
+    const providedKey = getKey(req, url);
+
+    if (providedKey !== snapshotKey) {
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      res.end("Lamby Snapshot API\n\nAccess denied — invalid or missing key.\nProvide ?key=YOUR_KEY or Authorization: Bearer YOUR_KEY");
+      return;
+    }
+
+    const matchedClient = findBridgeClient(providedKey);
+    if (matchedClient) {
+      const requestId = crypto.randomUUID();
+      const relayPromise = new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          pendingRelayRequests.delete(requestId);
+          resolve("Error: Relay timeout — desktop app did not respond within 30 seconds.");
+        }, 30000);
+        pendingRelayRequests.set(requestId, { resolve, timer });
+      });
+      try {
+        matchedClient.ws.send(JSON.stringify({ type: "snapshot-request", requestId, projectName }));
+      } catch {
+        res.writeHead(502, { "Content-Type": "text/plain" });
+        res.end("Error: Could not reach desktop app through relay bridge.");
+        return;
+      }
+      const snapshot = await relayPromise;
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end(snapshot);
+      return;
+    }
+
+    res.writeHead(503, { "Content-Type": "text/plain" });
+    res.end("No desktop client connected. The production server is relay-only — connect your desktop app via the Bridge to access project snapshots.");
+    return;
+  }
+
+  if (pathname === "/api/sandbox/execute") {
+    if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
+    try {
+      const providedKey = getKey(req, url);
+      if (providedKey !== snapshotKey) {
+        sendJson(res, { error: "Invalid key" }, 403);
+        return;
+      }
+
+      const body = JSON.parse(await readBody(req));
+      const actions = body.actions;
+      if (!Array.isArray(actions) || actions.length === 0) {
+        sendJson(res, { error: "actions array required" }, 400);
+        return;
+      }
+      if (actions.length > 50) {
+        sendJson(res, { error: "Max 50 actions per request" }, 400);
+        return;
+      }
+
+      const matchedClient = findBridgeClient(providedKey);
+      if (!matchedClient) {
+        sendJson(res, { error: "No desktop client connected. The production server is relay-only — connect your desktop app via the Bridge." }, 503);
+        return;
+      }
+
+      const requestId = crypto.randomUUID();
+      const relayPromise = new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          pendingSandboxRelayRequests.delete(requestId);
+          resolve(JSON.stringify({ error: "Relay timeout — desktop app did not respond within 60 seconds." }));
+        }, 60000);
+        pendingSandboxRelayRequests.set(requestId, { resolve, timer });
+      });
+      try {
+        matchedClient.ws.send(JSON.stringify({ type: "sandbox-execute-request", requestId, actions }));
+      } catch {
+        sendJson(res, { error: "Could not reach desktop app through relay bridge." }, 502);
+        return;
+      }
+
+      for (const action of actions) {
+        sandboxAuditLog.push({ ts: Date.now(), action: action.type, project: action.project || "", status: "relayed", detail: "Forwarded to desktop via bridge" });
+      }
+      if (sandboxAuditLog.length > 1000) sandboxAuditLog.splice(0, sandboxAuditLog.length - 500);
+
+      const result = await relayPromise;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(result);
+    } catch (err) {
+      sendJson(res, { error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pathname === "/api/sandbox/audit-log") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const providedKey = getKey(req, url);
+    if (providedKey !== snapshotKey) {
+      sendJson(res, { error: "Invalid key" }, 403);
+      return;
+    }
+    sendJson(res, { entries: sandboxAuditLog.slice(-100) });
+    return;
+  }
+
+  if (pathname === "/health" || pathname === "/healthz") {
+    sendJson(res, { status: "ok", bridge: bridgeClients.size > 0 ? "connected" : "no-desktop", uptime: process.uptime() });
+    return;
+  }
+
+  serveStatic(req, res);
+});
+
+const bridgeWss = new WebSocketServer({ noServer: true });
+
+bridgeWss.on("connection", (ws, bridgeKey, clientSnapshotKey) => {
+  console.log(`[Bridge Relay] Desktop client connected (key: ${bridgeKey.substring(0, 8)}...)`);
+  bridgeClients.set(bridgeKey, { ws, snapshotKey: clientSnapshotKey, lastPing: Date.now() });
+
+  ws.on("message", (data) => {
+    try {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === "snapshot-response" && msg.requestId) {
+        const pending = pendingRelayRequests.get(msg.requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pendingRelayRequests.delete(msg.requestId);
+          pending.resolve(msg.snapshot || "Error: Empty snapshot response from desktop.");
+        }
+      } else if (msg.type === "sandbox-execute-response" && msg.requestId) {
+        const pending = pendingSandboxRelayRequests.get(msg.requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pendingSandboxRelayRequests.delete(msg.requestId);
+          pending.resolve(JSON.stringify(msg.result || { error: "Empty sandbox response from desktop." }));
+        }
+      } else if (msg.type === "ping") {
+        const client = bridgeClients.get(bridgeKey);
+        if (client) client.lastPing = Date.now();
+        try { ws.send(JSON.stringify({ type: "pong" })); } catch {}
+      }
+    } catch {}
+  });
+
+  ws.on("close", () => {
+    console.log(`[Bridge Relay] Desktop client disconnected (key: ${bridgeKey.substring(0, 8)}...)`);
+    bridgeClients.delete(bridgeKey);
+  });
+
+  ws.on("error", () => {
+    bridgeClients.delete(bridgeKey);
+  });
+});
+
+server.on("upgrade", (req, socket, head) => {
+  const reqUrl = new URL(req.url || "", "http://localhost");
+  if (req.url && req.url.startsWith("/bridge-ws")) {
+    const bridgeKey = reqUrl.searchParams.get("key") || "";
+    const clientSnapshotKey = reqUrl.searchParams.get("snapshotKey") || "";
+    if (!bridgeKey || bridgeKey.length < 8) {
+      socket.destroy();
+      return;
+    }
+    if (clientSnapshotKey !== snapshotKey) {
+      console.log(`[Bridge Relay] Rejected connection — invalid snapshotKey`);
+      socket.destroy();
+      return;
+    }
+    bridgeWss.handleUpgrade(req, socket, head, (ws) => {
+      bridgeWss.emit("connection", ws, bridgeKey, clientSnapshotKey);
+    });
+    return;
+  }
+  socket.destroy();
+});
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, client] of bridgeClients) {
+    if (now - client.lastPing > 120000) {
+      console.log(`[Bridge Relay] Pruning stale client (key: ${key.substring(0, 8)}...)`);
+      try { client.ws.terminate(); } catch {}
+      bridgeClients.delete(key);
+    }
+  }
+}, 30000);
+
+process.on("uncaughtException", (err) => {
+  console.error(`[Lamby Production] Uncaught exception: ${err.message}`);
+  console.error(err.stack);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error(`[Lamby Production] Unhandled rejection: ${reason}`);
+});
+
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`[Lamby Production] Server running on port ${PORT}`);
+  console.log(`[Lamby Production] Snapshot key: ${snapshotKey}`);
+  console.log(`[Lamby Production] Bridge relay ready at /bridge-ws`);
+  console.log(`[Lamby Production] Serving static files from ${DIST_DIR}`);
+});

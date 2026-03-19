@@ -1,0 +1,12 @@
+projects/
+electron-browser/
+test/
+supabase/
+attached_assets/
+.local/
+.agents/
+.git/
+.cache/
+.config/
+.upm/
+references/
