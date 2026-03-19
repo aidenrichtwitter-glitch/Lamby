@@ -772,7 +772,52 @@ async function main() {
     assert(res.data.results[0].data.buildOutput === null, "get_build_metrics skips build when runBuild=false");
   } catch (e) { log("\u274c", `get_build_metrics failed: ${e.message}`); }
 
-  log("\n\ud83d\udccb", "7.7 Security: apply_patch rejects path traversal...");
+  log("\n\ud83d\udccb", "7.7 copy_folder...");
+  try {
+    await sandboxExecute(key, [
+      { type: "create_file", project: PROJECT, path: "copy-test/a.txt", content: "aaa" },
+      { type: "create_file", project: PROJECT, path: "copy-test/b.txt", content: "bbb" },
+    ]);
+    const res = await sandboxExecute(key, [
+      { type: "copy_folder", project: PROJECT, source: "copy-test", dest: "copy-test-backup" },
+    ]);
+    assert(res.data.success === true, "copy_folder succeeds");
+    const verify = await sandboxExecute(key, [
+      { type: "read_file", project: PROJECT, path: "copy-test-backup/a.txt" },
+    ]);
+    assert(verify.data.results[0].data.content === "aaa", "Copied folder contents match");
+    await sandboxExecute(key, [
+      { type: "delete_file", project: PROJECT, path: "copy-test", recursive: true },
+      { type: "delete_file", project: PROJECT, path: "copy-test-backup", recursive: true },
+    ]);
+  } catch (e) { log("\u274c", `copy_folder failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.8 apply_patch with context validation...");
+  try {
+    await sandboxExecute(key, [{ type: "create_file", project: PROJECT, path: "patch-test.txt", content: "line1\nline2\nline3\n" }]);
+    const res = await sandboxExecute(key, [
+      { type: "apply_patch", project: PROJECT, patch: "--- a/patch-test.txt\n+++ b/patch-test.txt\n@@ -1,3 +1,3 @@\n line1\n-line2\n+line2-modified\n line3" },
+    ]);
+    assert(res.data.success === true, "apply_patch succeeds");
+    assert(res.data.results[0].data.appliedFiles.length === 1, "apply_patch applied 1 file");
+    const verify = await sandboxExecute(key, [{ type: "read_file", project: PROJECT, path: "patch-test.txt" }]);
+    assert(verify.data.results[0].data.content.includes("line2-modified"), "Patch content applied correctly");
+    await sandboxExecute(key, [{ type: "delete_file", project: PROJECT, path: "patch-test.txt" }]);
+  } catch (e) { log("\u274c", `apply_patch failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.9 apply_patch rejects mismatched context...");
+  try {
+    await sandboxExecute(key, [{ type: "create_file", project: PROJECT, path: "patch-bad.txt", content: "alpha\nbeta\ngamma\n" }]);
+    const res = await sandboxExecute(key, [
+      { type: "apply_patch", project: PROJECT, patch: "--- a/patch-bad.txt\n+++ b/patch-bad.txt\n@@ -1,3 +1,3 @@\n wrong-context\n-not-here\n+replacement" },
+    ]);
+    assert(res.data.success === true, "apply_patch returns (with context errors)");
+    const errOrWarn = res.data.results[0].data.errors;
+    assert(errOrWarn.length > 0, "apply_patch reports mismatch on bad context");
+    await sandboxExecute(key, [{ type: "delete_file", project: PROJECT, path: "patch-bad.txt" }]);
+  } catch (e) { log("\u274c", `apply_patch context test failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.10 Security: apply_patch rejects path traversal...");
   try {
     const res = await sandboxExecute(key, [
       { type: "apply_patch", project: PROJECT, patch: "--- a/../../../etc/passwd\n+++ b/../../../etc/passwd\n@@ -1,1 +1,1 @@\n-root\n+hacked" },
@@ -781,6 +826,92 @@ async function main() {
     assert(res.data.results[0].data.errors.length > 0, "apply_patch blocks path traversal");
     assert(res.data.results[0].data.errors[0].error.includes("traversal"), "Error mentions traversal");
   } catch (e) { log("\u274c", `apply_patch security test failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.11 add_dependency validation...");
+  try {
+    const badRes = await sandboxExecute(key, [
+      { type: "add_dependency", project: PROJECT, name: "lodash; rm -rf /" },
+    ]);
+    assert(badRes.data.results[0].status === "error", "add_dependency rejects injection");
+    assert(badRes.data.results[0].error.includes("Invalid package"), "Error mentions invalid package");
+  } catch (e) { log("\u274c", `add_dependency validation failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.12 type_check...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "type_check", project: PROJECT }]);
+    assert(res.data.results[0].status !== undefined, "type_check returns a result");
+  } catch (e) { log("\u274c", `type_check failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.13 lint_and_fix...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "lint_and_fix", project: PROJECT }]);
+    assert(res.data.results[0].status !== undefined, "lint_and_fix returns a result");
+  } catch (e) { log("\u274c", `lint_and_fix failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.14 format_files...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "format_files", project: PROJECT }]);
+    assert(res.data.results[0].status !== undefined, "format_files returns a result");
+  } catch (e) { log("\u274c", `format_files failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.15 restart_dev_server (no restart)...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "restart_dev_server", project: PROJECT }]);
+    assert(res.data.success === true, "restart_dev_server succeeds");
+    assert(res.data.results[0].data.killedAll === true, "restart_dev_server reports killedAll");
+  } catch (e) { log("\u274c", `restart_dev_server failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.16 git_push (error expected - no remote)...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "git_push", project: PROJECT }]);
+    assert(res.data.results[0].status !== undefined, "git_push returns a result");
+  } catch (e) { log("\u274c", `git_push failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.17 git_pull (error expected - no remote)...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "git_pull", project: PROJECT }]);
+    assert(res.data.results[0].status !== undefined, "git_pull returns a result");
+  } catch (e) { log("\u274c", `git_pull failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.18 git_merge (error expected - no branch)...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "git_merge", project: PROJECT, branch: "nonexistent" }]);
+    assert(res.data.results[0].status !== undefined, "git_merge returns a result");
+  } catch (e) { log("\u274c", `git_merge failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.19 export_project...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "export_project", project: PROJECT, format: "tar.gz" }]);
+    assert(res.data.success === true, "export_project succeeds");
+    assert(res.data.results[0].data.archive.includes(".tar.gz"), "export_project creates tar.gz");
+  } catch (e) { log("\u274c", `export_project failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.20 rollback_last_change (error expected)...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "rollback_last_change", project: PROJECT, files: "index.html" }]);
+    assert(res.data.results[0].status !== undefined, "rollback_last_change returns a result");
+  } catch (e) { log("\u274c", `rollback_last_change failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.21 Security: env path traversal blocked...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "set_env_var", project: PROJECT, key: "X", value: "y", file: "../../etc/shadow" },
+    ]);
+    assert(res.data.results[0].status === "error", "set_env_var blocks path traversal");
+    const res2 = await sandboxExecute(key, [
+      { type: "get_env_vars", project: PROJECT, file: "../../../etc/passwd" },
+    ]);
+    assert(res2.data.results[0].status === "error", "get_env_vars blocks path traversal");
+  } catch (e) { log("\u274c", `env security test failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.22 Security: git_merge injection blocked...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "git_merge", project: PROJECT, branch: "main; rm -rf /" },
+    ]);
+    assert(res.data.results[0].status === "error", "git_merge blocks injection");
+    assert(res.data.results[0].error.includes("branch required"), "Error mentions invalid branch");
+  } catch (e) { log("\u274c", `git_merge injection test failed: ${e.message}`); }
 
   // ============================================================
   // SUMMARY

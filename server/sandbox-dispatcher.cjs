@@ -551,16 +551,51 @@ function executeSandboxAction(action, projectsDir) {
             let content = fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8") : "";
             let contentLines = content.split("\n");
             let offset = 0;
-            for (const hunk of hunks) {
+            let hunkErrors = [];
+            for (let hi = 0; hi < hunks.length; hi++) {
+              const hunk = hunks[hi];
               const startLine = hunk.oldStart - 1 + offset;
-              const removeCount = hunk.removes.length;
-              contentLines.splice(startLine, removeCount, ...hunk.adds);
-              offset += hunk.adds.length - removeCount;
+              let contextMatch = true;
+              for (let ri = 0; ri < hunk.removes.length; ri++) {
+                const lineIdx = startLine + ri;
+                if (lineIdx >= contentLines.length) { contextMatch = false; break; }
+                const actual = contentLines[lineIdx].trimEnd();
+                const expected = hunk.removes[ri].trimEnd();
+                if (actual !== expected) { contextMatch = false; break; }
+              }
+              if (!contextMatch) {
+                let found = false;
+                for (let search = Math.max(0, startLine - 10); search < Math.min(contentLines.length, startLine + 10); search++) {
+                  let match = true;
+                  for (let ri = 0; ri < hunk.removes.length; ri++) {
+                    if (search + ri >= contentLines.length || contentLines[search + ri].trimEnd() !== hunk.removes[ri].trimEnd()) { match = false; break; }
+                  }
+                  if (match) {
+                    const removeCount = hunk.removes.length;
+                    contentLines.splice(search, removeCount, ...hunk.adds);
+                    offset += hunk.adds.length - removeCount;
+                    found = true;
+                    break;
+                  }
+                }
+                if (!found) {
+                  hunkErrors.push(`Hunk ${hi + 1} at line ${hunk.oldStart}: context mismatch`);
+                }
+              } else {
+                const removeCount = hunk.removes.length;
+                contentLines.splice(startLine, removeCount, ...hunk.adds);
+                offset += hunk.adds.length - removeCount;
+              }
             }
             const parentDir = path.dirname(filePath);
             if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
-            fs.writeFileSync(filePath, contentLines.join("\n"));
-            appliedFiles.push(currentFile);
+            if (hunkErrors.length > 0 && hunkErrors.length === hunks.length) {
+              errors.push({ file: currentFile, error: `All hunks failed: ${hunkErrors.join("; ")}` });
+            } else {
+              fs.writeFileSync(filePath, contentLines.join("\n"));
+              appliedFiles.push(currentFile);
+              if (hunkErrors.length > 0) errors.push({ file: currentFile, warning: `Partial: ${hunkErrors.join("; ")}` });
+            }
           } catch (e) { errors.push({ file: currentFile, error: e.message }); }
           hunks = [];
         }
