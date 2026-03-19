@@ -201,9 +201,10 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
       } catch {}
       if (!keyData && !statusData) {
         try {
+          const devOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
           const [keyRes2, relayRes2] = await Promise.all([
-            fetch('http://localhost:5000/api/snapshot-key').catch(() => null),
-            fetch('http://localhost:5000/api/bridge-relay-status').catch(() => null),
+            fetch(`${devOrigin}/api/snapshot-key`).catch(() => null),
+            fetch(`${devOrigin}/api/bridge-relay-status`).catch(() => null),
           ]);
           keyData = keyRes2?.ok ? await keyRes2.json().catch(() => null) : null;
           const rd = relayRes2?.ok ? await relayRes2.json().catch(() => null) : null;
@@ -211,7 +212,7 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
         } catch {}
       }
       const relayUrl = statusData?.relayUrl || '';
-      const key = statusData?.bridgeKey || keyData?.key || '';
+      const key = statusData?.bridgeKey || statusData?.key || keyData?.key || '';
       if (relayUrl && key) {
         const relayBase = relayUrl.replace(/\/$/, '');
         return {
@@ -3823,10 +3824,10 @@ const GrokBridge: React.FC = () => {
         } catch {}
         if (!keyResult && !statusResult) {
           try {
-            serverBase = 'http://localhost:5000';
+            serverBase = window.location.origin || 'http://localhost:5000';
             const [keyRes2, relayRes2] = await Promise.all([
-              fetch('http://localhost:5000/api/snapshot-key'),
-              fetch('http://localhost:5000/api/bridge-relay-status').catch(() => null),
+              fetch(`${serverBase}/api/snapshot-key`),
+              fetch(`${serverBase}/api/bridge-relay-status`).catch(() => null),
             ]);
             if (keyRes2.ok) keyResult = await keyRes2.json();
             if (relayRes2 && relayRes2.ok) {
