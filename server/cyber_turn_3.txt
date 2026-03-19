@@ -1,3 +1,4 @@
 ```json
 {"actions": [{"type": "read_file", "project": "landing-page", "path": "components/hero-home.tsx"}]}
 ```
+DONE

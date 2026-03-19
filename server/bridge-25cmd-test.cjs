@@ -6,7 +6,7 @@ const path = require('path');
 const XAI_API = process.env.XAI_API;
 const RELAY = "https://bridge-relay.replit.app";
 const LOCAL = "http://localhost:5000";
-const MODEL = process.env.GROK_MODEL || "grok-3-mini-fast";
+const MODEL = process.env.GROK_MODEL || "grok-4";
 const PROJECT = "landing-page";
 const LOG_DIR = path.join(__dirname);
 
@@ -43,12 +43,12 @@ async function fetchSnapshotKey() {
 }
 
 function callXAI(messages) {
-  const body = JSON.stringify({ model: MODEL, stream: false, max_tokens: 16000, temperature: 0.3, messages });
+  const body = JSON.stringify({ model: MODEL, stream: false, max_tokens: 32000, temperature: 0.4, messages });
   return new Promise((resolve, reject) => {
     const req = https.request('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${XAI_API}`, 'Content-Length': Buffer.byteLength(body) },
-      timeout: 300000
+      timeout: 600000
     }, res => {
       let d = '';
       res.on('data', c => d += c);
@@ -225,43 +225,49 @@ async function main() {
   const origSnapshot = origContent.slice(0, 500);
   fs.writeFileSync(path.join(LOG_DIR, 'hero_before.txt'), typeof origContent === 'string' ? origContent : JSON.stringify(origContent));
 
-  const systemPrompt = `You are an autonomous coding agent. You make changes by outputting JSON action blocks.
+  const systemPrompt = `You are an autonomous coding agent with full read/write access to a Next.js project via a bridge API.
 
 ENDPOINT: POST ${cmdUrl}
-FORMAT: \`\`\`json
+FORMAT:
+\`\`\`json
 {"actions": [{"type": "ACTION", "project": "${PROJECT}", ...params}]}
 \`\`\`
 
-CRITICAL: Every action MUST include "project": "${PROJECT}". Without it, the action will fail.
+CRITICAL RULES:
+1. Every action MUST include "project": "${PROJECT}"
+2. write_file content MUST be the COMPLETE file — every import, every JSX tag, every closing bracket/brace. NEVER truncate. If the file is long, you MUST still write every single line.
+3. After writing, ALWAYS do a read_file to verify the file is complete and valid
+4. Output \`\`\`json action blocks — do NOT just describe changes
+5. When fully done AND verified, say DONE
 
 Available commands: list_tree, read_file, write_file, create_file, delete_file, move_file, copy_file, rename_file, grep, search_files, run_command, install_deps, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, detect_structure, start_process, kill_process, list_processes, build_project, run_tests
 
-Examples:
-- {"type":"read_file","project":"${PROJECT}","path":"components/hero-home.tsx"}
-- {"type":"write_file","project":"${PROJECT}","path":"components/hero-home.tsx","content":"COMPLETE FILE"}
-- {"type":"list_tree","project":"${PROJECT}"}
-
-Key rules:
-- EVERY action must have "project": "${PROJECT}"
-- write_file content must be the COMPLETE file — every import, every line, every closing bracket
-- Output JSON action blocks, do NOT just describe changes
-- When done, say DONE`;
+ANTI-TRUNCATION: The file you write will be compiled by Next.js immediately. If you leave out closing tags, closing braces, or the export — the build WILL break. Write the ENTIRE file top to bottom. Do NOT use "// ... rest of file" or any abbreviation.`;
 
   const conversation = [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: `First read the file components/hero-home.tsx, then write back the complete modified version.
+    { role: 'user', content: `Transform the landing page hero section into a neon cyberpunk theme.
 
-Changes needed:
-1. Change the main heading text to "Build Anything with Lamby"
-2. Change the subtitle to mention "AI-powered autonomous development"
-3. Change any blue/indigo CSS classes to violet/purple equivalents
+Steps:
+1. First, read components/hero-home.tsx to see the current file
+2. Then read the current styles (style.css or any relevant CSS/tailwind files) 
+3. Rewrite hero-home.tsx with a neon cyberpunk aesthetic:
+   - Dark background (black/very dark gray)
+   - Neon accent colors: cyan (#00FFFF), magenta (#FF00FF), electric green (#39FF14)
+   - Glowing text effects using text-shadow with neon colors
+   - Change heading to "Lamby — Code at Light Speed"
+   - Change subtitle to "Neon-powered autonomous AI development"
+   - Neon-styled buttons with glow effects
+   - Keep the same component structure and imports so it compiles
+4. After writing, read the file back to verify it's complete and compiles
+5. Say DONE only after verification
 
-IMPORTANT: First do a read_file to get the current contents, then do write_file with the COMPLETE updated file. Both actions must include "project": "${PROJECT}".` }
+Remember: write the COMPLETE file. Every line, every closing tag, every brace. The Next.js dev server compiles immediately — broken JSX = broken preview.` }
   ];
 
   let grokWrites = 0;
   let grokTurns = 0;
-  const MAX_TURNS = 6;
+  const MAX_TURNS = 10;
 
   for (let turn = 1; turn <= MAX_TURNS; turn++) {
     grokTurns = turn;
@@ -335,11 +341,13 @@ IMPORTANT: First do a read_file to get the current contents, then do write_file 
   const lower = afterContent.toLowerCase();
   const checks = {
     hasLamby: lower.includes('lamby'),
-    hasNewHeading: lower.includes('build anything with lamby'),
-    hasAIPowered: lower.includes('ai-powered') || lower.includes('ai powered') || lower.includes('autonomous'),
-    hasViolet: lower.includes('violet') || lower.includes('purple') || lower.includes('#7c3aed') || lower.includes('#8b5cf6'),
+    hasNewHeading: lower.includes('light speed') || lower.includes('code at'),
+    hasNeonTheme: lower.includes('neon') || lower.includes('#00ffff') || lower.includes('cyan') || lower.includes('#ff00ff') || lower.includes('magenta') || lower.includes('#39ff14'),
+    hasDarkBg: lower.includes('bg-black') || lower.includes('bg-gray-900') || lower.includes('bg-gray-950') || lower.includes('#000') || lower.includes('#0a0a0a') || lower.includes('#111'),
+    hasGlow: lower.includes('shadow') || lower.includes('glow') || lower.includes('text-shadow'),
     fileChanged: afterContent !== origContent && afterContent.length > 100,
-    isComplete: afterContent.includes('export') && (afterContent.includes('function') || afterContent.includes('=>'))
+    isComplete: afterContent.includes('export') && (afterContent.includes('function') || afterContent.includes('=>')),
+    jsxClosed: (afterContent.match(/<section/g) || []).length <= (afterContent.match(/<\/section>/g) || []).length && afterContent.trim().endsWith('}')
   };
 
   console.log('  Verification checks:');
@@ -347,7 +355,7 @@ IMPORTANT: First do a read_file to get the current contents, then do write_file 
     console.log(`    ${v ? '✓' : '✗'} ${k}`);
   }
 
-  const allPhase2Passed = checks.hasLamby && checks.fileChanged && checks.isComplete;
+  const allPhase2Passed = checks.hasLamby && checks.fileChanged && checks.isComplete && checks.jsxClosed;
   const phase1AllPassed = failed === 0;
 
   console.log('\n══════════════════════════════════════════════════════════════');
