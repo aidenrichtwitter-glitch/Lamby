@@ -13,15 +13,13 @@ export default function HeroHome() {
           {/* Section header */}
           <div className="mx-auto max-w-3xl pb-12 text-center md:pb-16">
             <h1
-              className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl md:text-6xl"
-              style={{ textShadow: '0 0 10px #00FFFF, 0 0 20px #00FFFF' }}
+              className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl md:text-6xl drop-shadow-[0_0_10px_#00FFFF] drop-shadow-[0_0_20px_#00FFFF]"
             >
               Lamby — Code at Light Speed
             </h1>
             <div className="mx-auto max-w-xs sm:max-w-none">
               <p
-                className="mt-6 text-xl text-gray-300"
-                style={{ textShadow: '0 0 5px #39FF14' }}
+                className="mt-6 text-xl text-gray-300 drop-shadow-[0_0_5px_#39FF14]"
               >
                 Neon-powered autonomous AI development
               </p>
@@ -30,15 +28,14 @@ export default function HeroHome() {
             {/* Hero buttons */}
             <div className="mx-auto mt-8 max-w-xs flex items-center gap-4 sm:max-w-none">
               <a
+                className="py-3 px-6 text-sm font-semibold rounded-lg bg-cyan-500 text-black hover:bg-cyan-400 shadow-[0_0_10px_rgba(0,255,255,0.5)] hover:shadow-[0_0_15px_rgba(0,255,255,0.7)]"
                 href="#"
-                className="py-3 px-6 text-sm font-semibold rounded-lg bg-cyan-500 text-black hover:bg-cyan-400"
-                style={{ boxShadow: '0 0 10px rgba(0, 255, 255, 0.5)' }}
               >
                 Get Started
               </a>
               <a
+                className="py-3 px-6 text-sm font-semibold rounded-lg border border-cyan-400 text-cyan-400 hover:bg-cyan-400/10"
                 href="#"
-                className="py-3 px-6 text-sm font-semibold rounded-lg border border-cyan-400 text-cyan-400 hover:bg-cyan-400/10 bg-transparent"
               >
                 Learn More
               </a>
