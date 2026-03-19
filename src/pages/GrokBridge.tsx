@@ -392,7 +392,16 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    { type: "git_commit", project: "${proj}", message: "fix: description" }\n`;
     section += `    { type: "git_diff", project: "${proj}" }\n`;
     section += `    { type: "git_log", project: "${proj}", count: 10 }\n`;
-    section += `  SCREENSHOT (capture the live preview as a PNG, auto-uploaded to Catbox.moe):\n`;
+    const keyMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/key=([^&]+)/);
+    const screenshotKey = keyMatch ? keyMatch[1] : 'KEY';
+    const relayBaseMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/^(https?:\/\/[^/]+)/);
+    const screenshotRelayBase = relayBaseMatch ? relayBaseMatch[1] : 'https://bridge-relay.replit.app';
+    section += `  SCREENSHOT — SIMPLE URL (NO encoding needed, just browse this URL):\n`;
+    section += `    GET ${screenshotRelayBase}/api/screenshot/${screenshotKey}/${proj}\n`;
+    section += `    Returns: { "success": true, "results": [{ "data": { "captured": true, "screenshotUrl": "https://files.catbox.moe/abc123.png" } }] }\n`;
+    section += `    The screenshotUrl is a public direct link — browse it to view or share with the user.\n`;
+    section += `    Optional query params: ?selector=#hero&fullPage=true&waitMs=3000\n\n`;
+    section += `  SCREENSHOT via grok-proxy (alternative, for multi-action chains):\n`;
     section += `    { type: "screenshot_preview", project: "${proj}" }  → screenshot the running app\n`;
     section += `    { type: "screenshot_preview", project: "${proj}", selector: "#hero", fullPage: true, waitMs: 3000 }\n`;
     section += `    Response: { captured: true, screenshotUrl: "https://files.catbox.moe/abc123.png" }\n`;
@@ -411,7 +420,7 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `  1. BROWSE the snapshot URL to see all project files\n`;
   section += `  2. ANALYZE what needs to change\n`;
   section += `  3. USE grok-edit for surgical text replacements (primary) or grok-proxy for complex multi-action chains\n`;
-  section += `  4. USE screenshot_preview to capture the result and share the Catbox URL with the user\n`;
+  section += `  4. BROWSE the screenshot URL to capture the result: ${screenshotRelayBase}/api/screenshot/${screenshotKey}/${proj}\n`;
   section += `  5. VERIFY by browsing the snapshot URL again or checking console logs\n`;
   section += `  6. TELL the user what you did, show the screenshot link\n\n`;
 

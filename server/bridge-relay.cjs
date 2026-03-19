@@ -362,6 +362,40 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  const screenshotMatch = pathname.match(/^\/api\/screenshot\/([^/]+)\/([^/]+)$/);
+  if (screenshotMatch) {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const providedKey = screenshotMatch[1];
+    const project = decodeURIComponent(screenshotMatch[2]);
+    const matchedClient = findBridgeClient(providedKey);
+    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
+    const selector = url.searchParams.get("selector") || undefined;
+    const fullPage = url.searchParams.get("fullPage") === "true";
+    const waitMs = parseInt(url.searchParams.get("waitMs") || "2000");
+    const action = { type: "screenshot_preview", project, selector, fullPage, waitMs };
+    const requestId = crypto.randomUUID();
+    const relayPromise = new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingSandboxRelayRequests.delete(requestId);
+        resolve(JSON.stringify({ error: "Relay timeout — desktop app did not respond within 60 seconds." }));
+      }, 60000);
+      pendingSandboxRelayRequests.set(requestId, { resolve, timer });
+    });
+    try {
+      matchedClient.send(JSON.stringify({ type: "sandbox-execute-request", requestId, actions: [action] }));
+    } catch {
+      sendJson(res, { error: "Could not reach desktop app through relay bridge." }, 502);
+      return;
+    }
+    sandboxAuditLog.push({ ts: Date.now(), action: "screenshot_preview", project, status: "relayed-screenshot" });
+    if (sandboxAuditLog.length > 1000) sandboxAuditLog.splice(0, sandboxAuditLog.length - 500);
+    const result = await relayPromise;
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(result);
+    return;
+  }
+
   if (pathname === "/api/grok-proxy") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     const providedKey = getKey(req, url);
