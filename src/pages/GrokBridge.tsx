@@ -3728,8 +3728,14 @@ const GrokBridge: React.FC = () => {
       }
     }
     fetchSnapshotInfo();
+    let fastPollCount = 0;
+    const fastPollId = setInterval(() => {
+      fastPollCount++;
+      if (fastPollCount >= 5) { clearInterval(fastPollId); return; }
+      fetchSnapshotInfo();
+    }, 2000);
     const interval = setInterval(fetchSnapshotInfo, 15000);
-    return () => clearInterval(interval);
+    return () => { clearInterval(fastPollId); clearInterval(interval); };
   }, [activeProject]);
 
   const estimateTokens = useCallback((text: string): number => {

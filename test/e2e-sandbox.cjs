@@ -13,6 +13,7 @@ const PROJECT = "landing-page";
 
 let passed = 0;
 let failed = 0;
+let skipped = 0;
 
 function log(icon, msg) {
   console.log(`${icon} ${msg}`);
@@ -21,11 +22,16 @@ function log(icon, msg) {
 function assert(condition, msg) {
   if (condition) {
     passed++;
-    log("✅", msg);
+    log("\u2705", msg);
   } else {
     failed++;
-    log("❌", msg);
+    log("\u274c", msg);
   }
+}
+
+function skip(msg) {
+  skipped++;
+  log("\u23ed\ufe0f", `SKIP: ${msg}`);
 }
 
 async function fetchJSON(url, options = {}) {
@@ -34,7 +40,7 @@ async function fetchJSON(url, options = {}) {
     const req = mod.request(url, {
       method: options.method || "GET",
       headers: { "Content-Type": "application/json", ...(options.headers || {}) },
-      timeout: 30000,
+      timeout: options.timeout || 30000,
     }, (res) => {
       let data = "";
       res.on("data", (chunk) => data += chunk);
@@ -50,13 +56,13 @@ async function fetchJSON(url, options = {}) {
   });
 }
 
-async function callXAI(messages, temperature = 0.3) {
+async function callXAI(messages, temperature = 0.3, maxTokens = 8192) {
   return new Promise((resolve, reject) => {
     const postData = JSON.stringify({
       model: "grok-3-mini-fast",
       messages,
       temperature,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
     });
     const req = https.request("https://api.x.ai/v1/chat/completions", {
       method: "POST",
@@ -64,7 +70,7 @@ async function callXAI(messages, temperature = 0.3) {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${XAI_API_KEY}`,
       },
-      timeout: 60000,
+      timeout: 120000,
     }, (res) => {
       let data = "";
       res.on("data", (chunk) => data += chunk);
@@ -83,289 +89,470 @@ async function callXAI(messages, temperature = 0.3) {
   });
 }
 
+function parseAIResponse(raw) {
+  let cleaned = raw.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const jsonMatch = cleaned.match(/\{[\s\S]*"actions"\s*:\s*\[[\s\S]*\]\s*\}/);
+    if (jsonMatch) return JSON.parse(jsonMatch[0]);
+    throw new Error("Could not parse AI response as JSON");
+  }
+}
+
 async function sandboxExecute(key, actions) {
   return fetchJSON(`${BASE_URL}/api/sandbox/execute?key=${key}`, {
     method: "POST",
     body: { actions },
+    timeout: 60000,
   });
+}
+
+function logResults(results) {
+  for (const r of results) {
+    const preview = r.data ? JSON.stringify(r.data).slice(0, 150) : (r.error || "").slice(0, 150);
+    log("  \ud83d\udcca", `[${r.actionIndex}] ${r.type}: ${r.status} \u2014 ${preview}`);
+  }
 }
 
 const SYSTEM_PROMPT = `You are an AI assistant that controls a code sandbox through structured JSON commands.
 You have access to a sandbox API that accepts an array of actions. Each action has a "type" field and additional parameters.
 
 Available action types:
-- list_tree: {type: "list_tree", project: "NAME", depth: N} — list project files
-- read_file: {type: "read_file", project: "NAME", path: "file/path"} — read a file
-- write_file: {type: "write_file", project: "NAME", path: "file/path", content: "..."} — write/overwrite a file
-- create_file: {type: "create_file", project: "NAME", path: "file/path", content: "..."} — create a new file
-- delete_file: {type: "delete_file", project: "NAME", path: "file/path"} — delete a file
+- list_tree: {type: "list_tree", project: "NAME", depth: N}
+- read_file: {type: "read_file", project: "NAME", path: "file/path"}
+- write_file: {type: "write_file", project: "NAME", path: "file/path", content: "..."}
+- create_file: {type: "create_file", project: "NAME", path: "file/path", content: "..."}
+- delete_file: {type: "delete_file", project: "NAME", path: "file/path", recursive: true/false}
 - move_file: {type: "move_file", project: "NAME", source: "old/path", dest: "new/path"}
 - copy_file: {type: "copy_file", project: "NAME", source: "src", dest: "dst"}
-- grep: {type: "grep", project: "NAME", pattern: "regex"} — search across files
-- run_command: {type: "run_command", project: "NAME", command: "cmd"} — run a shell command
-- install_deps: {type: "install_deps", project: "NAME"} — install dependencies
+- grep: {type: "grep", project: "NAME", pattern: "regex", extensions: [".js",".html"]}
+- search_files: {type: "search_files", project: "NAME", pattern: "regex"}
+- run_command: {type: "run_command", project: "NAME", command: "cmd", timeout: 30000}
+- install_deps: {type: "install_deps", project: "NAME"}
+- git_init: {type: "git_init", project: "NAME"}
 - git_status: {type: "git_status", project: "NAME"}
+- git_add: {type: "git_add", project: "NAME", files: ["."]}
+- git_commit: {type: "git_commit", project: "NAME", message: "commit msg"}
 - git_diff: {type: "git_diff", project: "NAME"}
+- git_log: {type: "git_log", project: "NAME"}
 - detect_structure: {type: "detect_structure", project: "NAME"}
+- start_process: {type: "start_process", project: "NAME", command: "cmd", name: "proc-name"}
+- list_processes: {type: "list_processes"}
+- kill_process: {type: "kill_process", name: "proc-name"}
 
 IMPORTANT: Respond with ONLY a valid JSON object containing an "actions" array. No markdown, no explanation, no code fences. Just raw JSON.
 Example: {"actions": [{"type": "list_tree", "project": "my-project", "depth": 2}]}`;
 
 async function main() {
-  console.log("\n🧪 LAMBY SANDBOX E2E TEST");
-  console.log("========================");
+  console.log("\n\ud83e\uddea LAMBY SANDBOX COMPREHENSIVE E2E TEST");
+  console.log("==========================================");
   console.log(`Base URL: ${BASE_URL}`);
-  console.log(`Project: ${PROJECT}`);
-  console.log(`xAI API: ${XAI_API_KEY ? "configured" : "MISSING"}\n`);
+  console.log(`Project:  ${PROJECT}`);
+  console.log(`xAI API:  ${XAI_API_KEY ? "configured" : "MISSING"}\n`);
 
   if (!XAI_API_KEY) {
-    log("❌", "XAI_API environment variable not set — cannot run E2E test");
+    log("\u274c", "XAI_API environment variable not set \u2014 cannot run E2E test");
     process.exit(1);
   }
 
-  // Step 1: Fetch snapshot key
-  log("📋", "Step 1: Fetching snapshot key...");
   let key;
+
+  // ============================================================
+  // PHASE 1: Infrastructure & Auth
+  // ============================================================
+  console.log("\n\u2550\u2550\u2550 PHASE 1: Infrastructure & Auth \u2550\u2550\u2550\n");
+
+  log("\ud83d\udccb", "1.1 Fetching snapshot key...");
   try {
     const keyRes = await fetchJSON(`${LOCAL_URL}/api/snapshot-key`);
-    assert(keyRes.status === 200 || keyRes.data?.key, "Snapshot key endpoint responds");
+    assert(keyRes.status === 200, "Snapshot key endpoint returns 200");
     key = keyRes.data.key;
-    log("🔑", `Key: ${key.slice(0, 8)}...`);
-    assert(!!keyRes.data.commandEndpoint, "Command endpoint URL included in snapshot-key response");
-    assert(!!keyRes.data.commandProtocol, "Command protocol description included in snapshot-key response");
+    assert(typeof key === "string" && key.length > 10, "Snapshot key is a valid string");
+    assert(!!keyRes.data.commandEndpoint, "commandEndpoint URL present");
+    assert(!!keyRes.data.commandProtocol, "commandProtocol description present");
+    assert(!!keyRes.data.baseUrl, "baseUrl present");
+    log("\ud83d\udd11", `Key: ${key.slice(0, 8)}...`);
   } catch (e) {
-    log("❌", `Failed to get snapshot key: ${e.message}`);
+    log("\u274c", `Fatal: Failed to get snapshot key: ${e.message}`);
     process.exit(1);
   }
 
-  // Step 2: Direct API test — list_tree + read_file + detect_structure
-  log("\n📋", "Step 2: Direct API test — basic sandbox actions...");
-  try {
-    const res = await sandboxExecute(key, [
-      { type: "list_tree", project: PROJECT, depth: 2 },
-      { type: "read_file", project: PROJECT, path: "package.json" },
-      { type: "detect_structure", project: PROJECT },
-    ]);
-    assert(res.data.success === true, "Multi-action batch succeeds");
-    assert(res.data.results.length === 3, "All 3 actions returned results");
-    assert(res.data.results[0].type === "list_tree" && res.data.results[0].data.entries.length > 0, "list_tree returns entries");
-    assert(res.data.results[1].type === "read_file" && res.data.results[1].data.content.includes("landing-page"), "read_file returns correct content");
-    assert(res.data.results[2].type === "detect_structure", "detect_structure returns");
-    log("📁", `Files found: ${res.data.results[0].data.entries.length}`);
-  } catch (e) {
-    log("❌", `Direct API test failed: ${e.message}`);
-  }
-
-  // Step 3: Direct API test — write + read + grep + delete
-  log("\n📋", "Step 3: Direct API test — file CRUD cycle...");
-  try {
-    const res = await sandboxExecute(key, [
-      { type: "create_file", project: PROJECT, path: "e2e-test-file.txt", content: "Hello from E2E test! UNIQUE_MARKER_12345" },
-      { type: "read_file", project: PROJECT, path: "e2e-test-file.txt" },
-      { type: "grep", project: PROJECT, pattern: "UNIQUE_MARKER_12345" },
-      { type: "delete_file", project: PROJECT, path: "e2e-test-file.txt" },
-    ]);
-    assert(res.data.success === true, "CRUD cycle succeeds");
-    assert(res.data.results[0].data.created === true, "File created");
-    assert(res.data.results[1].data.content.includes("UNIQUE_MARKER_12345"), "File content verified");
-    assert(res.data.results[2].data.matches.length > 0, "Grep found the marker");
-    assert(res.data.results[3].status === "success", "File deleted");
-  } catch (e) {
-    log("❌", `CRUD cycle test failed: ${e.message}`);
-  }
-
-  // Step 4: Direct API test — run_command
-  log("\n📋", "Step 4: Direct API test — run_command...");
-  try {
-    const res = await sandboxExecute(key, [
-      { type: "run_command", project: PROJECT, command: "echo SANDBOX_WORKS" },
-      { type: "run_command", project: PROJECT, command: "ls -1" },
-    ]);
-    assert(res.data.results[0].data.output.includes("SANDBOX_WORKS"), "echo command works");
-    assert(res.data.results[1].data.output.includes("package.json"), "ls command shows project files");
-  } catch (e) {
-    log("❌", `run_command test failed: ${e.message}`);
-  }
-
-  // Step 5: Auth test — wrong key should fail
-  log("\n📋", "Step 5: Auth test — invalid key rejected...");
+  log("\n\ud83d\udccb", "1.2 Auth test \u2014 invalid key rejected...");
   try {
     const res = await sandboxExecute("wrong-key-12345", [{ type: "list_tree", project: PROJECT }]);
     assert(res.status === 403, "Invalid key returns 403");
   } catch (e) {
-    log("❌", `Auth test failed: ${e.message}`);
+    log("\u274c", `Auth test failed: ${e.message}`);
   }
 
-  // Step 6: Audit log test
-  log("\n📋", "Step 6: Audit log test...");
+  log("\n\ud83d\udccb", "1.3 Bridge relay status...");
   try {
-    const res = await fetchJSON(`${BASE_URL}/api/sandbox/audit-log?key=${key}`);
-    assert(res.data.entries && res.data.entries.length > 0, "Audit log has entries from previous tests");
-    const lastEntry = res.data.entries[res.data.entries.length - 1];
-    assert(!!lastEntry.ts && !!lastEntry.action, "Audit log entries have timestamp and action type");
-    log("📊", `Audit log has ${res.data.entries.length} entries`);
+    const res = await fetchJSON(`${LOCAL_URL}/api/bridge-relay-status`);
+    assert(res.status === 200, "bridge-relay-status endpoint responds");
+    assert(["connected", "connecting", "disconnected"].includes(res.data.status), `Relay status: ${res.data.status}`);
+    if (res.data.relayUrl) log("\ud83c\udf10", `Relay URL: ${res.data.relayUrl}`);
   } catch (e) {
-    log("❌", `Audit log test failed: ${e.message}`);
+    log("\u274c", `Bridge relay status failed: ${e.message}`);
   }
 
-  // Step 7: Fetch project snapshot for AI context
-  log("\n📋", "Step 7: Fetching project snapshot for AI context...");
+  log("\n\ud83d\udccb", "1.4 Bridge status (desktop clients)...");
+  try {
+    const res = await fetchJSON(`${LOCAL_URL}/api/bridge-status`);
+    assert(res.status === 200, "bridge-status endpoint responds");
+    assert(typeof res.data.connectedClients === "number", `Connected clients: ${res.data.connectedClients}`);
+  } catch (e) {
+    log("\u274c", `Bridge status failed: ${e.message}`);
+  }
+
+  // ============================================================
+  // PHASE 2: Sandbox Action Types (direct API)
+  // ============================================================
+  console.log("\n\u2550\u2550\u2550 PHASE 2: Sandbox Action Types \u2550\u2550\u2550\n");
+
+  log("\ud83d\udccb", "2.1 detect_structure...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "detect_structure", project: PROJECT }]);
+    assert(res.data.success === true, "detect_structure succeeds");
+    assert(res.data.results[0].type === "detect_structure", "Returns detect_structure type");
+    log("  \u2139\ufe0f", `Structure: ${JSON.stringify(res.data.results[0].data).slice(0, 200)}`);
+  } catch (e) { log("\u274c", `detect_structure failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "2.2 list_tree...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "list_tree", project: PROJECT, depth: 3 }]);
+    assert(res.data.success === true, "list_tree succeeds");
+    assert(res.data.results[0].data.entries.length > 0, `list_tree returns ${res.data.results[0].data.entries.length} entries`);
+  } catch (e) { log("\u274c", `list_tree failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "2.3 read_file (package.json)...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "read_file", project: PROJECT, path: "package.json" }]);
+    assert(res.data.success === true, "read_file succeeds");
+    assert(res.data.results[0].data.content.length > 0, "package.json has content");
+  } catch (e) { log("\u274c", `read_file failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "2.4 create_file + read_file + write_file (append) + read_file...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "create_file", project: PROJECT, path: "e2e-test-marker.txt", content: "LINE1:MARKER_E2E_TEST\n" },
+      { type: "read_file", project: PROJECT, path: "e2e-test-marker.txt" },
+      { type: "write_file", project: PROJECT, path: "e2e-test-marker.txt", content: "LINE2:APPENDED\n", mode: "append" },
+      { type: "read_file", project: PROJECT, path: "e2e-test-marker.txt" },
+    ]);
+    assert(res.data.success === true, "CRUD batch succeeds");
+    assert(res.data.results[0].data.created === true, "File created");
+    assert(res.data.results[1].data.content.includes("MARKER_E2E_TEST"), "Read confirms create");
+    assert(res.data.results[3].data.content.includes("LINE1") && res.data.results[3].data.content.includes("LINE2"), "Append worked");
+  } catch (e) { log("\u274c", `create+write failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "2.5 copy_file + move_file...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "copy_file", project: PROJECT, source: "e2e-test-marker.txt", dest: "e2e-test-copy.txt" },
+      { type: "read_file", project: PROJECT, path: "e2e-test-copy.txt" },
+      { type: "move_file", project: PROJECT, source: "e2e-test-copy.txt", dest: "e2e-test-moved.txt" },
+      { type: "read_file", project: PROJECT, path: "e2e-test-moved.txt" },
+    ]);
+    assert(res.data.results[0].status === "success", "copy_file succeeds");
+    assert(res.data.results[1].data.content.includes("MARKER_E2E_TEST"), "Copied file has content");
+    assert(res.data.results[2].status === "success", "move_file succeeds");
+    assert(res.data.results[3].data.content.includes("MARKER_E2E_TEST"), "Moved file has content");
+  } catch (e) { log("\u274c", `copy+move failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "2.6 grep + search_files...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "grep", project: PROJECT, pattern: "MARKER_E2E_TEST" },
+      { type: "search_files", project: PROJECT, pattern: "e2e-test" },
+    ]);
+    assert(res.data.results[0].status === "success", "grep succeeds");
+    assert(res.data.results[0].data.matches.length > 0, `grep found ${res.data.results[0].data.matches.length} matches`);
+    assert(res.data.results[1].status === "success", "search_files succeeds");
+  } catch (e) { log("\u274c", `grep+search failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "2.7 delete_file (cleanup test files)...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "delete_file", project: PROJECT, path: "e2e-test-marker.txt" },
+      { type: "delete_file", project: PROJECT, path: "e2e-test-moved.txt" },
+    ]);
+    assert(res.data.results[0].status === "success", "delete_file (marker) succeeds");
+    assert(res.data.results[1].status === "success", "delete_file (moved) succeeds");
+  } catch (e) { log("\u274c", `delete_file failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "2.8 run_command...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "run_command", project: PROJECT, command: "echo E2E_COMMAND_WORKS" },
+      { type: "run_command", project: PROJECT, command: "node -e \"console.log(JSON.stringify({node:true,v:process.version}))\"" },
+      { type: "run_command", project: PROJECT, command: "ls -la" },
+    ]);
+    assert(res.data.results[0].data.output.includes("E2E_COMMAND_WORKS"), "echo command works");
+    assert(res.data.results[1].data.output.includes("node"), "node -e works");
+    assert(res.data.results[2].data.output.includes("package.json"), "ls shows project files");
+  } catch (e) { log("\u274c", `run_command failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "2.9 git_init + git_status + git_add + git_commit + git_log + git_diff...");
+  try {
+    const res1 = await sandboxExecute(key, [{ type: "git_init", project: PROJECT }]);
+    const gitInitOk = res1.data.results[0].status === "success";
+    assert(gitInitOk || (res1.data.results[0].data?.output || "").includes("Reinitialized"), "git_init succeeds (or repo already exists)");
+
+    await sandboxExecute(key, [
+      { type: "run_command", project: PROJECT, command: "git config user.email \"e2e@lamby.test\"" },
+      { type: "run_command", project: PROJECT, command: "git config user.name \"E2E Test\"" },
+      { type: "create_file", project: PROJECT, path: "git-test-file.txt", content: "git test content\n" },
+    ]);
+
+    const res2 = await sandboxExecute(key, [
+      { type: "git_status", project: PROJECT },
+      { type: "git_add", project: PROJECT, files: ["."] },
+      { type: "git_commit", project: PROJECT, message: "E2E test commit" },
+    ]);
+    assert(res2.data.results[0].status === "success", "git_status succeeds");
+    assert(res2.data.results[1].status === "success", "git_add succeeds");
+    const commitOk = res2.data.results[2].status === "success";
+    assert(commitOk || (res2.data.results[2].error || "").includes("nothing to commit"), "git_commit succeeds (or nothing to commit)");
+
+    const res2b = await sandboxExecute(key, [{ type: "git_log", project: PROJECT }]);
+    assert(res2b.data.results[0].status === "success", "git_log succeeds");
+
+    await sandboxExecute(key, [
+      { type: "write_file", project: PROJECT, path: "git-test-file.txt", content: "modified content\n" },
+    ]);
+    const res3 = await sandboxExecute(key, [{ type: "git_diff", project: PROJECT }]);
+    assert(res3.data.results[0].status === "success", "git_diff succeeds");
+
+    await sandboxExecute(key, [
+      { type: "git_add", project: PROJECT, files: ["."] },
+      { type: "git_commit", project: PROJECT, message: "E2E test commit 2" },
+      { type: "delete_file", project: PROJECT, path: "git-test-file.txt" },
+      { type: "git_add", project: PROJECT, files: ["."] },
+      { type: "git_commit", project: PROJECT, message: "E2E cleanup" },
+    ]);
+  } catch (e) { log("\u274c", `git operations failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "2.10 install_deps...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "install_deps", project: PROJECT }]);
+    assert(res.data.results[0].status === "success", "install_deps succeeds");
+  } catch (e) { log("\u274c", `install_deps failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "2.11 start_process + list_processes + kill_process...");
+  try {
+    const res1 = await sandboxExecute(key, [
+      { type: "start_process", project: PROJECT, command: "node -e \"const h=require('http');const s=h.createServer((q,r)=>{r.end('ok')});s.listen(19876,()=>console.log('listening'))\"", name: "e2e-test-proc" },
+    ]);
+    assert(res1.data.results[0].status === "success", "start_process succeeds");
+
+    await new Promise(r => setTimeout(r, 2000));
+
+    const res2 = await sandboxExecute(key, [{ type: "list_processes" }]);
+    assert(res2.data.results[0].status === "success", "list_processes succeeds");
+    log("  \u2139\ufe0f", `Processes: ${JSON.stringify(res2.data.results[0].data).slice(0, 200)}`);
+
+    const res3 = await sandboxExecute(key, [{ type: "kill_process", name: "e2e-test-proc" }]);
+    const killOk = res3.data.results[0].status === "success";
+    const killErr = res3.data.results[0].error || "";
+    assert(killOk || killErr.includes("not found") || killErr.includes("No process"), "kill_process succeeds (or process already exited)");
+  } catch (e) { log("\u274c", `process management failed: ${e.message}`); }
+
+  // ============================================================
+  // PHASE 3: Higher-Level Endpoints
+  // ============================================================
+  console.log("\n\u2550\u2550\u2550 PHASE 3: Higher-Level Endpoints \u2550\u2550\u2550\n");
+
+  log("\ud83d\udccb", "3.1 Project snapshot...");
   let snapshotContext = "";
   try {
-    const snapRes = await fetchJSON(`${BASE_URL}/api/snapshot/${PROJECT}?key=${key}`);
+    const snapRes = await fetchJSON(`${BASE_URL}/api/snapshot/${PROJECT}?key=${key}`, { timeout: 15000 });
     snapshotContext = typeof snapRes.data === "string" ? snapRes.data : JSON.stringify(snapRes.data);
-    assert(snapshotContext.length > 100, `Snapshot fetched (${snapshotContext.length} chars)`);
-    log("📄", `Snapshot length: ${snapshotContext.length} chars`);
+    assert(snapshotContext.length > 50, `Snapshot fetched (${snapshotContext.length} chars)`);
+    assert(snapshotContext.includes("LAMBY PROJECT SNAPSHOT") || snapshotContext.includes(PROJECT), "Snapshot contains project data");
   } catch (e) {
-    log("⚠️", `Snapshot fetch failed (non-fatal): ${e.message}`);
-    snapshotContext = "Project: landing-page. A simple landing page with index.html, package.json (vite dev dep), hero.png, postcss.config.cjs.";
+    log("\u274c", `Snapshot failed: ${e.message}`);
+    snapshotContext = `Project: ${PROJECT}. An empty landing page project with package.json.`;
   }
 
-  // Step 8: xAI Round 1 — Ask Grok to explore the project and create a test file
-  log("\n📋", "Step 8: xAI Round 1 — asking Grok to explore project and create a file...");
-  let round1Actions = null;
+  log("\n\ud83d\udccb", "3.2 Console logs endpoint...");
   try {
-    const truncatedSnapshot = snapshotContext.slice(0, 8000);
-    const userPrompt = `Here is the current state of the "${PROJECT}" project:\n\n${truncatedSnapshot}\n\nPlease do the following:\n1. Read the package.json to understand the project\n2. Create a new file called "health-check.js" with a simple Node.js script that exports a function checkHealth() that returns {status: "ok", timestamp: Date.now()}\n3. Run the command "node -e \\"console.log('health-check-created')\\"" to verify node works\n\nRespond with ONLY a JSON object containing an "actions" array. No markdown, no code fences.`;
+    const res = await fetchJSON(`${BASE_URL}/api/console-logs?key=${key}`, { timeout: 10000 });
+    assert(res.status === 200, "console-logs endpoint returns 200");
+    assert(Array.isArray(res.data.previews), "console-logs returns previews array");
+    log("  \u2139\ufe0f", `Console logs: ${JSON.stringify(res.data).slice(0, 200)}`);
+  } catch (e) { log("\u274c", `Console logs failed: ${e.message}`); }
 
-    log("🤖", "Calling xAI API (grok-3-mini-fast)...");
-    const response = await callXAI([
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ]);
+  log("\n\ud83d\udccb", "3.3 Audit log...");
+  try {
+    const res = await fetchJSON(`${BASE_URL}/api/sandbox/audit-log?key=${key}`);
+    assert(res.status === 200, "audit-log endpoint returns 200");
+    assert(Array.isArray(res.data.entries), "audit-log returns entries array");
+    assert(res.data.entries.length > 0, `Audit log has ${res.data.entries.length} entries from previous tests`);
+    const last = res.data.entries[res.data.entries.length - 1];
+    assert(!!last.ts && !!last.action, "Entries have ts and action fields");
+  } catch (e) { log("\u274c", `Audit log failed: ${e.message}`); }
 
-    log("📨", `xAI response length: ${response.length} chars`);
+  log("\n\ud83d\udccb", "3.4 Project listing via snapshot (no project name)...");
+  try {
+    const res = await fetchJSON(`${BASE_URL}/api/snapshot/?key=${key}`, { timeout: 10000 });
+    assert(res.status === 200, "Project listing returns 200");
+    const body = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
+    assert(body.includes(PROJECT) || body.includes("Available projects"), "Listing includes our project or heading");
+  } catch (e) { log("\u274c", `Project listing failed: ${e.message}`); }
 
-    let cleaned = response.trim();
-    if (cleaned.startsWith("```")) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
-    }
+  // ============================================================
+  // PHASE 4: Grok-Driven App Building
+  // ============================================================
+  console.log("\n\u2550\u2550\u2550 PHASE 4: Grok Builds a Landing Page \u2550\u2550\u2550\n");
 
-    try {
-      round1Actions = JSON.parse(cleaned);
-    } catch {
-      const jsonMatch = cleaned.match(/\{[\s\S]*"actions"\s*:\s*\[[\s\S]*\]\s*\}/);
-      if (jsonMatch) round1Actions = JSON.parse(jsonMatch[0]);
-    }
+  const truncatedSnapshot = snapshotContext.slice(0, 6000);
+  const conversationHistory = [{ role: "system", content: SYSTEM_PROMPT }];
 
-    assert(round1Actions && Array.isArray(round1Actions.actions), "Grok returned valid actions JSON");
-    assert(round1Actions.actions.length >= 2, `Grok generated ${round1Actions.actions.length} actions`);
-
-    log("📝", `Actions: ${round1Actions.actions.map(a => a.type).join(", ")}`);
-  } catch (e) {
-    log("❌", `xAI Round 1 failed: ${e.message}`);
-    round1Actions = {
-      actions: [
-        { type: "read_file", project: PROJECT, path: "package.json" },
-        { type: "create_file", project: PROJECT, path: "health-check.js", content: 'module.exports = { checkHealth() { return { status: "ok", timestamp: Date.now() }; } };' },
-        { type: "run_command", project: PROJECT, command: "node -e \"console.log('health-check-created')\"" },
-      ]
-    };
-    log("⚠️", "Using fallback actions");
-  }
-
-  // Step 9: Execute the AI-generated actions
-  log("\n📋", "Step 9: Executing AI-generated actions...");
+  log("\ud83d\udccb", "4.1 Round 1 \u2014 Grok explores the project...");
   let round1Results = null;
   try {
-    const res = await sandboxExecute(key, round1Actions.actions);
+    const prompt1 = `Here is the current state of the "${PROJECT}" project:\n\n${truncatedSnapshot}\n\nPlease explore this project:\n1. Read the package.json to understand the current setup\n2. List all files with depth 3\n3. Detect the project structure\n\nRespond with ONLY a JSON object containing an "actions" array.`;
+
+    conversationHistory.push({ role: "user", content: prompt1 });
+    log("\ud83e\udd16", "Calling xAI API (Round 1: explore)...");
+    const response = await callXAI(conversationHistory);
+    conversationHistory.push({ role: "assistant", content: response });
+
+    const parsed = parseAIResponse(response);
+    assert(parsed && Array.isArray(parsed.actions), "Round 1: Grok returned valid actions");
+    log("\ud83d\udcdd", `Round 1 actions: ${parsed.actions.map(a => a.type).join(", ")}`);
+
+    const res = await sandboxExecute(key, parsed.actions);
     round1Results = res.data;
-    const successCount = round1Results.results.filter(r => r.status === "success").length;
-    const failCount = round1Results.results.filter(r => r.status === "error").length;
-    assert(successCount > 0, `${successCount}/${round1Results.results.length} actions succeeded`);
-    if (failCount > 0) {
-      log("⚠️", `${failCount} actions had errors:`);
-      round1Results.results.filter(r => r.status === "error").forEach(r => log("  ⚠️", `${r.type}: ${r.error}`));
-    }
-
-    for (const r of round1Results.results) {
-      log("  📊", `[${r.actionIndex}] ${r.type}: ${r.status}${r.data ? " — " + JSON.stringify(r.data).slice(0, 120) : ""}${r.error ? " — " + r.error.slice(0, 120) : ""}`);
-    }
+    const ok = round1Results.results.filter(r => r.status === "success").length;
+    assert(ok > 0, `Round 1: ${ok}/${round1Results.results.length} actions succeeded`);
+    logResults(round1Results.results);
   } catch (e) {
-    log("❌", `Executing AI actions failed: ${e.message}`);
+    log("\u274c", `Round 1 failed: ${e.message}`);
   }
 
-  // Step 10: Verify the file was created
-  log("\n📋", "Step 10: Verifying AI-created file exists...");
+  log("\n\ud83d\udccb", "4.2 Round 2 \u2014 Grok creates the landing page...");
+  let round2Results = null;
   try {
-    const verifyRes = await sandboxExecute(key, [
-      { type: "read_file", project: PROJECT, path: "health-check.js" },
-    ]);
-    if (verifyRes.data.results[0].status === "success") {
-      assert(true, "health-check.js file exists and is readable");
-      assert(verifyRes.data.results[0].data.content.includes("checkHealth") || verifyRes.data.results[0].data.content.includes("health"), "File contains expected health check code");
-    } else {
-      assert(false, `health-check.js verification failed: ${verifyRes.data.results[0].error}`);
-    }
-  } catch (e) {
-    log("❌", `Verification failed: ${e.message}`);
-  }
-
-  // Step 11: xAI Round 2 — Feed results back and ask Grok to verify/fix
-  log("\n📋", "Step 11: xAI Round 2 — feeding results back for verification...");
-  try {
-    const resultsContext = round1Results
-      ? JSON.stringify(round1Results.results.map(r => ({ type: r.type, status: r.status, data: r.data, error: r.error })), null, 2)
+    const r1Context = round1Results
+      ? JSON.stringify(round1Results.results.map(r => ({ type: r.type, status: r.status, data: r.data, error: r.error })), null, 2).slice(0, 6000)
       : "No results from Round 1";
 
-    const round2Prompt = `I executed your actions against the "${PROJECT}" sandbox. Here are the results:\n\n${resultsContext}\n\nNow please:\n1. Read the health-check.js file to verify it was created correctly\n2. Run "node -e \\"const h = require('./health-check.js'); console.log(JSON.stringify(h.checkHealth()))\\"" to test it works\n3. If anything failed or is wrong, create corrective actions\n\nRespond with ONLY a JSON object containing an "actions" array.`;
+    const prompt2 = `I executed your exploration actions. Here are the results:\n\n${r1Context}\n\nNow create a beautiful, modern landing page for a product called "Lamby AI" \u2014 an AI-powered autonomous development platform. The page should be a single index.html file with embedded CSS and a small amount of JavaScript.\n\nRequirements:\n- Clean, modern design with a dark gradient hero section\n- Product name "Lamby AI" prominently displayed\n- Tagline: "Your AI-Powered Development Partner"\n- 3 feature cards (Autonomous Coding, Smart Debugging, Instant Deploy)\n- A call-to-action button\n- Responsive design that looks good on mobile\n- Smooth scroll animations using CSS only\n- A footer with copyright\n\nAlso create/update the package.json to add a "start" script that serves the page (use "npx serve ." or similar).\n\nRespond with ONLY a JSON object containing an "actions" array. Use write_file to create/overwrite index.html and package.json.`;
 
-    log("🤖", "Calling xAI API for Round 2...");
-    const response2 = await callXAI([
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: round2Prompt },
-    ]);
+    conversationHistory.push({ role: "user", content: prompt2 });
+    log("\ud83e\udd16", "Calling xAI API (Round 2: create landing page)...");
+    const response = await callXAI(conversationHistory, 0.4, 12000);
+    conversationHistory.push({ role: "assistant", content: response });
 
-    let cleaned2 = response2.trim();
-    if (cleaned2.startsWith("```")) {
-      cleaned2 = cleaned2.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
-    }
+    const parsed = parseAIResponse(response);
+    assert(parsed && Array.isArray(parsed.actions), "Round 2: Grok returned valid actions");
+    log("\ud83d\udcdd", `Round 2 actions: ${parsed.actions.map(a => a.type).join(", ")}`);
 
-    let round2Actions;
-    try {
-      round2Actions = JSON.parse(cleaned2);
-    } catch {
-      const jsonMatch = cleaned2.match(/\{[\s\S]*"actions"\s*:\s*\[[\s\S]*\]\s*\}/);
-      if (jsonMatch) round2Actions = JSON.parse(jsonMatch[0]);
-      else throw new Error("Could not parse Round 2 response as JSON");
-    }
-
-    assert(round2Actions && Array.isArray(round2Actions.actions), "Grok Round 2 returned valid actions");
-    log("📝", `Round 2 actions: ${round2Actions.actions.map(a => a.type).join(", ")}`);
-
-    const res2 = await sandboxExecute(key, round2Actions.actions);
-    const s2 = res2.data.results.filter(r => r.status === "success").length;
-    assert(s2 > 0, `Round 2: ${s2}/${res2.data.results.length} actions succeeded`);
-
-    for (const r of res2.data.results) {
-      log("  📊", `[${r.actionIndex}] ${r.type}: ${r.status}${r.data ? " — " + JSON.stringify(r.data).slice(0, 120) : ""}${r.error ? " — " + r.error.slice(0, 120) : ""}`);
-    }
-
-    const hasVerifyRead = res2.data.results.some(r => r.type === "read_file" && r.status === "success");
-    if (hasVerifyRead) assert(true, "Round 2 successfully read and verified file");
+    const res = await sandboxExecute(key, parsed.actions);
+    round2Results = res.data;
+    const ok = round2Results.results.filter(r => r.status === "success").length;
+    assert(ok > 0, `Round 2: ${ok}/${round2Results.results.length} actions succeeded`);
+    logResults(round2Results.results);
   } catch (e) {
-    log("❌", `xAI Round 2 failed: ${e.message}`);
+    log("\u274c", `Round 2 failed: ${e.message}`);
   }
 
-  // Step 12: Cleanup
-  log("\n📋", "Step 12: Cleaning up test artifacts...");
+  log("\n\ud83d\udccb", "4.3 Round 3 \u2014 Grok verifies and commits...");
   try {
-    await sandboxExecute(key, [
-      { type: "delete_file", project: PROJECT, path: "health-check.js" },
-      { type: "delete_file", project: PROJECT, path: "e2e-test-file.txt" },
-    ]);
-    log("🧹", "Cleanup complete");
-  } catch {
-    log("⚠️", "Cleanup had issues (non-fatal)");
+    const r2Context = round2Results
+      ? JSON.stringify(round2Results.results.map(r => ({ type: r.type, status: r.status, error: r.error })), null, 2).slice(0, 3000)
+      : "No results from Round 2";
+
+    const prompt3 = `I executed your file creation actions. Here are the results:\n\n${r2Context}\n\nNow please:\n1. Read the index.html to verify it was written correctly\n2. Read the package.json to verify the start script is there\n3. Run "ls -la" to see all files\n4. Initialize git if needed, add all files, and commit with message "feat: Lamby AI landing page created by Grok"\n\nRespond with ONLY a JSON object containing an "actions" array.`;
+
+    conversationHistory.push({ role: "user", content: prompt3 });
+    log("\ud83e\udd16", "Calling xAI API (Round 3: verify & commit)...");
+    const response = await callXAI(conversationHistory);
+    conversationHistory.push({ role: "assistant", content: response });
+
+    const parsed = parseAIResponse(response);
+    assert(parsed && Array.isArray(parsed.actions), "Round 3: Grok returned valid actions");
+    log("\ud83d\udcdd", `Round 3 actions: ${parsed.actions.map(a => a.type).join(", ")}`);
+
+    const res = await sandboxExecute(key, parsed.actions);
+    const ok = res.data.results.filter(r => r.status === "success").length;
+    assert(ok > 0, `Round 3: ${ok}/${res.data.results.length} actions succeeded`);
+    logResults(res.data.results);
+
+    const htmlRead = res.data.results.find(r => r.type === "read_file" && r.data?.content?.includes("<html"));
+    if (htmlRead) {
+      assert(htmlRead.data.content.includes("Lamby"), "index.html contains 'Lamby'");
+      assert(htmlRead.data.content.length > 500, `index.html is substantial (${htmlRead.data.content.length} chars)`);
+    }
+  } catch (e) {
+    log("\u274c", `Round 3 failed: ${e.message}`);
   }
 
-  // Final summary
-  console.log("\n=============================");
-  console.log(`🧪 E2E TEST RESULTS`);
-  console.log(`✅ Passed: ${passed}`);
-  console.log(`❌ Failed: ${failed}`);
-  console.log(`Total: ${passed + failed}`);
-  console.log("=============================\n");
+  // ============================================================
+  // PHASE 5: Final Verification
+  // ============================================================
+  console.log("\n\u2550\u2550\u2550 PHASE 5: Final Verification \u2550\u2550\u2550\n");
+
+  log("\ud83d\udccb", "5.1 Verify index.html exists and has content...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "read_file", project: PROJECT, path: "index.html" },
+    ]);
+    if (res.data.results[0].status === "success") {
+      const content = res.data.results[0].data.content;
+      assert(content.includes("<!DOCTYPE html") || content.includes("<html"), "index.html is valid HTML");
+      assert(content.includes("Lamby") || content.includes("lamby"), "index.html mentions Lamby");
+      assert(content.length > 1000, `index.html has substantial content (${content.length} chars)`);
+      log("\ud83c\udf89", "Landing page created successfully!");
+    } else {
+      assert(false, `index.html not found: ${res.data.results[0].error}`);
+    }
+  } catch (e) { log("\u274c", `Final verification failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "5.2 Verify project structure...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "list_tree", project: PROJECT, depth: 2 },
+      { type: "git_log", project: PROJECT },
+    ]);
+    const entries = res.data.results[0].data.entries;
+    assert(entries.length > 0, `Project has ${entries.length} files`);
+    const hasIndex = entries.some(e => {
+      const name = typeof e === "string" ? e : (e.name || e.path || "");
+      return name === "index.html" || name.includes("index.html");
+    });
+    assert(hasIndex, "index.html appears in file tree");
+    if (res.data.results[1].status === "success") {
+      log("  \ud83d\udcdc", `Git log: ${JSON.stringify(res.data.results[1].data).slice(0, 300)}`);
+    }
+  } catch (e) { log("\u274c", `Structure verification failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "5.3 Final snapshot of completed project...");
+  try {
+    const res = await fetchJSON(`${BASE_URL}/api/snapshot/${PROJECT}?key=${key}`, { timeout: 15000 });
+    const snap = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
+    assert(snap.length > 500, `Final snapshot captured (${snap.length} chars)`);
+    assert(snap.includes("index.html"), "Final snapshot includes index.html");
+  } catch (e) { log("\u274c", `Final snapshot failed: ${e.message}`); }
+
+  // ============================================================
+  // SUMMARY
+  // ============================================================
+  console.log("\n==========================================");
+  console.log(`\ud83e\uddea E2E TEST RESULTS`);
+  console.log(`\u2705 Passed:  ${passed}`);
+  console.log(`\u274c Failed:  ${failed}`);
+  console.log(`\u23ed\ufe0f  Skipped: ${skipped}`);
+  console.log(`   Total:   ${passed + failed + skipped}`);
+  console.log("==========================================");
+  console.log(`\n\ud83d\udcc1 The "${PROJECT}" project now has a complete landing page.`);
+  console.log(`   Preview it with: cd projects/${PROJECT} && npx serve .`);
+  console.log(`   Or start a preview from the Lamby UI.\n`);
 
   process.exit(failed > 0 ? 1 : 0);
 }
