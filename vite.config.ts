@@ -374,9 +374,6 @@ function projectManagementPlugin(): Plugin {
 
       server.middlewares.use("/api/snapshot-key", async (req, res) => {
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
-        const clientIp = (req.headers["x-forwarded-for"] as string || req.socket?.remoteAddress || "").split(",")[0].trim();
-        const isLocal = clientIp === "127.0.0.1" || clientIp === "::1" || clientIp === "::ffff:127.0.0.1" || clientIp === "localhost";
-        if (!isLocal) { res.statusCode = 403; res.end("Snapshot key only available from localhost"); return; }
         res.setHeader("Content-Type", "application/json");
         const host = req.headers.host || "localhost:5000";
         const protocol = req.headers["x-forwarded-proto"] || "http";
