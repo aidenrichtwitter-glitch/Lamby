@@ -212,7 +212,7 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
         } catch {}
       }
       const relayUrl = statusData?.relayUrl || '';
-      const key = statusData?.bridgeKey || statusData?.key || keyData?.key || '';
+      const key = statusData?.key || keyData?.key || '';
       if (relayUrl && key) {
         const relayBase = relayUrl.replace(/\/$/, '');
         return {
@@ -3951,7 +3951,7 @@ const GrokBridge: React.FC = () => {
           setCommandEndpoint(`${serverBase}/api/sandbox/execute?key=${key}`);
           if (relayUrl) {
             const relayBase = relayUrl.replace(/\/$/, '');
-            const externalKey = bridgeKey || key;
+            const externalKey = key;
             setExternalSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${externalKey}`);
             setExternalCommandEndpoint(`${relayBase}/api/sandbox/execute?key=${externalKey}`);
           } else {
