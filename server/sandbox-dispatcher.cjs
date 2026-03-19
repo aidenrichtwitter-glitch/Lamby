@@ -1373,6 +1373,880 @@ function executeSandboxAction(action, projectsDir, options) {
         }
         return { status: "success", type: t, data: results };
       }
+      case "create_folder": {
+        if (!action.path) return { status: "error", type: t, error: "path required" };
+        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
+        if (!c.valid) return { status: "error", type: t, error: c.error };
+        fs.mkdirSync(c.resolved, { recursive: true });
+        return { status: "success", type: t, data: { path: action.path, created: true } };
+      }
+      case "delete_folder": {
+        if (!action.path) return { status: "error", type: t, error: "path required" };
+        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
+        if (!c.valid) return { status: "error", type: t, error: c.error };
+        if (!fs.existsSync(c.resolved)) return { status: "error", type: t, error: "Folder not found" };
+        fs.rmSync(c.resolved, { recursive: action.recursive !== false, force: true });
+        return { status: "success", type: t, data: { path: action.path, deleted: true } };
+      }
+      case "move_folder":
+      case "rename_folder": {
+        if (!action.from && !action.source) return { status: "error", type: t, error: "from/source required" };
+        if (!action.to && !action.dest && !action.newName) return { status: "error", type: t, error: "to/dest/newName required" };
+        const srcPath = action.from || action.source;
+        let dstPath = action.to || action.dest;
+        if (!dstPath && action.newName) dstPath = path.join(path.dirname(srcPath), action.newName);
+        const src = projectName ? validateProjectPath(projectName, srcPath, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, srcPath) };
+        const dst = projectName ? validateProjectPath(projectName, dstPath, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, dstPath) };
+        if (!src.valid) return { status: "error", type: t, error: src.error };
+        if (!dst.valid) return { status: "error", type: t, error: dst.error };
+        if (!fs.existsSync(src.resolved)) return { status: "error", type: t, error: "Source folder not found" };
+        const dstDir = path.dirname(dst.resolved);
+        if (!fs.existsSync(dstDir)) fs.mkdirSync(dstDir, { recursive: true });
+        fs.renameSync(src.resolved, dst.resolved);
+        return { status: "success", type: t, data: { from: srcPath, to: dstPath } };
+      }
+      case "list_tree_filtered": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const filterStr = action.filter || "";
+        const filterExts = filterStr.split("|").map(e => e.startsWith(".") ? e : "." + e).filter(Boolean);
+        const depth = parseInt(action.depth, 10) || 6;
+        const ignore = new Set(action.ignore || ["node_modules", ".git", "dist", ".cache", ".next"]);
+        const entries = [];
+        function filtWalk(d, rel, lvl) {
+          if (lvl > depth) return;
+          let items;
+          try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat;
+            try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { filtWalk(full, r, lvl + 1); }
+            else if (filterExts.length === 0 || filterExts.some(e => item.endsWith(e))) entries.push(r);
+          }
+          if (entries.length >= 2000) return;
+        }
+        filtWalk(dir, "", 0);
+        return { status: "success", type: t, data: { filter: filterStr, entries: entries.slice(0, 2000) } };
+      }
+      case "dead_code_detection": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next", "build"]);
+        const allFiles = [];
+        const allExports = {};
+        const allImports = new Set();
+        function dcWalk(d, rel) {
+          let items; try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat; try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { dcWalk(full, r); continue; }
+            if (!/\.(ts|tsx|js|jsx)$/.test(item)) continue;
+            allFiles.push(r);
+            try {
+              const content = fs.readFileSync(full, "utf-8");
+              const expDefault = /export\s+default/.test(content);
+              const expNamed = [];
+              const re = /export\s+(?:function|const|class|let|var|type|interface|enum)\s+(\w+)/g;
+              let m; while ((m = re.exec(content)) !== null) expNamed.push(m[1]);
+              if (expDefault || expNamed.length > 0) allExports[r] = { default: expDefault, named: expNamed };
+              const impRe = /from\s+['"]([^'"]+)['"]/g;
+              while ((m = impRe.exec(content)) !== null) allImports.add(m[1]);
+            } catch {}
+          }
+        }
+        dcWalk(dir, "");
+        const potentiallyUnused = [];
+        for (const [file, exp] of Object.entries(allExports)) {
+          const baseName = file.replace(/\.(ts|tsx|js|jsx)$/, "");
+          const shortBase = "./" + baseName;
+          const isImported = [...allImports].some(imp => {
+            if (imp === shortBase || imp === "./" + file) return true;
+            if (imp.endsWith("/" + path.basename(baseName))) return true;
+            return false;
+          });
+          if (!isImported && !/index\.(ts|tsx|js|jsx)$/.test(file) && !/main\.(ts|tsx|js|jsx)$/.test(file) && !/App\.(ts|tsx|js|jsx)$/.test(file)) {
+            potentiallyUnused.push({ file, exports: exp });
+          }
+        }
+        return { status: "success", type: t, data: { totalFiles: allFiles.length, potentiallyUnused: potentiallyUnused.slice(0, 100), totalExportedModules: Object.keys(allExports).length } };
+      }
+      case "dependency_graph": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next", "build"]);
+        const graph = {};
+        function dgWalk(d, rel) {
+          let items; try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat; try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { dgWalk(full, r); continue; }
+            if (!/\.(ts|tsx|js|jsx|vue|svelte)$/.test(item)) continue;
+            try {
+              const content = fs.readFileSync(full, "utf-8");
+              const imports = [];
+              const re = /(?:import|require)\s*\(?['"]([^'"]+)['"]\)?/g;
+              let m; while ((m = re.exec(content)) !== null) imports.push(m[1]);
+              graph[r] = { imports: imports.slice(0, 50) };
+            } catch {}
+          }
+        }
+        dgWalk(dir, "");
+        return { status: "success", type: t, data: { graph, totalModules: Object.keys(graph).length } };
+      }
+      case "symbol_search": {
+        if (!action.query) return { status: "error", type: t, error: "query required" };
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next"]);
+        const query = action.query;
+        const results = [];
+        const defPatterns = [
+          new RegExp(`(?:function|const|let|var|class|type|interface|enum)\\s+(\\w*${query}\\w*)`, "gi"),
+          new RegExp(`export\\s+default\\s+(?:function\\s+)?(\\w*${query}\\w*)`, "gi"),
+        ];
+        function symWalk(d, rel) {
+          let items; try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat; try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { symWalk(full, r); continue; }
+            if (!/\.(ts|tsx|js|jsx|py|rs|go)$/.test(item)) continue;
+            try {
+              const content = fs.readFileSync(full, "utf-8");
+              const lines = content.split("\n");
+              for (let i = 0; i < lines.length; i++) {
+                for (const pat of defPatterns) {
+                  pat.lastIndex = 0;
+                  let m; while ((m = pat.exec(lines[i])) !== null) {
+                    results.push({ file: r, line: i + 1, symbol: m[1], text: lines[i].trim().slice(0, 200) });
+                  }
+                }
+              }
+            } catch {}
+            if (results.length >= 100) return;
+          }
+        }
+        symWalk(dir, "");
+        return { status: "success", type: t, data: { query, results: results.slice(0, 100) } };
+      }
+      case "grep_advanced": {
+        if (!action.pattern) return { status: "error", type: t, error: "pattern required" };
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const includeGlobs = action.include || [];
+        const excludeGlobs = action.exclude || [];
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next"]);
+        const re = new RegExp(action.pattern, action.case_sensitive ? "g" : "gi");
+        const matches = [];
+        function gaWalk(d, rel) {
+          let items; try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat; try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { gaWalk(full, r); continue; }
+            if (includeGlobs.length > 0 && !includeGlobs.some(g => item.endsWith(g) || r.includes(g))) continue;
+            if (excludeGlobs.some(g => item.endsWith(g) || r.includes(g))) continue;
+            try {
+              const content = fs.readFileSync(full, "utf-8");
+              const lines = content.split("\n");
+              for (let i = 0; i < lines.length; i++) {
+                re.lastIndex = 0;
+                if (re.test(lines[i])) matches.push({ file: r, line: i + 1, text: lines[i].trim().slice(0, 200) });
+              }
+            } catch {}
+            if (matches.length >= 200) return;
+          }
+        }
+        gaWalk(dir, "");
+        return { status: "success", type: t, data: { pattern: action.pattern, matches: matches.slice(0, 200) } };
+      }
+      case "extract_imports": {
+        if (!action.file) return { status: "error", type: t, error: "file required" };
+        const c = projectName ? validateProjectPath(projectName, action.file, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.file) };
+        if (!c.valid) return { status: "error", type: t, error: c.error };
+        if (!fs.existsSync(c.resolved)) return { status: "error", type: t, error: "File not found" };
+        const content = fs.readFileSync(c.resolved, "utf-8");
+        const imports = [];
+        const re = /import\s+(?:(\{[^}]*\})|(\w+)(?:\s*,\s*(\{[^}]*\}))?)\s+from\s+['"]([^'"]+)['"]/g;
+        let m; while ((m = re.exec(content)) !== null) {
+          const specifiers = m[1] || m[3] ? (m[1] || m[3]).replace(/[{}]/g, "").split(",").map(s => s.trim()).filter(Boolean) : [];
+          const defaultImport = m[2] || null;
+          imports.push({ source: m[4], default: defaultImport, named: specifiers });
+        }
+        const requireRe = /(?:const|let|var)\s+(?:(\{[^}]*\})|(\w+))\s*=\s*require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+        while ((m = requireRe.exec(content)) !== null) {
+          imports.push({ source: m[3], default: m[2] || null, named: m[1] ? m[1].replace(/[{}]/g, "").split(",").map(s => s.trim()).filter(Boolean) : [] });
+        }
+        return { status: "success", type: t, data: { file: action.file, imports } };
+      }
+      case "run_command_advanced": {
+        if (!action.command) return { status: "error", type: t, error: "command required" };
+        const dir = projectName ? validateProjectPath(projectName, action.cwd || null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const cmd = action.command.trim();
+        if (/[\n\r\0]/.test(cmd)) return { status: "error", type: t, error: "Newlines/control characters not allowed in command" };
+        const isAllowed = ALLOWED_CMD_PREFIXES.some(p => cmd.startsWith(p));
+        if (!isAllowed) return { status: "error", type: t, error: `Command not allowed: ${cmd.slice(0, 50)}` };
+        const cmdOutsideQuotes = cmd.replace(/"[^"]*"/g, "").replace(/'[^']*'/g, "");
+        if (/[;&|`${}]/.test(cmdOutsideQuotes)) return { status: "error", type: t, error: "Shell metacharacters not allowed" };
+        const timeout = Math.min(Math.max(parseInt(action.timeout, 10) || 30000, 1000), 120000);
+        try {
+          const output = childProcess.execSync(cmd, { cwd: dir, timeout, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, ...(action.env || {}) }, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: cmd, output: (output || "").slice(0, 50000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: e.message?.slice(0, 2000), data: { command: cmd, stdout: (e.stdout || "").slice(0, 10000), stderr: (e.stderr || "").slice(0, 10000) } };
+        }
+      }
+      case "build_with_flags": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const pm = detectPmForDir(dir);
+        const flags = Array.isArray(action.flags) ? action.flags.map(f => sanitizeGitArg(f)).filter(Boolean).join(" ") : "";
+        const buildCmd = buildPmCommand(pm, "build", flags ? `-- ${flags}` : "");
+        try {
+          const output = childProcess.execSync(buildCmd, { cwd: dir, timeout: 120000, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: buildCmd, output: (output || "").slice(0, 20000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: e.message?.slice(0, 2000), data: { stdout: (e.stdout || "").slice(0, 10000), stderr: (e.stderr || "").slice(0, 10000) } };
+        }
+      }
+      case "clean_build_cache": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const cleaned = [];
+        const cacheDirs = ["dist", ".next", "build", "out", ".cache", ".turbo", ".parcel-cache", ".output", ".nuxt"];
+        for (const cd of cacheDirs) {
+          const p = path.join(dir, cd);
+          if (fs.existsSync(p)) { try { fs.rmSync(p, { recursive: true, force: true }); cleaned.push(cd); } catch {} }
+        }
+        const nmCache = path.join(dir, "node_modules", ".cache");
+        if (fs.existsSync(nmCache)) { try { fs.rmSync(nmCache, { recursive: true, force: true }); cleaned.push("node_modules/.cache"); } catch {} }
+        return { status: "success", type: t, data: { cleaned } };
+      }
+      case "start_process_named": {
+        if (!action.command) return { status: "error", type: t, error: "command required" };
+        if (!action.name) return { status: "error", type: t, error: "name required" };
+        return executeSandboxAction({ ...action, type: "start_process" }, projectsDir, _opts);
+      }
+      case "monitor_process": {
+        const pid = parseInt(action.pid, 10);
+        if (!pid) return { status: "error", type: t, error: "pid required (number)" };
+        let alive = false;
+        try { process.kill(pid, 0); alive = true; } catch { alive = false; }
+        let info = null;
+        for (const [name, entry] of sandboxProcesses) {
+          if (entry.proc && entry.proc.pid === pid) { info = { name, cmd: entry.cmd, startedAt: entry.startedAt }; break; }
+        }
+        return { status: "success", type: t, data: { pid, alive, processInfo: info } };
+      }
+      case "get_process_logs": {
+        const name = action.name;
+        const pid = action.pid ? parseInt(action.pid, 10) : null;
+        let entry = null;
+        if (name && sandboxProcesses.has(name)) {
+          entry = sandboxProcesses.get(name);
+        } else if (pid) {
+          for (const [n, e] of sandboxProcesses) { if (e.proc && e.proc.pid === pid) { entry = e; break; } }
+        }
+        if (!entry) {
+          const extPreviews = _opts.previewProcesses;
+          if (extPreviews) {
+            if (name && extPreviews.has(name)) entry = extPreviews.get(name);
+            else if (pid) { for (const [, e] of extPreviews) { if (e.process && e.process.pid === pid) { entry = e; break; } } }
+          }
+        }
+        if (!entry) return { status: "error", type: t, error: "Process not found" };
+        return { status: "success", type: t, data: { stdout: (entry.logs?.stdout || "").slice(-20000), stderr: (entry.logs?.stderr || "").slice(-20000) } };
+      }
+      case "stop_all_processes": {
+        const killed = [];
+        for (const [name, entry] of sandboxProcesses) {
+          try { entry.proc.kill("SIGTERM"); } catch {}
+          killed.push(name);
+          sandboxProcesses.delete(name);
+        }
+        return { status: "success", type: t, data: { killed } };
+      }
+      case "switch_port": {
+        const port = parseInt(action.port, 10);
+        if (!port || port < 1 || port > 65535) return { status: "error", type: t, error: "Valid port number required (1-65535)" };
+        return { status: "success", type: t, data: { port, note: "Port preference registered. Restart dev server to use new port." } };
+      }
+      case "git_stash_pop": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        try {
+          const output = childProcess.execFileSync("git", ["stash", "pop"], { cwd: dir, timeout: 15000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: "git stash pop", output: (output || "").trim().slice(0, 10000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: (e.stderr || e.message || "").slice(0, 2000) };
+        }
+      }
+      case "git_reset": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const mode = action.mode === "hard" ? "--hard" : "--soft";
+        const ref = sanitizeGitArg(action.ref) || "HEAD";
+        try {
+          const output = childProcess.execFileSync("git", ["reset", mode, ref], { cwd: dir, timeout: 15000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: `git reset ${mode} ${ref}`, output: (output || "").trim().slice(0, 10000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: (e.stderr || e.message || "").slice(0, 2000) };
+        }
+      }
+      case "git_revert": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const commit = sanitizeGitArg(action.commit);
+        if (!commit) return { status: "error", type: t, error: "commit hash required" };
+        try {
+          const output = childProcess.execFileSync("git", ["revert", "--no-edit", commit], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: `git revert ${commit}`, output: (output || "").trim().slice(0, 10000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: (e.stderr || e.message || "").slice(0, 2000) };
+        }
+      }
+      case "git_tag": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const tagName = sanitizeGitArg(action.name);
+        if (!tagName) return { status: "error", type: t, error: "tag name required" };
+        const args = action.message ? ["tag", "-a", tagName, "-m", action.message] : ["tag", tagName];
+        try {
+          const output = childProcess.execFileSync("git", args, { cwd: dir, timeout: 15000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: `git tag ${tagName}`, output: (output || "").trim().slice(0, 5000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: (e.stderr || e.message || "").slice(0, 2000) };
+        }
+      }
+      case "visual_diff": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        return { status: "success", type: t, data: { beforeUrl: action.beforeUrl, afterUrl: action.afterUrl, note: "Visual diff requires puppeteer/playwright. Use capture_preview for each URL separately and compare manually." } };
+      }
+      case "capture_component": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        return { status: "success", type: t, data: { componentName: action.componentName, note: "Component capture requires a running Storybook or isolated render. Use capture_preview with the component's URL." } };
+      }
+      case "record_video": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        return { status: "success", type: t, data: { duration: parseInt(action.duration, 10) || 5, note: "Video recording requires puppeteer/playwright with video support. Install one and use the preview URL." } };
+      }
+      case "get_dom_snapshot": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        let previewUrl = null;
+        const extPreviews = _opts.previewProcesses;
+        if (extPreviews && projectName && extPreviews.has(projectName)) {
+          previewUrl = `http://localhost:${extPreviews.get(projectName).port}`;
+        }
+        if (!previewUrl) {
+          for (const [, entry] of sandboxProcesses) {
+            if (entry.cmd && /dev|start|serve/.test(entry.cmd)) {
+              const portMatch = (entry.logs?.stdout || "").match(/localhost:(\d+)/);
+              if (portMatch) { previewUrl = `http://localhost:${portMatch[1]}`; break; }
+            }
+          }
+        }
+        if (!previewUrl) return { status: "success", type: t, data: { note: "No running preview server. Start a dev server first.", html: null } };
+        try {
+          const html = childProcess.execSync(`curl -s -m 10 ${previewUrl}`, { timeout: 15000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { url: previewUrl, html: html.slice(0, 100000) } };
+        } catch (e) {
+          return { status: "success", type: t, data: { url: previewUrl, html: null, error: e.message?.slice(0, 500) } };
+        }
+      }
+      case "get_console_errors": {
+        const extPreviews = _opts.previewProcesses;
+        const errors = [];
+        if (extPreviews) {
+          for (const [name, entry] of extPreviews) {
+            const stderr = entry.logs?.stderr || "";
+            const stdout = entry.logs?.stdout || "";
+            const combined = stderr + stdout;
+            const errLines = combined.split("\n").filter(l => /error|Error|ERR|FAIL|fatal|FATAL|TypeError|ReferenceError|SyntaxError/i.test(l));
+            if (errLines.length > 0) errors.push({ process: name, errors: errLines.slice(-50).map(l => l.trim().slice(0, 300)) });
+          }
+        }
+        for (const [name, entry] of sandboxProcesses) {
+          const stderr = entry.logs?.stderr || "";
+          const stdout = entry.logs?.stdout || "";
+          const combined = stderr + stdout;
+          const errLines = combined.split("\n").filter(l => /error|Error|ERR|FAIL|fatal|FATAL/i.test(l));
+          if (errLines.length > 0) errors.push({ process: name, errors: errLines.slice(-50).map(l => l.trim().slice(0, 300)) });
+        }
+        return { status: "success", type: t, data: { errors, totalErrors: errors.reduce((s, e) => s + e.errors.length, 0) } };
+      }
+      case "generate_test":
+      case "generate_storybook":
+      case "optimize_code":
+      case "convert_to_typescript":
+      case "add_feature": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const xaiKey = process.env.XAI_API || process.env.XAI_API_KEY || "";
+        if (!xaiKey) return { status: "error", type: t, error: "XAI_API environment variable not set" };
+        let aiPrompt = "";
+        let outPath = "";
+        if (t === "generate_test") {
+          if (!action.file) return { status: "error", type: t, error: "file required" };
+          const fc = projectName ? validateProjectPath(projectName, action.file, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.file) };
+          if (!fc.valid) return { status: "error", type: t, error: fc.error };
+          if (!fs.existsSync(fc.resolved)) return { status: "error", type: t, error: "File not found" };
+          const src = fs.readFileSync(fc.resolved, "utf-8");
+          const ext = path.extname(action.file);
+          outPath = action.file.replace(ext, `.test${ext}`);
+          aiPrompt = `Generate comprehensive unit tests for this file using Jest/Vitest:\n\nFile: ${action.file}\n\`\`\`\n${src.slice(0, 40000)}\n\`\`\`\n\nReturn ONLY the complete test file content.`;
+        } else if (t === "generate_storybook") {
+          if (!action.component) return { status: "error", type: t, error: "component name required" };
+          const compFiles = [];
+          function sbWalk(d, rel) {
+            let items; try { items = fs.readdirSync(d); } catch { return; }
+            for (const item of items) {
+              if (["node_modules", ".git", "dist"].includes(item)) continue;
+              const full = path.join(d, item);
+              const r = rel ? `${rel}/${item}` : item;
+              try { const s = fs.statSync(full); if (s.isDirectory()) sbWalk(full, r); else if (item.includes(action.component) && /\.(tsx|jsx)$/.test(item)) compFiles.push({ path: r, content: fs.readFileSync(full, "utf-8").slice(0, 20000) }); } catch {}
+            }
+          }
+          sbWalk(dir, "");
+          const compSrc = compFiles[0] ? `\n\`\`\`\n${compFiles[0].content}\n\`\`\`` : "";
+          outPath = compFiles[0] ? compFiles[0].path.replace(/\.(tsx|jsx)$/, ".stories.$1") : `src/stories/${action.component}.stories.tsx`;
+          aiPrompt = `Generate a Storybook story file for the component "${action.component}".${compSrc}\n\nReturn ONLY the complete stories file content.`;
+        } else if (t === "optimize_code") {
+          if (!action.file) return { status: "error", type: t, error: "file required" };
+          const fc = projectName ? validateProjectPath(projectName, action.file, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.file) };
+          if (!fc.valid) return { status: "error", type: t, error: fc.error };
+          if (!fs.existsSync(fc.resolved)) return { status: "error", type: t, error: "File not found" };
+          const src = fs.readFileSync(fc.resolved, "utf-8");
+          outPath = action.file;
+          aiPrompt = `Optimize this code for performance, readability, and best practices. Preserve all functionality.\n\nFile: ${action.file}\n\`\`\`\n${src.slice(0, 50000)}\n\`\`\`\n\nReturn ONLY the complete optimized file content.`;
+        } else if (t === "convert_to_typescript") {
+          if (!action.file) return { status: "error", type: t, error: "file required" };
+          const fc = projectName ? validateProjectPath(projectName, action.file, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.file) };
+          if (!fc.valid) return { status: "error", type: t, error: fc.error };
+          if (!fs.existsSync(fc.resolved)) return { status: "error", type: t, error: "File not found" };
+          const src = fs.readFileSync(fc.resolved, "utf-8");
+          outPath = action.file.replace(/\.(js|jsx)$/, (m, ext) => ext === "jsx" ? ".tsx" : ".ts");
+          aiPrompt = `Convert this JavaScript file to TypeScript with proper type annotations.\n\nFile: ${action.file}\n\`\`\`\n${src.slice(0, 50000)}\n\`\`\`\n\nReturn ONLY the complete TypeScript file content.`;
+        } else if (t === "add_feature") {
+          if (!action.featureSpec) return { status: "error", type: t, error: "featureSpec required" };
+          let projectContext = "";
+          try {
+            const pkgPath = path.join(dir, "package.json");
+            if (fs.existsSync(pkgPath)) {
+              const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+              projectContext = `\nProject: ${pkg.name || ""}\nDeps: ${Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).join(", ")}`;
+            }
+          } catch {}
+          outPath = action.path || "src/features/NewFeature.tsx";
+          aiPrompt = `Implement this feature: ${action.featureSpec}${projectContext}\n\nFile to create: ${outPath}\n\nReturn ONLY the complete file content.`;
+        }
+        const https = require("https");
+        const reqBody = JSON.stringify({
+          model: action.model || "grok-3-mini-fast",
+          messages: [{ role: "system", content: "You are a code generator. Return ONLY raw file content. No markdown fences, no explanations." }, { role: "user", content: aiPrompt }],
+          max_tokens: 8000, temperature: 0.3,
+        });
+        const _outPath = outPath, _pn = projectName, _pd = projectsDir, _tt = t;
+        return new Promise((resolve) => {
+          const req = https.request({ hostname: "api.x.ai", path: "/v1/chat/completions", method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${xaiKey}`, "Content-Length": Buffer.byteLength(reqBody) }, timeout: 60000 }, (res) => {
+            let data = "";
+            res.on("data", (chunk) => data += chunk);
+            res.on("end", () => {
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.message?.content;
+                if (!content) { resolve({ status: "error", type: _tt, error: "No content in API response" }); return; }
+                let clean = content.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
+                const wr = executeSandboxAction({ type: "write_file", project: _pn, path: _outPath, content: clean }, _pd);
+                if (wr.status === "error") { resolve({ status: "error", type: _tt, error: `Write failed: ${wr.error}` }); return; }
+                resolve({ status: "success", type: _tt, data: { path: _outPath, generated: true, length: clean.length, preview: clean.slice(0, 500) } });
+              } catch (e) { resolve({ status: "error", type: _tt, error: `AI generation failed: ${e.message}`.slice(0, 2000) }); }
+            });
+          });
+          req.on("error", (e) => { resolve({ status: "error", type: _tt, error: `AI request failed: ${e.message}`.slice(0, 2000) }); });
+          req.on("timeout", () => { req.destroy(); resolve({ status: "error", type: _tt, error: "API request timed out" }); });
+          req.write(reqBody);
+          req.end();
+        });
+      }
+      case "migrate_framework": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const target = action.target;
+        if (!target) return { status: "error", type: t, error: "target framework required (vite, react, next)" };
+        const suggestions = [];
+        if (target === "vite") {
+          suggestions.push("Install vite: npm install -D vite @vitejs/plugin-react");
+          suggestions.push("Create vite.config.ts with React plugin");
+          suggestions.push("Update package.json scripts: dev -> vite, build -> vite build");
+          suggestions.push("Move index.html to project root if not already there");
+        } else if (target === "next") {
+          suggestions.push("Install next: npm install next react react-dom");
+          suggestions.push("Create next.config.js");
+          suggestions.push("Move pages to /pages or /app directory");
+          suggestions.push("Update package.json scripts: dev -> next dev, build -> next build");
+        }
+        return { status: "success", type: t, data: { target, suggestions, note: "Use generate_component or write_file to create config files. Use add_dependency to install packages." } };
+      }
+      case "react_profiler": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next"]);
+        const suggestions = [];
+        function rpWalk(d, rel) {
+          let items; try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat; try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { rpWalk(full, r); continue; }
+            if (!/\.(tsx|jsx)$/.test(item)) continue;
+            try {
+              const content = fs.readFileSync(full, "utf-8");
+              if (/export\s+default\s+function/.test(content) && !/React\.memo|memo\(/.test(content) && content.length > 500) {
+                suggestions.push({ file: r, suggestion: "Consider wrapping with React.memo if props rarely change" });
+              }
+              if (/useEffect\s*\(\s*\(\)\s*=>\s*\{/.test(content) && !/\[\s*\]/.test(content.slice(content.indexOf("useEffect")))) {
+                suggestions.push({ file: r, suggestion: "Check useEffect dependency arrays — possible unnecessary re-runs" });
+              }
+              if (/new\s+Array|\.map\s*\(/.test(content) && /useMemo|useCallback/.test(content) === false && content.split("\n").length > 50) {
+                suggestions.push({ file: r, suggestion: "Consider useMemo for expensive computations or large array mappings" });
+              }
+            } catch {}
+            if (suggestions.length >= 50) return;
+          }
+        }
+        rpWalk(dir, "");
+        return { status: "success", type: t, data: { suggestions: suggestions.slice(0, 50) } };
+      }
+      case "memory_leak_detection": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next"]);
+        const issues = [];
+        function mlWalk(d, rel) {
+          let items; try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat; try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { mlWalk(full, r); continue; }
+            if (!/\.(ts|tsx|js|jsx)$/.test(item)) continue;
+            try {
+              const content = fs.readFileSync(full, "utf-8");
+              if (/addEventListener/.test(content) && !/removeEventListener/.test(content)) issues.push({ file: r, issue: "addEventListener without removeEventListener — potential event listener leak" });
+              if (/setInterval/.test(content) && !/clearInterval/.test(content)) issues.push({ file: r, issue: "setInterval without clearInterval — potential timer leak" });
+              if (/setTimeout/.test(content) && /useEffect/.test(content) && !/clearTimeout/.test(content)) issues.push({ file: r, issue: "setTimeout in useEffect without clearTimeout cleanup" });
+              if (/new\s+(?:WebSocket|EventSource|MutationObserver)/.test(content) && !/\.close\(\)/.test(content)) issues.push({ file: r, issue: "WebSocket/EventSource/Observer opened without close() — potential connection leak" });
+            } catch {}
+            if (issues.length >= 50) return;
+          }
+        }
+        mlWalk(dir, "");
+        return { status: "success", type: t, data: { issues: issues.slice(0, 50) } };
+      }
+      case "console_error_analysis": {
+        const extPreviews = _opts.previewProcesses;
+        const analysis = { errors: [], warnings: [], total: 0 };
+        const processLogs = (name, logs) => {
+          const combined = (logs.stderr || "") + (logs.stdout || "");
+          const lines = combined.split("\n");
+          for (const line of lines) {
+            if (/error|Error|ERR|TypeError|ReferenceError|SyntaxError|FATAL/i.test(line)) analysis.errors.push({ process: name, message: line.trim().slice(0, 300) });
+            else if (/warn|Warning|WARN|deprecated/i.test(line)) analysis.warnings.push({ process: name, message: line.trim().slice(0, 300) });
+          }
+        };
+        if (extPreviews) for (const [name, entry] of extPreviews) processLogs(name, entry.logs || {});
+        for (const [name, entry] of sandboxProcesses) processLogs(name, entry.logs || {});
+        analysis.total = analysis.errors.length + analysis.warnings.length;
+        analysis.errors = analysis.errors.slice(-100);
+        analysis.warnings = analysis.warnings.slice(-100);
+        return { status: "success", type: t, data: analysis };
+      }
+      case "runtime_error_trace": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next"]);
+        const findings = { errorBoundaries: [], tryCatchBlocks: [], uncaughtPatterns: [] };
+        function reWalk(d, rel) {
+          let items; try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat; try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { reWalk(full, r); continue; }
+            if (!/\.(ts|tsx|js|jsx)$/.test(item)) continue;
+            try {
+              const content = fs.readFileSync(full, "utf-8");
+              if (/componentDidCatch|ErrorBoundary|getDerivedStateFromError/.test(content)) findings.errorBoundaries.push(r);
+              const tryCatches = (content.match(/try\s*\{/g) || []).length;
+              if (tryCatches > 0) findings.tryCatchBlocks.push({ file: r, count: tryCatches });
+              if (/throw\s+new\s+Error/.test(content) && !/try\s*\{/.test(content)) findings.uncaughtPatterns.push(r);
+            } catch {}
+          }
+        }
+        reWalk(dir, "");
+        return { status: "success", type: t, data: findings };
+      }
+      case "bundle_analyzer": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const distCandidates = ["dist", ".next", "build", "out"];
+        let distDir = null;
+        for (const dc of distCandidates) { const p = path.join(dir, dc); if (fs.existsSync(p)) { distDir = p; break; } }
+        if (!distDir) return { status: "success", type: t, data: { note: "No build output found. Run build_project first.", files: [] } };
+        const files = [];
+        let totalSize = 0;
+        const byType = {};
+        function baWalk(d, rel) {
+          let items; try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat; try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { baWalk(full, r); continue; }
+            const ext = path.extname(item).toLowerCase();
+            files.push({ path: r, size: stat.size, sizeKB: Math.round(stat.size / 1024), type: ext });
+            totalSize += stat.size;
+            byType[ext] = (byType[ext] || 0) + stat.size;
+          }
+        }
+        baWalk(distDir, "");
+        files.sort((a, b) => b.size - a.size);
+        return { status: "success", type: t, data: { totalSize, totalSizeKB: Math.round(totalSize / 1024), fileCount: files.length, byType, largestFiles: files.slice(0, 30) } };
+      }
+      case "network_monitor": {
+        try {
+          const output = childProcess.execSync("ss -tnp 2>/dev/null || netstat -tnp 2>/dev/null || echo 'no tool'", { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          const connections = [];
+          const lines = output.split("\n").slice(1);
+          for (const line of lines) {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length >= 4) connections.push({ local: parts[3] || "", remote: parts[4] || "", state: parts[0] || "" });
+          }
+          return { status: "success", type: t, data: { connections: connections.slice(0, 100), raw: output.slice(0, 5000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: e.message?.slice(0, 1000) };
+        }
+      }
+      case "accessibility_audit": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next"]);
+        const issues = [];
+        function a11yWalk(d, rel) {
+          let items; try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat; try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { a11yWalk(full, r); continue; }
+            if (!/\.(tsx|jsx|html)$/.test(item)) continue;
+            try {
+              const content = fs.readFileSync(full, "utf-8");
+              if (/<img[^>]+(?!alt=)/.test(content) && !/<img[^>]+alt=/.test(content)) issues.push({ file: r, issue: "img without alt attribute" });
+              if (/<a[^>]+(?!href)/.test(content) && content.includes("<a") && !content.includes("href=")) issues.push({ file: r, issue: "anchor without href" });
+              if (/<button[^>]*>\s*<\/(button)>/i.test(content)) issues.push({ file: r, issue: "empty button element" });
+              if (/onClick\s*=/.test(content) && /<div[^>]*onClick/.test(content) && !/role=/.test(content)) issues.push({ file: r, issue: "div with onClick but no role attribute — use button instead" });
+              if (/<input[^>]+(?!id=)/.test(content) && /<label/.test(content) && !/htmlFor=/.test(content)) issues.push({ file: r, issue: "label without htmlFor / input without id pairing" });
+            } catch {}
+            if (issues.length >= 50) return;
+          }
+        }
+        a11yWalk(dir, "");
+        return { status: "success", type: t, data: { issues: issues.slice(0, 50), note: "Heuristic scan — install axe-core for comprehensive testing" } };
+      }
+      case "security_scan": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const results = { npmAudit: null, envExposed: [], dangerousPatterns: [] };
+        if (fs.existsSync(path.join(dir, "package.json"))) {
+          try {
+            const output = childProcess.execSync("npm audit --json 2>/dev/null || echo '{}'", { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            try { results.npmAudit = JSON.parse(output); } catch { results.npmAudit = { raw: output.slice(0, 5000) }; }
+          } catch (e) {
+            results.npmAudit = { error: (e.message || "").slice(0, 1000) };
+          }
+        }
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache"]);
+        function secWalk(d, rel) {
+          let items; try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat; try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { secWalk(full, r); continue; }
+            if (!/\.(ts|tsx|js|jsx)$/.test(item)) continue;
+            try {
+              const content = fs.readFileSync(full, "utf-8");
+              if (/dangerouslySetInnerHTML/.test(content)) results.dangerousPatterns.push({ file: r, pattern: "dangerouslySetInnerHTML" });
+              if (/eval\s*\(/.test(content)) results.dangerousPatterns.push({ file: r, pattern: "eval()" });
+              if (/(?:api[_-]?key|secret|password|token)\s*[:=]\s*["'][^"']{8,}["']/i.test(content)) results.envExposed.push({ file: r, issue: "Possible hardcoded secret/API key" });
+            } catch {}
+          }
+        }
+        secWalk(dir, "");
+        return { status: "success", type: t, data: results };
+      }
+      case "set_tailwind_config":
+      case "set_next_config": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        if (!action.config || typeof action.config !== "object") return { status: "error", type: t, error: "config object required" };
+        const configCandidates = t === "set_tailwind_config"
+          ? ["tailwind.config.js", "tailwind.config.ts", "tailwind.config.cjs", "tailwind.config.mjs"]
+          : ["next.config.js", "next.config.ts", "next.config.mjs"];
+        let configPath = null;
+        for (const c of configCandidates) { const p = path.join(dir, c); if (fs.existsSync(p)) { configPath = p; break; } }
+        if (!configPath) {
+          const defaultFile = t === "set_tailwind_config" ? "tailwind.config.js" : "next.config.js";
+          configPath = path.join(dir, defaultFile);
+          const defaultContent = `module.exports = ${JSON.stringify(action.config, null, 2)};\n`;
+          fs.writeFileSync(configPath, defaultContent);
+          return { status: "success", type: t, data: { file: defaultFile, created: true } };
+        }
+        const configJson = JSON.stringify(action.config, null, 2);
+        return { status: "success", type: t, data: { file: path.basename(configPath), note: `Config object received. Use write_file to update ${path.basename(configPath)} with the merged content.`, config: configJson.slice(0, 5000) } };
+      }
+      case "update_package_json": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        const pkgPath = path.join(dir, "package.json");
+        if (!fs.existsSync(pkgPath)) return { status: "error", type: t, error: "package.json not found" };
+        if (!action.changes || typeof action.changes !== "object") return { status: "error", type: t, error: "changes object required" };
+        try {
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+          for (const [key, value] of Object.entries(action.changes)) {
+            if (typeof value === "object" && value !== null && !Array.isArray(value) && typeof pkg[key] === "object" && pkg[key] !== null) {
+              pkg[key] = { ...pkg[key], ...value };
+            } else {
+              pkg[key] = value;
+            }
+          }
+          fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+          return { status: "success", type: t, data: { updated: Object.keys(action.changes), packageJson: JSON.stringify(pkg).slice(0, 5000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: e.message?.slice(0, 1000) };
+        }
+      }
+      case "manage_scripts": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        const pkgPath = path.join(dir, "package.json");
+        if (!fs.existsSync(pkgPath)) return { status: "error", type: t, error: "package.json not found" };
+        if (!action.scriptName) return { status: "error", type: t, error: "scriptName required" };
+        try {
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+          if (!pkg.scripts) pkg.scripts = {};
+          if (action.command === null || action.command === "") {
+            delete pkg.scripts[action.scriptName];
+          } else if (action.command) {
+            pkg.scripts[action.scriptName] = action.command;
+          }
+          fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+          return { status: "success", type: t, data: { scriptName: action.scriptName, command: action.command || "(deleted)", scripts: pkg.scripts } };
+        } catch (e) {
+          return { status: "error", type: t, error: e.message?.slice(0, 1000) };
+        }
+      }
+      case "switch_package_manager": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const target = action.manager;
+        if (!["npm", "yarn", "pnpm"].includes(target)) return { status: "error", type: t, error: "manager must be npm, yarn, or pnpm" };
+        const lockfiles = { npm: "package-lock.json", yarn: "yarn.lock", pnpm: "pnpm-lock.yaml" };
+        const removed = [];
+        for (const [pm, lf] of Object.entries(lockfiles)) {
+          if (pm !== target) {
+            const lfPath = path.join(dir, lf);
+            if (fs.existsSync(lfPath)) { try { fs.unlinkSync(lfPath); removed.push(lf); } catch {} }
+          }
+        }
+        const buns = ["bun.lockb", "bun.lock"];
+        for (const b of buns) { const bp = path.join(dir, b); if (fs.existsSync(bp)) { try { fs.unlinkSync(bp); removed.push(b); } catch {} } }
+        try {
+          const pkgPath = path.join(dir, "package.json");
+          if (fs.existsSync(pkgPath)) {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+            delete pkg.packageManager;
+            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+          }
+        } catch {}
+        return { status: "success", type: t, data: { target, removedLockfiles: removed, note: `Switched to ${target}. Run install_deps to generate new lockfile.` } };
+      }
+      case "deploy_preview": {
+        return executeSandboxAction({ ...action, type: "start_process", command: action.command || "npm run dev", name: action.name || "preview-server" }, projectsDir, _opts);
+      }
+      case "export_project_zip": {
+        return executeSandboxAction({ ...action, type: "export_project", format: "zip" }, projectsDir, _opts);
+      }
+      case "import_project": {
+        if (!action.url) return { status: "error", type: t, error: "url required" };
+        const url = action.url.trim();
+        if (!/^https?:\/\//.test(url)) return { status: "error", type: t, error: "URL must start with http:// or https://" };
+        if (/[;&|`${}]/.test(url)) return { status: "error", type: t, error: "Invalid URL characters" };
+        const repoName = action.name || url.split("/").filter(Boolean).pop()?.replace(/\.git$/, "") || `imported-${Date.now()}`;
+        if (/[\/\\]|\.\./.test(repoName)) return { status: "error", type: t, error: "Invalid project name" };
+        const targetDir = path.join(projectsDir, repoName);
+        if (fs.existsSync(targetDir)) return { status: "error", type: t, error: `Project '${repoName}' already exists` };
+        try {
+          childProcess.execFileSync("git", ["clone", "--depth", "1", url, targetDir], { timeout: 120000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { name: repoName, url, cloned: true } };
+        } catch (e) {
+          return { status: "error", type: t, error: `Git clone failed: ${(e.stderr || e.message || "").slice(0, 2000)}` };
+        }
+      }
+      case "super_command": {
+        if (!action.description) return { status: "error", type: t, error: "description required" };
+        const xaiKey = process.env.XAI_API || process.env.XAI_API_KEY || "";
+        if (!xaiKey) return { status: "error", type: t, error: "XAI_API environment variable not set" };
+        const proj = projectName || "PROJECT_NAME";
+        const superPrompt = `You are an AI that translates natural language descriptions into a JSON array of Lamby sandbox actions.
+Available action types: list_tree, read_file, write_file, create_file, delete_file, move_file, copy_file, grep, search_replace, run_command, install_deps, add_dependency, git_status, git_add, git_commit, create_folder, delete_folder, build_project, run_tests, generate_component, generate_page, refactor_file.
+
+The user wants: "${action.description}"
+Project name: "${proj}"
+
+Return ONLY a valid JSON array of action objects. Example: [{"type":"read_file","project":"${proj}","path":"src/App.tsx"}]`;
+        const https = require("https");
+        const reqBody = JSON.stringify({ model: "grok-3-mini-fast", messages: [{ role: "user", content: superPrompt }], max_tokens: 4000, temperature: 0.2 });
+        return new Promise((resolve) => {
+          const req = https.request({ hostname: "api.x.ai", path: "/v1/chat/completions", method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${xaiKey}`, "Content-Length": Buffer.byteLength(reqBody) }, timeout: 30000 }, (res) => {
+            let data = "";
+            res.on("data", (chunk) => data += chunk);
+            res.on("end", () => {
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.message?.content || "";
+                const jsonMatch = content.match(/\[[\s\S]*\]/);
+                if (!jsonMatch) { resolve({ status: "error", type: t, error: "AI did not return a valid action list" }); return; }
+                const actions = JSON.parse(jsonMatch[0]);
+                resolve({ status: "success", type: t, data: { description: action.description, generatedActions: actions, actionCount: actions.length } });
+              } catch (e) { resolve({ status: "error", type: t, error: `Failed to parse AI response: ${e.message}`.slice(0, 1000) }); }
+            });
+          });
+          req.on("error", (e) => { resolve({ status: "error", type: t, error: `AI request failed: ${e.message}`.slice(0, 500) }); });
+          req.on("timeout", () => { req.destroy(); resolve({ status: "error", type: t, error: "API request timed out" }); });
+          req.write(reqBody);
+          req.end();
+        });
+      }
       default:
         return { status: "error", type: t, error: `Unknown action type: ${t}` };
     }

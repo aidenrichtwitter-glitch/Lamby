@@ -286,20 +286,27 @@ supabase/
 - **Core file**: `server/sandbox-dispatcher.cjs` — all sandbox action handlers. Imported by both `vite.config.ts` (dev) and `electron-browser/src/local-server.js` (desktop).
 - **1:1 Mirror Rule**: `commandProtocol` strings in `vite.config.ts` and `local-server.js` must list identical action types.
 - **Grok Prompt**: `buildSandboxApiSection()` in `GrokBridge.tsx` documents all commands for the AI.
-- **Action Types** (20 new in Task #67, 13 new in Task #68):
+- **Action Types** (~110 total: 20 from Task #67, 13 from Task #68, 51 from Task #69):
   - **File**: `list_tree`, `read_file`, `read_multiple_files`, `write_file`, `create_file`, `bulk_write` (atomic+rollback), `delete_file`, `bulk_delete`, `move_file`, `copy_file`, `copy_folder`, `rename_file`
+  - **Folder** (Task #69): `create_folder`, `delete_folder`, `move_folder`, `rename_folder`, `list_tree_filtered` (by extension, depth, ignore)
   - **Search**: `grep`, `search_files`, `search_replace` (single/multi-file, regex), `apply_patch` (unified diff with context validation)
-  - **Shell**: `run_command`, `install_deps`, `add_dependency` (pkg mgr auto-detect, version, dev flag)
+  - **Code Intelligence** (Task #69): `dead_code_detection`, `dependency_graph`, `symbol_search`, `grep_advanced` (with include/exclude filters), `extract_imports`
+  - **Shell**: `run_command`, `install_deps`, `add_dependency` (pkg mgr auto-detect, version, dev flag), `run_command_advanced` (timeout, env vars)
+  - **Build** (Task #69): `build_with_flags`, `clean_build_cache`
   - **Code Quality**: `type_check` (tsc --noEmit), `lint_and_fix` (eslint/prettier), `format_files` (prettier)
-  - **Process**: `start_process`, `kill_process`, `list_processes`, `restart_dev_server`, `list_open_ports`
-  - **Git**: `git_init`, `git_status`, `git_add`, `git_commit`, `git_diff`, `git_log`, `git_branch`, `git_checkout`, `git_stash`, `git_push`, `git_pull`, `git_merge`
+  - **Process**: `start_process`, `kill_process`, `list_processes`, `restart_dev_server`, `list_open_ports`, `start_process_named`, `monitor_process`, `get_process_logs`, `stop_all_processes`, `switch_port`
+  - **Git**: `git_init`, `git_status`, `git_add`, `git_commit`, `git_diff`, `git_log`, `git_branch`, `git_checkout`, `git_stash`, `git_push`, `git_pull`, `git_merge`, `git_stash_pop`, `git_reset`, `git_revert`, `git_tag`
   - **Environment**: `set_env_var`, `get_env_vars`, `rollback_last_change`
   - **Project**: `detect_structure`, `build_project`, `run_tests`, `get_build_metrics`, `archive_project`, `export_project` (zip/tar.gz)
-  - **Analysis** (Task #68): `project_analyze` (routes, components, deps, CSS vars), `tailwind_audit` (config, custom colors, used classes), `find_usages` (symbol grep with context), `component_tree` (React import/export/JSX tree), `extract_theme`/`extract_colors` (CSS vars + Tailwind colors)
-  - **Preview** (Task #68): `get_preview_url` (running dev server URL/port), `capture_preview` (preview URL + screenshot info)
-  - **AI Generation** (Task #68): `generate_component` (xAI → component file), `generate_page` (xAI → page file), `refactor_file` (xAI → refactored file). All require `XAI_API` env var.
+  - **Analysis** (Task #68): `project_analyze`, `tailwind_audit`, `find_usages`, `component_tree`, `extract_theme`/`extract_colors`
+  - **Visual/Preview** (Tasks #68/#69): `get_preview_url`, `capture_preview`, `visual_diff`, `capture_component`, `record_video`, `get_dom_snapshot`, `get_console_errors`
+  - **AI Generation** (Tasks #68/#69): `generate_component`, `generate_page`, `refactor_file`, `generate_test`, `generate_storybook`, `optimize_code`, `convert_to_typescript`, `add_feature`, `migrate_framework`. All require `XAI_API` env var.
+  - **Debugging/Profiling** (Task #69): `react_profiler`, `memory_leak_detection`, `console_error_analysis`, `runtime_error_trace`, `bundle_analyzer`, `network_monitor`, `accessibility_audit`, `security_scan`
   - **Validation** (Task #68): `validate_change` (type-check + lint pass/fail), `profile_performance` (bundle sizes + lighthouse info)
-- **Field names**: `copy_file`/`rename_file`/`move_file` use `source`/`dest` (not `from`/`to`). `list_tree` returns `entries`. `search_files` uses `pattern`.
+  - **Config** (Task #69): `set_tailwind_config`, `set_next_config`, `update_package_json`, `manage_scripts`, `switch_package_manager`
+  - **Super/Meta** (Task #69): `deploy_preview`, `export_project_zip`, `import_project` (git clone), `super_command` (AI natural language → action list)
+- **Bridge Prompt Doc**: `electron-browser/BRIDGE_PROMPT.md` — paste-ready prompt for AI chat with all ~110 commands documented.
+- **Field names**: `copy_file`/`rename_file`/`move_file` use `source`/`dest` (not `from`/`to`). `move_folder`/`rename_folder` accept `from`/`source` + `to`/`dest`/`newName`. `list_tree` returns `entries`. `search_files` uses `pattern`.
 
 ## Testing
 - `npm test` — runs all Vitest tests
