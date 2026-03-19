@@ -541,6 +541,139 @@ async function main() {
   } catch (e) { log("\u274c", `Final snapshot failed: ${e.message}`); }
 
   // ============================================================
+  // PHASE 6: Bridge Relay Round-Trip
+  // ============================================================
+  console.log("\n\u2550\u2550\u2550 PHASE 6: Bridge Relay Round-Trip \u2550\u2550\u2550\n");
+
+  let relayUrl = null;
+  let relayKey = null;
+  let relayAvailable = false;
+
+  log("\ud83d\udccb", "6.0 Checking bridge relay connection...");
+  try {
+    const relayStatus = await fetchJSON(`${LOCAL_URL}/api/bridge-relay-status`);
+    if (relayStatus.status === 200 && relayStatus.data.status === "connected" && relayStatus.data.relayUrl) {
+      relayUrl = relayStatus.data.relayUrl.replace(/\/$/, "");
+      relayKey = relayStatus.data.snapshotKey || key;
+      relayAvailable = true;
+      log("\ud83c\udf10", `Relay connected: ${relayUrl}`);
+      log("\ud83d\udd11", `Relay key: ${relayKey.slice(0, 8)}...`);
+    } else {
+      log("\u26a0\ufe0f", `Relay status: ${relayStatus.data.status || "unknown"} \u2014 relay tests will be skipped`);
+    }
+  } catch (e) {
+    log("\u26a0\ufe0f", `Could not reach bridge-relay-status: ${e.message} \u2014 relay tests will be skipped`);
+  }
+
+  if (!relayAvailable) {
+    skip("6.1 Relay sandbox list_tree \u2014 relay not connected");
+    skip("6.2 Relay sandbox read_file \u2014 relay not connected");
+    skip("6.3 Relay sandbox create+read+delete \u2014 relay not connected");
+    skip("6.4 Relay snapshot fetch \u2014 relay not connected");
+    skip("6.5 Relay console-logs fetch \u2014 relay not connected");
+    skip("6.6 Relay xAI-driven round-trip \u2014 relay not connected");
+  } else {
+    const relaySandbox = async (actions) => {
+      return fetchJSON(`${relayUrl}/api/sandbox/execute?key=${relayKey}`, {
+        method: "POST",
+        body: { actions },
+        timeout: 60000,
+      });
+    };
+
+    log("\ud83d\udccb", "6.1 Relay sandbox: list_tree...");
+    try {
+      const res = await relaySandbox([{ type: "list_tree", project: PROJECT, depth: 2 }]);
+      assert(res.status === 200, "Relay list_tree returns 200");
+      assert(res.data.success === true, "Relay list_tree succeeds");
+      assert(res.data.results[0].data.entries.length > 0, `Relay list_tree returns ${res.data.results[0].data.entries.length} entries`);
+    } catch (e) { log("\u274c", `Relay list_tree failed: ${e.message}`); }
+
+    log("\n\ud83d\udccb", "6.2 Relay sandbox: read_file...");
+    try {
+      const res = await relaySandbox([{ type: "read_file", project: PROJECT, path: "package.json" }]);
+      assert(res.status === 200, "Relay read_file returns 200");
+      assert(res.data.success === true, "Relay read_file succeeds");
+      assert(res.data.results[0].data.content.length > 0, "Relay read_file returns content");
+    } catch (e) { log("\u274c", `Relay read_file failed: ${e.message}`); }
+
+    log("\n\ud83d\udccb", "6.3 Relay sandbox: create_file + read_file + delete_file round-trip...");
+    try {
+      const marker = `RELAY_E2E_${Date.now()}`;
+      const createRes = await relaySandbox([
+        { type: "create_file", project: PROJECT, path: "relay-test-marker.txt", content: `${marker}\n` },
+      ]);
+      assert(createRes.data.success === true, "Relay create_file succeeds");
+
+      const readRes = await relaySandbox([
+        { type: "read_file", project: PROJECT, path: "relay-test-marker.txt" },
+      ]);
+      assert(readRes.data.success === true, "Relay read_file (verify create) succeeds");
+      assert(readRes.data.results[0].data.content.includes(marker), "Relay round-trip: written content matches read content");
+
+      const delRes = await relaySandbox([
+        { type: "delete_file", project: PROJECT, path: "relay-test-marker.txt" },
+      ]);
+      assert(delRes.data.success === true, "Relay delete_file (cleanup) succeeds");
+      log("\ud83d\udd04", "Full relay CRUD round-trip verified: create \u2192 read \u2192 delete");
+    } catch (e) { log("\u274c", `Relay CRUD round-trip failed: ${e.message}`); }
+
+    log("\n\ud83d\udccb", "6.4 Relay snapshot fetch...");
+    try {
+      const res = await fetchJSON(`${relayUrl}/api/snapshot/${PROJECT}?key=${relayKey}`, { timeout: 30000 });
+      const snap = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
+      assert(res.status === 200, "Relay snapshot returns 200");
+      assert(snap.length > 50, `Relay snapshot fetched (${snap.length} chars)`);
+      assert(snap.includes(PROJECT) || snap.includes("LAMBY PROJECT SNAPSHOT"), "Relay snapshot contains project data");
+    } catch (e) { log("\u274c", `Relay snapshot failed: ${e.message}`); }
+
+    log("\n\ud83d\udccb", "6.5 Relay console-logs fetch...");
+    try {
+      const res = await fetchJSON(`${relayUrl}/api/console-logs?key=${relayKey}`, { timeout: 15000 });
+      assert(res.status === 200, "Relay console-logs returns 200");
+      const body = typeof res.data === "object" ? res.data : {};
+      assert(body.previews || body.error !== "Relay timeout", "Relay console-logs returns data (not timeout)");
+      log("  \u2139\ufe0f", `Relay console-logs: ${JSON.stringify(body).slice(0, 200)}`);
+    } catch (e) { log("\u274c", `Relay console-logs failed: ${e.message}`); }
+
+    log("\n\ud83d\udccb", "6.6 Relay xAI-driven round-trip (AI \u2192 relay \u2192 desktop \u2192 relay \u2192 AI)...");
+    try {
+      const relayConversation = [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: `You have access to the "${PROJECT}" project sandbox. Please:\n1. List the project files (depth 2)\n2. Read the package.json file\n3. Create a test file called "relay-ai-test.txt" with the content "Hello from Grok via relay!"\n\nRespond with ONLY a JSON object containing an "actions" array.` },
+      ];
+
+      log("\ud83e\udd16", "Calling xAI API for relay round-trip...");
+      const aiResponse = await callXAI(relayConversation, 0.2, 4096);
+      const parsed = parseAIResponse(aiResponse);
+      assert(parsed && Array.isArray(parsed.actions), "xAI returned valid actions for relay test");
+      assert(parsed.actions.length >= 2, `xAI returned ${parsed.actions.length} actions`);
+      log("\ud83d\udcdd", `AI actions: ${parsed.actions.map(a => a.type).join(", ")}`);
+
+      log("\ud83d\udd04", "Executing AI actions through relay...");
+      const aiRes = await relaySandbox(parsed.actions);
+      assert(aiRes.status === 200, "Relay accepts AI-generated actions");
+      assert(aiRes.data.success === true, "Relay AI actions execute successfully");
+      const okCount = aiRes.data.results.filter(r => r.status === "success").length;
+      assert(okCount > 0, `Relay: ${okCount}/${aiRes.data.results.length} AI actions succeeded`);
+      logResults(aiRes.data.results);
+
+      log("\ud83d\udd0d", "Verifying AI-created file through relay...");
+      const verifyRes = await relaySandbox([
+        { type: "read_file", project: PROJECT, path: "relay-ai-test.txt" },
+      ]);
+      if (verifyRes.data.success && verifyRes.data.results[0].status === "success") {
+        assert(verifyRes.data.results[0].data.content.includes("Grok") || verifyRes.data.results[0].data.content.includes("relay"), "AI-created file contains expected content");
+        log("\ud83c\udf89", "Full AI \u2192 Relay \u2192 Desktop pipeline verified!");
+      } else {
+        log("\u26a0\ufe0f", "AI may not have created relay-ai-test.txt (non-critical)");
+      }
+
+      await relaySandbox([{ type: "delete_file", project: PROJECT, path: "relay-ai-test.txt" }]).catch(() => {});
+    } catch (e) { log("\u274c", `Relay xAI round-trip failed: ${e.message}`); }
+  }
+
+  // ============================================================
   // SUMMARY
   // ============================================================
   console.log("\n==========================================");

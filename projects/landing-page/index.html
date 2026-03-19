@@ -1,109 +1,6 @@
 <!doctype html>
 <html lang="en">
   <head>
-<script data-lamby-preview-path>if(window.location.pathname.match(/^\/__preview\/\d+/)){window.history.replaceState(null,'',window.location.pathname.replace(/^\/__preview\/\d+\/?/,'/')+window.location.search+window.location.hash)}</script>
-<script data-lamby-console-bridge>
-(function() {
-  if (window.__lambyConsoleBridge) return;
-  window.__lambyConsoleBridge = true;
-  var origLog = console.log, origWarn = console.warn, origError = console.error, origInfo = console.info;
-  function send(level, args, stack) {
-    try {
-      var serialized = [];
-      for (var i = 0; i < args.length; i++) {
-        try { serialized.push(typeof args[i] === 'object' ? JSON.parse(JSON.stringify(args[i])) : args[i]); }
-        catch(e) { serialized.push(String(args[i])); }
-      }
-      window.parent.postMessage({ type: 'lamby-console-bridge', level: level, args: serialized, stack: stack || null }, '*');
-    } catch(e) {}
-  }
-  console.log = function() { send('log', Array.prototype.slice.call(arguments)); origLog.apply(console, arguments); };
-  console.warn = function() { send('warn', Array.prototype.slice.call(arguments)); origWarn.apply(console, arguments); };
-  console.error = function() { send('error', Array.prototype.slice.call(arguments)); origError.apply(console, arguments); };
-  console.info = function() { send('info', Array.prototype.slice.call(arguments)); origInfo.apply(console, arguments); };
-  window.onerror = function(msg, source, line, column, error) {
-    send('error', [String(msg)], error && error.stack ? error.stack : null);
-    return false;
-  };
-  window.addEventListener('unhandledrejection', function(event) {
-    var reason = event.reason;
-    var msg = reason instanceof Error ? reason.message : String(reason);
-    var stack = reason instanceof Error ? reason.stack : null;
-    send('error', ['Unhandled Promise Rejection: ' + msg], stack);
-  });
-  var moduleErrors = [];
-  var origCreateElement = document.createElement;
-  document.createElement = function(tag) {
-    var el = origCreateElement.call(document, tag);
-    if (tag === 'script') {
-      el.addEventListener('error', function(e) {
-        var src = el.src || el.getAttribute('src') || 'unknown';
-        moduleErrors.push(src);
-        send('error', ['[Lamby] Failed to load script: ' + src]);
-      });
-    }
-    return el;
-  };
-  function extractOverlayContent(el) {
-    try {
-      var root = el.shadowRoot || el;
-      var text = '';
-      var msgEl = root.querySelector('.message-body, .message, [class*="message"], pre');
-      if (msgEl) text = msgEl.textContent || '';
-      if (!text) {
-        var preEls = root.querySelectorAll('pre, code');
-        for (var p = 0; p < preEls.length; p++) { text += (preEls[p].textContent || '') + '\n'; }
-      }
-      if (!text) {
-        text = root.textContent || el.textContent || '';
-      }
-      return text.trim().substring(0, 4000);
-    } catch(e) { return ''; }
-  }
-  function checkOverlays() {
-    try {
-      var selectors = ['vite-error-overlay', 'nextjs-portal', '#webpack-dev-server-client-overlay'];
-      for (var s = 0; s < selectors.length; s++) {
-        var els = document.querySelectorAll(selectors[s]);
-        for (var i = 0; i < els.length; i++) {
-          if (els[i].__lambyReported) continue;
-          els[i].__lambyReported = true;
-          var content = extractOverlayContent(els[i]);
-          if (content) {
-            send('error', ['[Lamby] Error overlay detected (' + selectors[s] + '):\n' + content]);
-          } else {
-            send('error', ['[Lamby] Error overlay detected (' + selectors[s] + ') but could not extract content.']);
-          }
-        }
-      }
-    } catch(e) {}
-  }
-  try {
-    var overlayObserver = new MutationObserver(function() { checkOverlays(); });
-    overlayObserver.observe(document.documentElement, { childList: true, subtree: true });
-  } catch(e) {}
-  setTimeout(function() {
-    checkOverlays();
-    try {
-      var root = document.getElementById('root') || document.getElementById('app');
-      if (root && root.children.length === 0 && root.textContent.trim() === '') {
-        var diag = '[Lamby] Blank screen detected — root element exists but has no rendered content after 5s.';
-        if (moduleErrors.length > 0) diag += ' Failed scripts: ' + moduleErrors.join(', ');
-        var viteErrors = document.querySelectorAll('vite-error-overlay');
-        if (viteErrors.length > 0) diag += ' Vite error overlay is showing.';
-        send('warn', [diag]);
-      }
-      if (!root) {
-        var body = document.body;
-        var visibleText = body ? body.innerText.trim() : '';
-        if (visibleText.length === 0) {
-          send('warn', ['[Lamby] Blank screen detected — no visible content on page after 5s. Check that index.html has the correct root element and entry script.']);
-        }
-      }
-    } catch(e) {}
-  }, 5000);
-})();
-</script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Lamby AI</title>
@@ -111,22 +8,28 @@
       body {
         font-family: Arial, sans-serif;
         margin: 0;
-        padding: 0;
-        background: linear-gradient(to bottom, #333, #000);
-        color: white;
-        scroll-behavior: smooth;
+        background-color: #f4f4f4;
       }
       .hero {
+        background: linear-gradient(to right, #333, #666);
+        color: white;
         text-align: center;
         padding: 100px 20px;
-        background: linear-gradient(45deg, #4a90e2, #9013fe);
-        color: white;
+        animation: fadeIn 1s ease-in;
       }
-      .hero h1 {
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      h1 {
         font-size: 3em;
         margin: 0;
       }
-      .hero p {
+      p {
         font-size: 1.5em;
       }
       .features {
@@ -135,60 +38,73 @@
         justify-content: center;
         padding: 20px;
       }
-      .card {
-        background: rgba(255, 255, 255, 0.1);
+      .feature {
+        background: white;
         border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         margin: 10px;
         padding: 20px;
         width: 250px;
         text-align: center;
-        transition: transform 0.3s;
+        animation: slideUp 0.5s ease-out;
       }
-      .card:hover {
-        transform: scale(1.05);
+      @keyframes slideUp {
+        from {
+          transform: translateY(20px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
       }
       button {
-        background: #4a90e2;
-        border: none;
+        background: #4caf50;
         color: white;
-        padding: 15px 30px;
-        font-size: 1em;
-        cursor: pointer;
+        padding: 15px 25px;
+        border: none;
         border-radius: 5px;
+        cursor: pointer;
+        font-size: 1.2em;
+        margin: 20px auto;
+        display: block;
+      }
+      button:hover {
+        background: #45a049;
       }
       footer {
         text-align: center;
-        padding: 20px;
+        padding: 10px;
         background: #333;
+        color: white;
+        position: absolute;
+        bottom: 0;
+        width: 100%;
       }
-      @media (max-width: 600px) {
-        .hero {
-          padding: 50px 10px;
-        }
+      @media (max-width: 768px) {
         .features {
           flex-direction: column;
+          align-items: center;
         }
       }
     </style>
   </head>
   <body>
-    <header class="hero">
+    <section class="hero">
       <h1>Lamby AI</h1>
       <p>Your AI-Powered Development Partner</p>
-      <button>Learn More</button>
-    </header>
-    <section class="features">
-      <div class="card">Autonomous Coding</div>
-      <div class="card">Smart Debugging</div>
-      <div class="card">Instant Deploy</div>
     </section>
-    <footer>
-      <p>&copy; 2023 Lamby AI</p>
-    </footer>
+    <section class="features">
+      <div class="feature">Autonomous Coding</div>
+      <div class="feature">Smart Debugging</div>
+      <div class="feature">Instant Deploy</div>
+    </section>
+    <button>Get Started</button>
+    <footer>&copy; 2023 Lamby AI</footer>
     <script>
-      // Small script for basic interaction, e.g., button click alert
+      // Small JavaScript for button click alert
       document.querySelector('button').addEventListener('click', () => {
-        alert('Discover Lamby AI!')
+        alert('Starting your journey with Lamby AI!')
       })
     </script>
   </body>
