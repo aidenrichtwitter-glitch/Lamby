@@ -10,7 +10,68 @@ function getChromiumPath() {
     _chromiumPath = childProcess.execSync("which chromium", { encoding: "utf-8", timeout: 3000 }).trim();
     if (_chromiumPath && fs.existsSync(_chromiumPath)) return _chromiumPath;
   } catch {}
+  try {
+    const gcPath = childProcess.execSync("which google-chrome || which google-chrome-stable || which chromium-browser", { encoding: "utf-8", timeout: 3000 }).trim();
+    if (gcPath && fs.existsSync(gcPath)) { _chromiumPath = gcPath; return _chromiumPath; }
+  } catch {}
+  const macPaths = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+  ];
+  for (const mp of macPaths) {
+    if (fs.existsSync(mp)) { _chromiumPath = mp; return _chromiumPath; }
+  }
+  const winPaths = [
+    path.join(process.env.PROGRAMFILES || "", "Google/Chrome/Application/chrome.exe"),
+    path.join(process.env["PROGRAMFILES(X86)"] || "", "Google/Chrome/Application/chrome.exe"),
+    path.join(process.env.LOCALAPPDATA || "", "Google/Chrome/Application/chrome.exe"),
+  ];
+  for (const wp of winPaths) {
+    if (wp && fs.existsSync(wp)) { _chromiumPath = wp; return _chromiumPath; }
+  }
   _chromiumPath = null;
+  return null;
+}
+
+let _puppeteerPath = null;
+let _puppeteerSearched = false;
+function findPuppeteerPath() {
+  if (_puppeteerSearched) return _puppeteerPath;
+  _puppeteerSearched = true;
+  try { _puppeteerPath = require.resolve("puppeteer"); return _puppeteerPath; } catch {}
+  try { _puppeteerPath = require.resolve("puppeteer-core"); return _puppeteerPath; } catch {}
+  try {
+    const globalRoot = childProcess.execSync("npm root -g", { encoding: "utf-8", timeout: 5000 }).trim();
+    for (const pkg of ["puppeteer", "puppeteer-core"]) {
+      const gp = path.join(globalRoot, pkg);
+      if (fs.existsSync(gp)) { _puppeteerPath = gp; return _puppeteerPath; }
+    }
+  } catch {}
+  const searchPaths = [
+    path.join(process.env.HOME || process.env.USERPROFILE || "", ".nvm/versions/node"),
+    path.join(process.env.APPDATA || "", "npm/node_modules"),
+    "/usr/local/lib/node_modules",
+    "/usr/lib/node_modules",
+  ];
+  for (const sp of searchPaths) {
+    if (!fs.existsSync(sp)) continue;
+    if (sp.includes(".nvm")) {
+      try {
+        const versions = fs.readdirSync(sp).filter(v => v.startsWith("v")).sort().reverse();
+        for (const ver of versions) {
+          for (const pkg of ["puppeteer", "puppeteer-core"]) {
+            const nvmPup = path.join(sp, ver, "lib/node_modules", pkg);
+            if (fs.existsSync(nvmPup)) { _puppeteerPath = nvmPup; return _puppeteerPath; }
+          }
+        }
+      } catch {}
+    } else {
+      for (const pkg of ["puppeteer", "puppeteer-core"]) {
+        const sysPup = path.join(sp, pkg);
+        if (fs.existsSync(sysPup)) { _puppeteerPath = sysPup; return _puppeteerPath; }
+      }
+    }
+  }
   return null;
 }
 
@@ -1259,14 +1320,17 @@ function executeSandboxAction(action, projectsDir, options) {
         } else {
           screenshotPath = path.join(dir, `preview-${Date.now()}.png`);
         }
+        const cpPuppeteerPath = findPuppeteerPath();
         const playwrightBin = path.join(dir, "node_modules/playwright");
         const puppeteerBin = path.join(dir, "node_modules/puppeteer");
         const hasPlaywright = fs.existsSync(playwrightBin);
-        const hasPuppeteer = fs.existsSync(puppeteerBin);
-        if (hasPlaywright || hasPuppeteer) {
+        const hasPuppeteer = fs.existsSync(puppeteerBin) || cpPuppeteerPath;
+        const cpHasChromium = !!getChromiumPath();
+        if (hasPlaywright || hasPuppeteer || cpHasChromium) {
+          const pupRequire = cpPuppeteerPath ? JSON.stringify(cpPuppeteerPath) : "'puppeteer'";
           const captureScript = hasPlaywright
             ? `const { chromium } = require('playwright'); (async()=>{ const b=await chromium.launch({headless:true}); const p=await b.newPage(); await p.setViewportSize({width:${action.width||1280},height:${action.height||720}}); await p.goto('${previewUrl}',{waitUntil:'networkidle',timeout:15000}).catch(()=>{}); await p.screenshot({path:'${screenshotPath.replace(/'/g,"\\'")}',fullPage:${!!action.fullPage}}); await b.close(); })();`
-            : `const pup = require('puppeteer'); (async()=>{ const b=await pup.launch({headless:'new',args:['--no-sandbox','--disable-gpu'],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined}); const p=await b.newPage(); await p.setViewport({width:${action.width||1280},height:${action.height||720}}); await p.goto('${previewUrl}',{waitUntil:'networkidle0',timeout:15000}).catch(()=>{}); await p.screenshot({path:'${screenshotPath.replace(/'/g,"\\'")}',fullPage:${!!action.fullPage}}); await b.close(); })();`;
+            : `const pup = require(${pupRequire}); (async()=>{ const b=await pup.launch({headless:'new',args:['--no-sandbox','--disable-gpu'],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined}); const p=await b.newPage(); await p.setViewport({width:${action.width||1280},height:${action.height||720}}); await p.goto('${previewUrl}',{waitUntil:'networkidle0',timeout:15000}).catch(()=>{}); await p.screenshot({path:'${screenshotPath.replace(/'/g,"\\'")}',fullPage:${!!action.fullPage}}); await b.close(); })();`;
           return new Promise((resolve) => {
             try {
               const chromExecEnv = Object.assign({}, process.env);
@@ -1332,15 +1396,17 @@ function executeSandboxAction(action, projectsDir, options) {
         const viewportW = action.width || 1280;
         const viewportH = action.height || 720;
         const waitMs = action.waitMs || 2000;
-        let puppeteerPath = null;
-        try { puppeteerPath = require.resolve("puppeteer"); } catch {}
-        if (!puppeteerPath) { try { puppeteerPath = require.resolve("puppeteer-core"); } catch {} }
+        let puppeteerPath = findPuppeteerPath();
         const playwrightBin = path.join(dir, "node_modules/playwright");
         const puppeteerBin = path.join(dir, "node_modules/puppeteer");
         const hasPlaywright = fs.existsSync(playwrightBin);
         const hasPuppeteer = fs.existsSync(puppeteerBin) || puppeteerPath;
-        if (!hasPlaywright && !hasPuppeteer) {
-          return { status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, note: "No headless browser available. Install puppeteer globally or in the project: npm i puppeteer" } };
+        const hasChromium = !!getChromiumPath();
+        if (!hasPlaywright && !hasPuppeteer && !hasChromium) {
+          return { status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, note: "No headless browser available. Install puppeteer globally or in the project: npm i puppeteer", searched: { puppeteerPath: null, chromiumBinary: false } } };
+        }
+        if (!hasPuppeteer && !hasPlaywright && hasChromium) {
+          puppeteerPath = findPuppeteerPath() || "puppeteer-core";
         }
         const selectorSnippet = action.selector ? (hasPlaywright
           ? `const el=await p.$(${JSON.stringify(action.selector)});if(el){await el.screenshot({path:ss})}else{await p.screenshot({path:ss,fullPage:${!!action.fullPage}})}`
@@ -1415,14 +1481,13 @@ function executeSandboxAction(action, projectsDir, options) {
         }
         if (!previewUrl) previewUrl = previewPort ? `http://localhost:${previewPort}` : null;
         if (!previewUrl) return { status: "error", type: t, error: "No preview server detected. Start a dev server first." };
-        let puppeteerPath = null;
-        try { puppeteerPath = require.resolve("puppeteer"); } catch {}
-        if (!puppeteerPath) { try { puppeteerPath = require.resolve("puppeteer-core"); } catch {} }
+        let puppeteerPath = findPuppeteerPath();
         const playwrightBin2 = path.join(dir, "node_modules/playwright");
         const puppeteerBin2 = path.join(dir, "node_modules/puppeteer");
         const hasPlaywright2 = fs.existsSync(playwrightBin2);
         const hasPuppeteer2 = fs.existsSync(puppeteerBin2) || puppeteerPath;
-        if (!hasPlaywright2 && !hasPuppeteer2) {
+        const biHasChromium = !!getChromiumPath();
+        if (!hasPlaywright2 && !hasPuppeteer2 && !biHasChromium) {
           return { status: "error", type: t, error: "No headless browser available. Install puppeteer: npm i puppeteer" };
         }
         const targetUrl = action.url || previewUrl;
@@ -2095,9 +2160,7 @@ function executeSandboxAction(action, projectsDir, options) {
       case "visual_diff": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!action.beforeUrl && !action.afterUrl) return { status: "error", type: t, error: "beforeUrl and afterUrl required" };
-        let puppeteerPath = null;
-        try { puppeteerPath = require.resolve("puppeteer"); } catch {}
-        if (!puppeteerPath) { try { puppeteerPath = require.resolve("puppeteer-core"); } catch {} }
+        let puppeteerPath = findPuppeteerPath();
         if (puppeteerPath) {
           const outDir = path.join(dir, ".visual-diffs");
           if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
@@ -2134,9 +2197,7 @@ function executeSandboxAction(action, projectsDir, options) {
       case "capture_component": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!action.componentName && !action.url) return { status: "error", type: t, error: "componentName or url required" };
-        let puppeteerPath = null;
-        try { puppeteerPath = require.resolve("puppeteer"); } catch {}
-        if (!puppeteerPath) { try { puppeteerPath = require.resolve("puppeteer-core"); } catch {} }
+        let puppeteerPath = findPuppeteerPath();
         if (puppeteerPath && action.url) {
           const outDir = path.join(dir, ".component-captures");
           if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
