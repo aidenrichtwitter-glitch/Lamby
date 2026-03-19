@@ -20,7 +20,7 @@ const net = require("net");
 const USER_DATA_DIR = path.join(os.homedir(), ".guardian-ai");
 const PROJECTS_DIR = path.join(USER_DATA_DIR, "projects");
 const BRIDGE_CONFIG_PATH = path.join(USER_DATA_DIR, "bridge-config.json");
-const PORT = parseInt(process.env.LAMBY_PORT || "5000", 10);
+const PORT = parseInt(process.env.LAMBY_PORT || "4999", 10);
 
 if (!fs.existsSync(USER_DATA_DIR)) fs.mkdirSync(USER_DATA_DIR, { recursive: true });
 if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
