@@ -5052,6 +5052,18 @@ const GrokBridge: React.FC = () => {
                        bridgeStatus === 'disconnected' ? 'Disconnected' : `Status: ${bridgeStatus}`}
                     </span>
                   </div>
+                  {(bridgeStatus === 'connected' || bridgeStatus === 'web-mode') && bridgeRelayUrl && (
+                    <div className="text-[9px] space-y-0.5 mt-1 border-t border-border pt-1.5">
+                      <div className="flex items-center gap-1">
+                        <span className="text-muted-foreground/70 shrink-0">Relay:</span>
+                        <code data-testid="text-relay-url" className="text-muted-foreground truncate select-all">{bridgeRelayUrl}</code>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-muted-foreground/70 shrink-0">Key:</span>
+                        <code data-testid="text-snapshot-key" className="text-muted-foreground truncate select-all font-mono">{snapshotUrl?.match(/key=([^&]+)/)?.[1] || '—'}</code>
+                      </div>
+                    </div>
+                  )}
                   {isElectron && (
                     <div className="border-t border-border pt-2 mt-2 space-y-1.5">
                       <div className="text-muted-foreground font-medium">Relay Settings</div>
