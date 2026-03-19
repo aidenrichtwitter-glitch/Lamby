@@ -256,7 +256,7 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   const grokDocsUrl = snapshotUrl ? snapshotUrl.replace(/\/api\/snapshot\/[^?]+/, '/api/grok') : '';
 
   let section = '\n=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS — USE IT) ===\n';
-  section += `You are Grok working inside Lamby with full bridge-relay access. Your ONLY web tool is browse_page (GET-only).\n\n`;
+  section += `You are Grok-4 working inside Lamby with full bridge-relay access. Your ONLY web tool is browse_page (GET-only).\n\n`;
   section += `CRITICAL: Desktop connections can take 5–20 seconds to become ready. You MUST be patient.\n\n`;
 
   if (!bridgeOnline) {
