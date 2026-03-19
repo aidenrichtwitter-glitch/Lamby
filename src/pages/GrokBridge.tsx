@@ -175,6 +175,16 @@ function saveConversations(convos: Conversation[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(convos.slice(0, 50)));
 }
 
+function extractBaseUrl(endpoint: string): string {
+  try {
+    const url = new URL(endpoint);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    const match = endpoint.match(/^(https?:\/\/[^/]+)/);
+    return match ? match[1] : '';
+  }
+}
+
 function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, project: string): string {
   if (!snapshotUrl && !cmdEndpoint) return '';
   const proj = project || 'PROJECT_NAME';
@@ -199,6 +209,8 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    delete_file    — { type: "delete_file", project: "${proj}", path: "src/old.ts" }\n`;
     section += `    move_file      — { type: "move_file", project: "${proj}", from: "old/path.ts", to: "new/path.ts" }  → move/rename\n`;
     section += `    copy_file      — { type: "copy_file", project: "${proj}", from: "src/a.ts", to: "src/b.ts" }  → duplicate file\n`;
+    section += `    rename_file    — { type: "rename_file", project: "${proj}", path: "src/old.ts", newName: "new.ts" }  → renames file in place\n`;
+    section += `  SEARCH:\n`;
     section += `    grep           — { type: "grep", project: "${proj}", pattern: "TODO" }  → regex search across all files\n`;
     section += `    search_files   — { type: "search_files", project: "${proj}", query: "Button" }  → filename search\n`;
     section += `  COMMANDS:\n`;
@@ -219,7 +231,10 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    git_checkout   — { type: "git_checkout", project: "${proj}", ref: "main" }\n`;
     section += `    git_stash      — { type: "git_stash", project: "${proj}" }\n`;
     section += `  PROJECT INFO:\n`;
-    section += `    detect_structure — { type: "detect_structure", project: "${proj}" }  → framework, entry point, package manager\n\n`;
+    section += `    detect_structure — { type: "detect_structure", project: "${proj}" }  → framework, entry point, package manager\n`;
+    section += `    build_project   — { type: "build_project", project: "${proj}" }  → runs the project build command\n`;
+    section += `    run_tests       — { type: "run_tests", project: "${proj}" }  → runs the project test suite\n`;
+    section += `    archive_project — { type: "archive_project", project: "${proj}" }  → archives/zips the project\n\n`;
     section += `RESPONSE FORMAT:\n`;
     section += `  { "success": true, "results": [ { "actionIndex": 0, "status": "success", "data": {...} }, ... ] }\n\n`;
     section += `HOW TO USE — wrap actions in a \`\`\`json code block so Lamby auto-executes them:\n`;
@@ -1913,11 +1928,12 @@ const GrokBridge: React.FC = () => {
 
     if (commandEndpoint) {
       prompt += `YOU MUST USE THE SANDBOX API TO FIX THIS. Follow this exact workflow:\n`;
-      prompt += `1. read_file each file mentioned in the error stack traces above\n`;
+      prompt += `1. read_file each file mentioned in the error stack traces above to see their CURRENT state\n`;
       prompt += `2. grep for the broken symbol/function if the root cause isn't obvious\n`;
-      prompt += `3. write_file with the corrected content for every file that needs fixing\n`;
-      prompt += `4. run_command to verify the fix (e.g. a quick node -e check or build command)\n`;
-      prompt += `5. Fetch console logs to confirm errors are resolved\n\n`;
+      prompt += `3. Diagnose the root cause by cross-referencing errors with the source code\n`;
+      prompt += `4. write_file with the corrected content for every file that needs fixing\n`;
+      prompt += `5. run_command to verify the fix (e.g. a quick node -e check or build command)\n`;
+      prompt += `6. Fetch console logs to confirm errors are resolved\n\n`;
       prompt += `Respond with a \`\`\`json code block containing {"actions": [...]} so Lamby auto-executes your fix.\n`;
       prompt += `Do NOT just describe the fix in text — actually apply it via the API.\n\n`;
     } else {
@@ -1948,8 +1964,9 @@ const GrokBridge: React.FC = () => {
         if (commandEndpoint) {
           visionPrompt += `USE THE SANDBOX API to fix these visual issues. Follow this workflow:\n`;
           visionPrompt += `1. read_file the CSS/component files responsible for the broken layout or styling\n`;
-          visionPrompt += `2. write_file with corrected styles, classes, or JSX structure\n`;
-          visionPrompt += `3. run_command or check console logs to verify no build errors after your fix\n`;
+          visionPrompt += `2. grep for relevant class names, styles, or component references\n`;
+          visionPrompt += `3. write_file with corrected styles, classes, or JSX structure\n`;
+          visionPrompt += `4. run_command or check console logs to verify no build errors after your fix\n`;
           visionPrompt += `Respond with a \`\`\`json code block containing {"actions": [...]} so Lamby auto-executes your fix.\n`;
         } else {
           visionPrompt += `Please fix these visual problems. Provide updated code blocks for affected files.`;
@@ -2393,7 +2410,8 @@ const GrokBridge: React.FC = () => {
       enrichedPrompt += `1. read_file the files referenced in the error traces\n`;
       enrichedPrompt += `2. grep for the broken symbol if needed\n`;
       enrichedPrompt += `3. write_file with corrected code\n`;
-      enrichedPrompt += `4. Fetch fresh console logs to confirm the fix\n`;
+      enrichedPrompt += `4. run_command to verify the fix compiles\n`;
+      enrichedPrompt += `5. Fetch fresh console logs to confirm the fix\n`;
       enrichedPrompt += `Respond with \`\`\`json {"actions": [...]} so Lamby auto-executes your fix.\n`;
     }
     try {
@@ -3866,6 +3884,9 @@ const GrokBridge: React.FC = () => {
           active += `User description / goal: ${historySummary.replace(/=== CHAT HISTORY.*===\n/g, '').trim()}\n`;
         }
         active += `Status: ${isEmptyProject ? 'Brand new empty project — only initial package.json exists.' : `Active project with ${sourceFiles.length} source files.`}\n`;
+        if (sandboxApiSection) {
+          active += sandboxApiSection + '\n';
+        }
         if (frameworkHint) {
           active += `Detected framework: ${frameworkHint} (based on package.json — for your awareness, not a restriction)\n`;
         }
