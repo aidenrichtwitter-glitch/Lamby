@@ -889,6 +889,416 @@ function executeSandboxAction(action, projectsDir) {
           }
         }
       }
+      case "project_analyze": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next", ".nuxt", "__pycache__", "build", ".output"]);
+        const filesByExt = {};
+        let totalFiles = 0;
+        const components = [];
+        const routes = [];
+        function analyzeWalk(d, rel) {
+          let items;
+          try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            let stat;
+            try { stat = fs.statSync(full); } catch { continue; }
+            if (stat.isDirectory()) { analyzeWalk(full, r); continue; }
+            totalFiles++;
+            const ext = path.extname(item).toLowerCase();
+            filesByExt[ext] = (filesByExt[ext] || 0) + 1;
+            if (/\.(tsx|jsx)$/.test(item) && /^[A-Z]/.test(item)) components.push(r);
+            if (/pages\/|routes\/|app\//i.test(r) && /\.(tsx|jsx|ts|js|vue|svelte)$/.test(item)) routes.push(r);
+          }
+        }
+        analyzeWalk(dir, "");
+        let pkg = {};
+        try { pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8")); } catch {}
+        const deps = Object.keys(pkg.dependencies || {});
+        const devDeps = Object.keys(pkg.devDependencies || {});
+        const colors = [];
+        try {
+          const cssFiles = [];
+          function findCss(d, rel) {
+            let items;
+            try { items = fs.readdirSync(d); } catch { return; }
+            for (const item of items) {
+              if (ignore.has(item)) continue;
+              const full = path.join(d, item);
+              const r = rel ? `${rel}/${item}` : item;
+              try {
+                const s = fs.statSync(full);
+                if (s.isDirectory()) findCss(full, r);
+                else if (/\.css$/.test(item)) cssFiles.push(full);
+              } catch {}
+            }
+          }
+          findCss(dir, "");
+          for (const cf of cssFiles.slice(0, 10)) {
+            const content = fs.readFileSync(cf, "utf-8");
+            const varMatches = content.match(/--[\w-]+\s*:\s*[^;]+/g);
+            if (varMatches) for (const m of varMatches.slice(0, 50)) {
+              const [name, ...rest] = m.split(":");
+              colors.push({ variable: name.trim(), value: rest.join(":").trim() });
+            }
+          }
+        } catch {}
+        return { status: "success", type: t, data: { totalFiles, filesByExtension: filesByExt, components: components.slice(0, 100), routes: routes.slice(0, 100), dependencies: deps, devDependencies: devDeps, name: pkg.name || path.basename(dir), cssVariables: colors.slice(0, 100) } };
+      }
+      case "tailwind_audit": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const twConfigCandidates = ["tailwind.config.js", "tailwind.config.ts", "tailwind.config.cjs", "tailwind.config.mjs"];
+        let twConfigPath = null;
+        let twConfig = null;
+        for (const c of twConfigCandidates) {
+          const p = path.join(dir, c);
+          if (fs.existsSync(p)) { twConfigPath = c; twConfig = fs.readFileSync(p, "utf-8"); break; }
+        }
+        const hasTw = !!twConfigPath || (fs.existsSync(path.join(dir, "package.json")) && fs.readFileSync(path.join(dir, "package.json"), "utf-8").includes("tailwindcss"));
+        const customColors = [];
+        const breakpoints = [];
+        const plugins = [];
+        if (twConfig) {
+          const colorMatches = twConfig.match(/colors?\s*:\s*\{[\s\S]*?\}/g);
+          if (colorMatches) for (const cm of colorMatches.slice(0, 5)) customColors.push(cm.slice(0, 500));
+          const bpMatches = twConfig.match(/screens?\s*:\s*\{[\s\S]*?\}/g);
+          if (bpMatches) for (const bm of bpMatches.slice(0, 3)) breakpoints.push(bm.slice(0, 300));
+          const pluginMatch = twConfig.match(/plugins\s*:\s*\[[\s\S]*?\]/);
+          if (pluginMatch) plugins.push(pluginMatch[0].slice(0, 500));
+        }
+        const usedClasses = new Set();
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next"]);
+        function twWalk(d) {
+          let items;
+          try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            try {
+              const s = fs.statSync(full);
+              if (s.isDirectory()) { twWalk(full); continue; }
+              if (!/\.(tsx|jsx|html|vue|svelte)$/.test(item)) continue;
+              const content = fs.readFileSync(full, "utf-8");
+              const classMatches = content.match(/class(?:Name)?\s*=\s*["'`][^"'`]*["'`]/g);
+              if (classMatches) for (const cm of classMatches) {
+                const classes = cm.replace(/^class(?:Name)?\s*=\s*["'`]/, "").replace(/["'`]$/, "").split(/\s+/);
+                for (const c of classes) if (c && !c.includes("{")) usedClasses.add(c);
+              }
+            } catch {}
+            if (usedClasses.size > 500) return;
+          }
+        }
+        twWalk(dir);
+        return { status: "success", type: t, data: { hasTailwind: hasTw, configFile: twConfigPath, configContent: twConfig ? twConfig.slice(0, 5000) : null, customColors, breakpoints, plugins, usedClassesSample: Array.from(usedClasses).slice(0, 200) } };
+      }
+      case "find_usages": {
+        if (!action.symbol) return { status: "error", type: t, error: "symbol required" };
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const symbol = action.symbol;
+        const exts = action.extensions || [".ts", ".tsx", ".js", ".jsx", ".css", ".html", ".vue", ".svelte", ".json", ".md"];
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next"]);
+        const context = action.context || 2;
+        const usages = [];
+        function usageWalk(d, rel) {
+          let items;
+          try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            try {
+              const s = fs.statSync(full);
+              if (s.isDirectory()) { usageWalk(full, r); continue; }
+              if (!exts.some(e => item.endsWith(e))) continue;
+              const content = fs.readFileSync(full, "utf-8");
+              const lines = content.split("\n");
+              for (let i = 0; i < lines.length; i++) {
+                if (lines[i].includes(symbol)) {
+                  const start = Math.max(0, i - context);
+                  const end = Math.min(lines.length, i + context + 1);
+                  usages.push({ file: r, line: i + 1, context: lines.slice(start, end).join("\n").slice(0, 500) });
+                }
+              }
+            } catch {}
+            if (usages.length >= 200) return;
+          }
+        }
+        usageWalk(dir, "");
+        return { status: "success", type: t, data: { symbol, usages: usages.slice(0, 200), totalMatches: usages.length } };
+      }
+      case "component_tree": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next"]);
+        const tree = {};
+        function treeWalk(d, rel) {
+          let items;
+          try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            try {
+              const s = fs.statSync(full);
+              if (s.isDirectory()) { treeWalk(full, r); continue; }
+              if (!/\.(tsx|jsx)$/.test(item)) continue;
+              const content = fs.readFileSync(full, "utf-8");
+              const imports = [];
+              const importRe = /import\s+(?:\{[^}]*\}|[\w*]+(?:\s*,\s*\{[^}]*\})?)\s+from\s+['"]([^'"]+)['"]/g;
+              let m;
+              while ((m = importRe.exec(content)) !== null) imports.push(m[1]);
+              const exportDefault = /export\s+default\s+(?:function\s+)?(\w+)/.exec(content);
+              const namedExports = [];
+              const namedRe = /export\s+(?:function|const|class)\s+(\w+)/g;
+              while ((m = namedRe.exec(content)) !== null) namedExports.push(m[1]);
+              const jsxUsages = [];
+              const jsxRe = /<([A-Z]\w+)[\s/>]/g;
+              while ((m = jsxRe.exec(content)) !== null) {
+                if (!jsxUsages.includes(m[1])) jsxUsages.push(m[1]);
+              }
+              tree[r] = {
+                imports, jsxUsages: jsxUsages.slice(0, 50),
+                defaultExport: exportDefault ? exportDefault[1] : null,
+                namedExports: namedExports.slice(0, 20),
+              };
+            } catch {}
+          }
+        }
+        treeWalk(dir, "");
+        return { status: "success", type: t, data: { components: tree } };
+      }
+      case "extract_theme":
+      case "extract_colors": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next"]);
+        const cssVars = [];
+        const twColors = [];
+        function themeWalk(d, rel) {
+          let items;
+          try { items = fs.readdirSync(d); } catch { return; }
+          for (const item of items) {
+            if (ignore.has(item)) continue;
+            const full = path.join(d, item);
+            const r = rel ? `${rel}/${item}` : item;
+            try {
+              const s = fs.statSync(full);
+              if (s.isDirectory()) { themeWalk(full, r); continue; }
+              if (/\.css$/.test(item)) {
+                const content = fs.readFileSync(full, "utf-8");
+                const varMatches = content.match(/--[\w-]+\s*:\s*[^;]+/g);
+                if (varMatches) for (const vm of varMatches) {
+                  const [name, ...rest] = vm.split(":");
+                  cssVars.push({ file: r, variable: name.trim(), value: rest.join(":").trim() });
+                }
+              }
+            } catch {}
+          }
+        }
+        themeWalk(dir, "");
+        const twConfigCandidates = ["tailwind.config.js", "tailwind.config.ts", "tailwind.config.cjs", "tailwind.config.mjs"];
+        for (const c of twConfigCandidates) {
+          const p = path.join(dir, c);
+          if (fs.existsSync(p)) {
+            try {
+              const content = fs.readFileSync(p, "utf-8");
+              const colorBlock = content.match(/colors?\s*:\s*\{[\s\S]*?\}/g);
+              if (colorBlock) for (const cb of colorBlock) twColors.push(cb.slice(0, 1000));
+            } catch {}
+            break;
+          }
+        }
+        return { status: "success", type: t, data: { cssVariables: cssVars.slice(0, 200), tailwindColors: twColors, totalCssVars: cssVars.length } };
+      }
+      case "capture_preview":
+      case "get_preview_url": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        let previewPort = null;
+        if (sandboxProcesses.size > 0) {
+          for (const [, entry] of sandboxProcesses) {
+            if (entry.cmd && /dev|start|serve/.test(entry.cmd)) {
+              const portMatch = (entry.logs?.stdout || "").match(/localhost:(\d+)|port\s+(\d+)/i);
+              if (portMatch) { previewPort = parseInt(portMatch[1] || portMatch[2]); break; }
+            }
+          }
+        }
+        if (!previewPort) {
+          try {
+            const ssOut = childProcess.execSync("ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo none", { cwd: dir, timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            const portMatches = ssOut.match(/:(\d{4,5})\s/g);
+            if (portMatches) {
+              const devPorts = portMatches.map(m => parseInt(m.slice(1))).filter(p => p >= 3000 && p <= 9999);
+              if (devPorts.length > 0) previewPort = devPorts[0];
+            }
+          } catch {}
+        }
+        const previewUrl = previewPort ? `http://localhost:${previewPort}` : null;
+        if (t === "get_preview_url") {
+          return { status: "success", type: t, data: { url: previewUrl, port: previewPort } };
+        }
+        if (!previewUrl) return { status: "error", type: t, error: "No preview server detected. Start a dev server first." };
+        let screenshot = null;
+        try {
+          const puppeteerCheck = fs.existsSync(path.join(dir, "node_modules/puppeteer")) || fs.existsSync(path.join(dir, "node_modules/playwright"));
+          if (puppeteerCheck) {
+            screenshot = { available: true, note: "Puppeteer/Playwright found but screenshot capture requires explicit setup" };
+          }
+        } catch {}
+        return { status: "success", type: t, data: { url: previewUrl, port: previewPort, screenshot, note: "Use this URL in a browser to view the preview. For automated screenshots, install puppeteer." } };
+      }
+      case "generate_component":
+      case "generate_page":
+      case "refactor_file": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const xaiKey = process.env.XAI_API || process.env.XAI_API_KEY || "";
+        if (!xaiKey) return { status: "error", type: t, error: "XAI_API environment variable not set" };
+        let prompt = "";
+        let outputPath = "";
+        if (t === "refactor_file") {
+          if (!action.path) return { status: "error", type: t, error: "path required" };
+          if (!action.instructions) return { status: "error", type: t, error: "instructions required" };
+          const fCheck = projectName ? validateProjectPath(projectName, action.path, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
+          if (!fCheck.valid) return { status: "error", type: t, error: fCheck.error };
+          if (!fs.existsSync(fCheck.resolved)) return { status: "error", type: t, error: "File not found" };
+          const existingContent = fs.readFileSync(fCheck.resolved, "utf-8");
+          outputPath = action.path;
+          prompt = `Refactor the following file according to these instructions: ${action.instructions}\n\nFile: ${action.path}\n\`\`\`\n${existingContent.slice(0, 50000)}\n\`\`\`\n\nReturn ONLY the complete refactored file content, no explanations or markdown fences.`;
+        } else {
+          if (!action.spec && !action.description) return { status: "error", type: t, error: "spec or description required" };
+          outputPath = action.path || (t === "generate_component" ? `src/components/${action.name || "Generated"}.tsx` : `src/pages/${action.name || "Generated"}.tsx`);
+          const fCheck = projectName ? validateProjectPath(projectName, outputPath, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, outputPath) };
+          if (!fCheck.valid) return { status: "error", type: t, error: fCheck.error };
+          let projectContext = "";
+          try {
+            const pkgPath = path.join(dir, "package.json");
+            if (fs.existsSync(pkgPath)) {
+              const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+              projectContext = `\nProject deps: ${Object.keys({ ...pkg.dependencies, ...pkg.devDependencies }).join(", ")}`;
+            }
+          } catch {}
+          const kind = t === "generate_component" ? "React component" : "page/route";
+          prompt = `Generate a ${kind} for: ${action.spec || action.description}${projectContext}\n\nComponent name: ${action.name || path.basename(outputPath, path.extname(outputPath))}\nFile path: ${outputPath}\n${action.style ? `Style: ${action.style}` : ""}\n${action.framework ? `Framework: ${action.framework}` : ""}\n\nReturn ONLY the complete file content, no explanations or markdown fences.`;
+        }
+        const https = require("https");
+        const reqBody = JSON.stringify({
+          model: action.model || "grok-3-mini-fast",
+          messages: [
+            { role: "system", content: "You are a code generator. Return ONLY the raw file content. No markdown fences, no explanations." },
+            { role: "user", content: prompt },
+          ],
+          max_tokens: 8000,
+          temperature: 0.3,
+        });
+        const _outputPath = outputPath;
+        const _projectName = projectName;
+        const _projectsDir = projectsDir;
+        const _t = t;
+        return new Promise((resolve) => {
+          const req = https.request({
+            hostname: "api.x.ai",
+            path: "/v1/chat/completions",
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${xaiKey}`, "Content-Length": Buffer.byteLength(reqBody) },
+            timeout: 60000,
+          }, (res) => {
+            let data = "";
+            res.on("data", (chunk) => data += chunk);
+            res.on("end", () => {
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.message?.content;
+                if (!content) { resolve({ status: "error", type: _t, error: "No content in API response" }); return; }
+                let cleanContent = content.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
+                const outCheck = _projectName ? validateProjectPath(_projectName, _outputPath, _projectsDir) : { valid: true, resolved: path.resolve(_projectsDir, _outputPath) };
+                const outDir = path.dirname(outCheck.resolved);
+                if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+                fs.writeFileSync(outCheck.resolved, cleanContent);
+                resolve({ status: "success", type: _t, data: { path: _outputPath, generated: true, length: cleanContent.length, preview: cleanContent.slice(0, 500) } });
+              } catch (e) {
+                resolve({ status: "error", type: _t, error: `AI generation failed: ${e.message}`.slice(0, 2000) });
+              }
+            });
+          });
+          req.on("error", (e) => { resolve({ status: "error", type: _t, error: `AI generation failed: ${e.message}`.slice(0, 2000) }); });
+          req.on("timeout", () => { req.destroy(); resolve({ status: "error", type: _t, error: "API request timed out" }); });
+          req.write(reqBody);
+          req.end();
+        });
+      }
+      case "validate_change": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const results = { typeCheck: null, lint: null, passed: true };
+        try {
+          const tscPath = fs.existsSync(path.join(dir, "node_modules/.bin/tsc")) ? path.join(dir, "node_modules/.bin/tsc") : null;
+          if (tscPath) {
+            try {
+              childProcess.execSync(`${tscPath} --noEmit`, { cwd: dir, timeout: 60000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+              results.typeCheck = { passed: true, errors: 0 };
+            } catch (e) {
+              const output = (e.stdout || "") + (e.stderr || "");
+              const errorCount = (output.match(/error TS/g) || []).length;
+              results.typeCheck = { passed: false, errors: errorCount, output: output.slice(0, 5000) };
+              results.passed = false;
+            }
+          }
+        } catch {}
+        try {
+          const eslintPath = fs.existsSync(path.join(dir, "node_modules/.bin/eslint")) ? path.join(dir, "node_modules/.bin/eslint") : null;
+          if (eslintPath) {
+            const lintTarget = action.files || "src/";
+            try {
+              childProcess.execSync(`${eslintPath} ${lintTarget}`, { cwd: dir, timeout: 60000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+              results.lint = { passed: true, errors: 0 };
+            } catch (e) {
+              const output = (e.stdout || "") + (e.stderr || "");
+              const errorCount = (output.match(/\d+ error/g) || []).length;
+              results.lint = { passed: false, errors: errorCount, output: output.slice(0, 5000) };
+              results.passed = false;
+            }
+          }
+        } catch {}
+        return { status: "success", type: t, data: results };
+      }
+      case "profile_performance": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const results = { bundleSize: null, lighthouse: null };
+        const distCandidates = ["dist", ".next", "build", "out"];
+        for (const dc of distCandidates) {
+          const distPath = path.join(dir, dc);
+          if (fs.existsSync(distPath)) {
+            const sizes = [];
+            let totalSize = 0;
+            function sizeWalk(d, rel) {
+              try {
+                const items = fs.readdirSync(d);
+                for (const item of items) {
+                  const full = path.join(d, item);
+                  const r = rel ? `${rel}/${item}` : item;
+                  const s = fs.statSync(full);
+                  if (s.isDirectory()) sizeWalk(full, r);
+                  else { sizes.push({ file: r, size: s.size }); totalSize += s.size; }
+                }
+              } catch {}
+            }
+            sizeWalk(distPath, dc);
+            sizes.sort((a, b) => b.size - a.size);
+            results.bundleSize = { directory: dc, totalSize, totalSizeKB: Math.round(totalSize / 1024), fileCount: sizes.length, largestFiles: sizes.slice(0, 20).map(f => ({ ...f, sizeKB: Math.round(f.size / 1024) })) };
+            break;
+          }
+        }
+        const hasLighthouse = fs.existsSync(path.join(dir, "node_modules/.bin/lhci")) || fs.existsSync(path.join(dir, "node_modules/.bin/lighthouse"));
+        results.lighthouse = { available: hasLighthouse, note: hasLighthouse ? "Run `npx lhci autorun` or `npx lighthouse URL` manually" : "Install @lhci/cli or lighthouse for automated audits" };
+        return { status: "success", type: t, data: results };
+      }
       default:
         return { status: "error", type: t, error: `Unknown action type: ${t}` };
     }

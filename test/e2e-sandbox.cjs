@@ -164,6 +164,19 @@ Available action types:
 - get_env_vars: {type: "get_env_vars", project: "NAME"}
 - rollback_last_change: {type: "rollback_last_change", project: "NAME", files: "path"}
 - export_project: {type: "export_project", project: "NAME", format: "zip"}
+- project_analyze: {type: "project_analyze", project: "NAME"}
+- tailwind_audit: {type: "tailwind_audit", project: "NAME"}
+- find_usages: {type: "find_usages", project: "NAME", symbol: "MyComponent", context: 2}
+- component_tree: {type: "component_tree", project: "NAME"}
+- extract_theme: {type: "extract_theme", project: "NAME"}
+- extract_colors: {type: "extract_colors", project: "NAME"}
+- get_preview_url: {type: "get_preview_url", project: "NAME"}
+- capture_preview: {type: "capture_preview", project: "NAME"}
+- generate_component: {type: "generate_component", project: "NAME", spec: "desc", name: "Name"}
+- generate_page: {type: "generate_page", project: "NAME", spec: "desc", name: "Name"}
+- refactor_file: {type: "refactor_file", project: "NAME", path: "file", instructions: "..."}
+- validate_change: {type: "validate_change", project: "NAME"}
+- profile_performance: {type: "profile_performance", project: "NAME"}
 
 IMPORTANT: Respond with ONLY a valid JSON object containing an "actions" array. No markdown, no explanation, no code fences. Just raw JSON.
 Example: {"actions": [{"type": "list_tree", "project": "my-project", "depth": 2}]}`;
@@ -912,6 +925,135 @@ async function main() {
     assert(res.data.results[0].status === "error", "git_merge blocks injection");
     assert(res.data.results[0].error.includes("branch required"), "Error mentions invalid branch");
   } catch (e) { log("\u274c", `git_merge injection test failed: ${e.message}`); }
+
+  // ============================================================
+  // PHASE 8: Advanced analysis, visual & AI-generation commands
+  // ============================================================
+  console.log("\n\ud83d\ude80 PHASE 8: Analysis, visual & AI-generation commands");
+
+  log("\n\ud83d\udccb", "8.1 project_analyze...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "project_analyze", project: PROJECT }]);
+    assert(res.data.success === true, "project_analyze succeeds");
+    assert(typeof res.data.results[0].data.totalFiles === "number", "project_analyze returns totalFiles");
+    assert(typeof res.data.results[0].data.filesByExtension === "object", "project_analyze returns filesByExtension");
+    assert(Array.isArray(res.data.results[0].data.components), "project_analyze returns components array");
+    assert(Array.isArray(res.data.results[0].data.dependencies), "project_analyze returns dependencies array");
+  } catch (e) { log("\u274c", `project_analyze failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.2 tailwind_audit...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "tailwind_audit", project: PROJECT }]);
+    assert(res.data.success === true, "tailwind_audit succeeds");
+    assert(typeof res.data.results[0].data.hasTailwind === "boolean", "tailwind_audit returns hasTailwind");
+  } catch (e) { log("\u274c", `tailwind_audit failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.3 find_usages...");
+  try {
+    await sandboxExecute(key, [{ type: "create_file", project: PROJECT, path: "usage-test.js", content: "const MyVar = 1;\nconsole.log(MyVar);\n" }]);
+    const res = await sandboxExecute(key, [{ type: "find_usages", project: PROJECT, symbol: "MyVar" }]);
+    assert(res.data.success === true, "find_usages succeeds");
+    assert(res.data.results[0].data.usages.length >= 2, "find_usages finds 2+ usages");
+    assert(res.data.results[0].data.symbol === "MyVar", "find_usages returns correct symbol");
+    await sandboxExecute(key, [{ type: "delete_file", project: PROJECT, path: "usage-test.js" }]);
+  } catch (e) { log("\u274c", `find_usages failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.4 find_usages requires symbol...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "find_usages", project: PROJECT }]);
+    assert(res.data.results[0].status === "error", "find_usages requires symbol param");
+  } catch (e) { log("\u274c", `find_usages validation test failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.5 component_tree...");
+  try {
+    await sandboxExecute(key, [
+      { type: "create_file", project: PROJECT, path: "src/Button.tsx", content: "import React from 'react';\nexport default function Button() { return <div>Click</div>; }\n" },
+      { type: "create_file", project: PROJECT, path: "src/App.tsx", content: "import Button from './Button';\nexport default function App() { return <Button />; }\n" },
+    ]);
+    const res = await sandboxExecute(key, [{ type: "component_tree", project: PROJECT }]);
+    assert(res.data.success === true, "component_tree succeeds");
+    assert(typeof res.data.results[0].data.components === "object", "component_tree returns components object");
+    const comps = res.data.results[0].data.components;
+    const appKey = Object.keys(comps).find(k => k.includes("App.tsx"));
+    assert(appKey, "component_tree found App.tsx");
+    assert(comps[appKey].jsxUsages.includes("Button"), "component_tree detected Button usage in App.tsx");
+    await sandboxExecute(key, [
+      { type: "delete_file", project: PROJECT, path: "src", recursive: true },
+    ]);
+  } catch (e) { log("\u274c", `component_tree failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.6 extract_theme...");
+  try {
+    await sandboxExecute(key, [
+      { type: "create_file", project: PROJECT, path: "styles/theme.css", content: ":root { --primary: #3b82f6; --bg: white; }\n" },
+    ]);
+    const res = await sandboxExecute(key, [{ type: "extract_theme", project: PROJECT }]);
+    assert(res.data.success === true, "extract_theme succeeds");
+    assert(res.data.results[0].data.cssVariables.length >= 2, "extract_theme found CSS variables");
+    assert(res.data.results[0].data.cssVariables.some(v => v.variable === "--primary"), "extract_theme found --primary");
+    await sandboxExecute(key, [{ type: "delete_file", project: PROJECT, path: "styles", recursive: true }]);
+  } catch (e) { log("\u274c", `extract_theme failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.7 extract_colors (alias)...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "extract_colors", project: PROJECT }]);
+    assert(res.data.success === true, "extract_colors succeeds (alias)");
+    assert(Array.isArray(res.data.results[0].data.cssVariables), "extract_colors returns cssVariables");
+  } catch (e) { log("\u274c", `extract_colors failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.8 get_preview_url...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "get_preview_url", project: PROJECT }]);
+    assert(res.data.success === true, "get_preview_url succeeds");
+    assert("url" in res.data.results[0].data, "get_preview_url returns url field");
+    assert("port" in res.data.results[0].data, "get_preview_url returns port field");
+  } catch (e) { log("\u274c", `get_preview_url failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.9 capture_preview...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "capture_preview", project: PROJECT }]);
+    assert(res.data.results[0].status !== undefined, "capture_preview returns a result");
+  } catch (e) { log("\u274c", `capture_preview failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.10 validate_change...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "validate_change", project: PROJECT }]);
+    assert(res.data.success === true, "validate_change succeeds");
+    assert(typeof res.data.results[0].data.passed === "boolean", "validate_change returns passed flag");
+  } catch (e) { log("\u274c", `validate_change failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.11 profile_performance...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "profile_performance", project: PROJECT }]);
+    assert(res.data.success === true, "profile_performance succeeds");
+    assert("lighthouse" in res.data.results[0].data, "profile_performance returns lighthouse info");
+  } catch (e) { log("\u274c", `profile_performance failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.12 generate_component (no XAI_API)...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "generate_component", project: PROJECT, spec: "a button", name: "TestBtn" },
+    ]);
+    const r = res.data.results[0];
+    if (r.status === "error" && r.error.includes("XAI_API")) {
+      log("\u2705", "generate_component correctly requires XAI_API env var");
+    } else {
+      assert(r.status !== undefined, "generate_component returns a result");
+    }
+  } catch (e) { log("\u274c", `generate_component test failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.13 refactor_file requires path and instructions...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "refactor_file", project: PROJECT }]);
+    assert(res.data.results[0].status === "error", "refactor_file requires path");
+    assert(res.data.results[0].error.includes("path required"), "Error mentions path required");
+  } catch (e) { log("\u274c", `refactor_file validation test failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "8.14 generate_page requires spec...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "generate_page", project: PROJECT }]);
+    assert(res.data.results[0].status === "error", "generate_page requires spec");
+  } catch (e) { log("\u274c", `generate_page validation test failed: ${e.message}`); }
 
   // ============================================================
   // SUMMARY
