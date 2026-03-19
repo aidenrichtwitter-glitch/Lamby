@@ -46,10 +46,13 @@ function callXAI(messages) {
     }, res => {
       let d = '';
       res.on('data', c => d += c);
-      res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(new Error('Parse: ' + d.slice(0,300))); } });
+      res.on('end', () => {
+        try { resolve(JSON.parse(d)); }
+        catch(e) { reject(new Error('Parse: ' + d.slice(0,500))); }
+      });
     });
-    req.on('error', reject);
-    req.on('timeout', () => { req.destroy(); reject(new Error('xAI timeout')); });
+    req.on('error', (err) => { console.error(`    [xAI] Request error: ${err.message}`); reject(err); });
+    req.on('timeout', () => { req.destroy(); reject(new Error('xAI timeout (600s)')); });
     req.write(body);
     req.end();
   });
@@ -75,8 +78,8 @@ async function main() {
   if (!XAI_API) { console.error('XAI_API not set'); process.exit(1); }
 
   console.log('╔══════════════════════════════════════════════════╗');
-  console.log('║  GROK-4 CYBERPUNK THEME TEST                   ║');
-  console.log('║  Grok transforms hero → neon cyberpunk          ║');
+  console.log('║  GROK-4 CYBERPUNK THEME TEST v2                ║');
+  console.log('║  Neon cyberpunk + polished buttons & fonts      ║');
   console.log('╚══════════════════════════════════════════════════╝');
 
   const keyRes = await httpRequest(`${LOCAL}/api/snapshot-key`, { method: 'GET', timeout: 5000 });
@@ -110,17 +113,31 @@ ANTI-TRUNCATION WARNING: The file compiles immediately via Next.js. Missing clos
 
   const conversation = [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: `Transform hero-home.tsx into a neon cyberpunk theme.
+    { role: 'user', content: `Transform hero-home.tsx into a neon cyberpunk theme with polished, professional styling.
 
 1. Read components/hero-home.tsx
 2. Rewrite it with:
    - Dark background (black/gray-950)
-   - Neon colors: cyan (#00FFFF), magenta (#FF00FF), electric green (#39FF14)  
+   - Neon colors: cyan (#00FFFF), magenta (#FF00FF), electric green (#39FF14)
    - Glowing text effects via inline style text-shadow
    - Heading: "Lamby — Code at Light Speed"
    - Subtitle: "Neon-powered autonomous AI development"
-   - Neon glowing buttons
-   - Keep same imports and component structure so it compiles
+   
+   BUTTONS (critical — must look polished):
+   - Both buttons MUST have the EXACT SAME height (use py-3 px-6 on both)
+   - Use Tailwind classes only for sizing: text-sm font-semibold rounded-lg
+   - Primary button: bg-cyan-500 text-black hover:bg-cyan-400, with a subtle cyan glow via inline boxShadow
+   - Secondary button: transparent border border-cyan-400 text-cyan-400 hover:bg-cyan-400/10
+   - Wrap both buttons in a flex container with items-center gap-4 to guarantee alignment
+   - Do NOT use different padding, font-size, or line-height between buttons
+   
+   FONT:
+   - Use font-sans (system default Inter/sans-serif stack) for everything — do NOT use monospace or decorative fonts
+   - Heading should be text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight
+   
+   - MUST use "export default function HeroHome()" — default export required, other files import it as default
+   - Keep the Image import from "next/image" and PageIllustration import from "@/components/page-illustration" — these are used in the original
+   - Keep same component structure so it compiles
 3. Verify by reading the file back
 4. Say DONE
 
@@ -133,7 +150,13 @@ Write the COMPLETE file — every line, every tag, every brace.` }
 
   for (let turn = 1; turn <= MAX_TURNS; turn++) {
     process.stdout.write(`  Turn ${turn}/${MAX_TURNS}... `);
-    const resp = await callXAI(conversation);
+    let resp;
+    try {
+      resp = await callXAI(conversation);
+    } catch (err) {
+      console.log(`\n  ✗ xAI call failed on turn ${turn}: ${err.message}`);
+      break;
+    }
     const ms = Date.now() - t0;
 
     if (resp.error) { console.log(`API Error: ${JSON.stringify(resp.error)}`); break; }
@@ -199,7 +222,11 @@ Write the COMPLETE file — every line, every tag, every brace.` }
     hasGlow: lower.includes('shadow') || lower.includes('glow'),
     fileChanged: afterContent.length > 100 && afterContent !== origContent,
     isComplete: afterContent.includes('export') && (afterContent.includes('function') || afterContent.includes('=>')),
-    jsxClosed: afterContent.trim().endsWith('}')
+    jsxClosed: afterContent.trim().endsWith('}'),
+    defaultExport: afterContent.includes('export default'),
+    fontSans: lower.includes('font-sans') || lower.includes('font-extrabold') || lower.includes('tracking-tight'),
+    buttonsAligned: lower.includes('items-center') && lower.includes('py-3') && lower.includes('px-6'),
+    noMonoFont: !lower.includes('font-mono') && !lower.includes('courier') && !lower.includes('fira code')
   };
 
   console.log('  Checks:');

@@ -5151,6 +5151,11 @@ function projectManagementPlugin(): Plugin {
               const result = await executeSandboxActions(parsed.actions || [], projectsDir, { auditLog: sandboxAuditLog, previewProcesses });
               bridgeRelaySend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result }));
               console.log(`[Bridge] Sent sandbox-execute-response (reqId: ${parsed.requestId.slice(0, 8)})`);
+              const fileWriteActions = new Set(["write_file", "create_file", "search_replace", "delete_file", "move_file", "rename_file", "copy_file"]);
+              const hadFileWrite = (parsed.actions || []).some((a: any) => fileWriteActions.has(a.type));
+              if (hadFileWrite && result && result.success) {
+                try { server.hot.send({ type: "custom", event: "lamby:files-changed", data: { ts: Date.now() } }); } catch {}
+              }
             } catch (err: any) {
               console.error(`[Bridge] sandbox-execute error: ${err.message}`);
               bridgeRelaySend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result: { error: err.message } }));
@@ -5477,6 +5482,11 @@ function projectManagementPlugin(): Plugin {
                 } : undefined;
                 const wsResult = await executeSandboxActions(actions, projectsDir, { auditLog: sandboxAuditLog, onActionResult, previewProcesses });
                 ws.send(JSON.stringify({ type: "result", requestId: msg.requestId, ...wsResult }));
+                const fileWriteActions2 = new Set(["write_file", "create_file", "search_replace", "delete_file", "move_file", "rename_file", "copy_file"]);
+                const hadFileWrite2 = actions.some((a: any) => fileWriteActions2.has(a.type));
+                if (hadFileWrite2 && wsResult && wsResult.success) {
+                  try { server.hot.send({ type: "custom", event: "lamby:files-changed", data: { ts: Date.now() } }); } catch {}
+                }
               } else if (msg.type === "ping") {
                 ws.send(JSON.stringify({ type: "pong" }));
               }

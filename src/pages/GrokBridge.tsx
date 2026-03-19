@@ -1698,6 +1698,22 @@ const GrokBridge: React.FC = () => {
 
   useEffect(() => { refreshValidationContext(); }, [activeProject, refreshValidationContext]);
 
+  useEffect(() => {
+    if (!import.meta.hot) return;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const handler = (_data: any) => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        setPreviewPanels(prev => prev.map(p => ({ ...p, key: p.key + 1 })));
+      }, 1500);
+    };
+    import.meta.hot.on("lamby:files-changed", handler);
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      import.meta.hot!.off("lamby:files-changed", handler);
+    };
+  }, []);
+
   const updatePanelById = useCallback((panelId: string, updates: Partial<PreviewPanel>) => {
     setPreviewPanels(prev => prev.map(p => p.id === panelId ? { ...p, ...updates } : p));
   }, []);
