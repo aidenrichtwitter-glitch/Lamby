@@ -453,7 +453,7 @@ const server = http.createServer(async (req, res) => {
       baseUrl,
       exampleUrl: `${baseUrl}/api/snapshot/PROJECT_NAME?key=${snapshotKey}`,
       commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`,
-      commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, write_file, create_file, delete_file, move_file, copy_file, rename_file, grep, search_files, run_command, install_deps, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, archive_project",
+      commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, read_multiple_files, write_file, create_file, delete_file, bulk_delete, move_file, copy_file, copy_folder, rename_file, grep, search_files, search_replace, apply_patch, bulk_write, run_command, install_deps, add_dependency, type_check, lint_and_fix, format_files, get_build_metrics, restart_dev_server, list_open_ports, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, git_push, git_pull, git_merge, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, archive_project, export_project, set_env_var, get_env_vars, rollback_last_change",
     });
     return;
   }

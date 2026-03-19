@@ -403,17 +403,402 @@ function executeSandboxAction(action, projectsDir) {
           return { status: "error", type: t, error: e.message?.slice(0, 2000), data: { stdout: (e.stdout || "").slice(0, 10000), stderr: (e.stderr || "").slice(0, 10000) } };
         }
       }
-      case "archive_project": {
+      case "archive_project":
+      case "export_project": {
         if (!projectName) return { status: "error", type: t, error: "project name required" };
         const dir = validateProjectPath(projectName, null, projectsDir).resolved;
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Project not found" };
-        const archiveName = `${projectName}-${Date.now()}.tar.gz`;
+        const fmt = action.format || "tar.gz";
+        const archiveName = `${projectName}-${Date.now()}.${fmt === "zip" ? "zip" : "tar.gz"}`;
         const archivePath = path.join(projectsDir, archiveName);
         try {
-          childProcess.execSync(`tar -czf "${archivePath}" -C "${projectsDir}" "${projectName}" --exclude=node_modules --exclude=.git --exclude=dist --exclude=.cache`, { timeout: 60000 });
-          return { status: "success", type: t, data: { archive: archiveName, path: archivePath } };
+          if (fmt === "zip") {
+            childProcess.execSync(`cd "${projectsDir}" && zip -r "${archivePath}" "${projectName}" -x "*/node_modules/*" -x "*/.git/*" -x "*/dist/*" -x "*/.cache/*"`, { timeout: 60000 });
+          } else {
+            childProcess.execSync(`tar --exclude=node_modules --exclude=.git --exclude=dist --exclude=.cache -czf "${archivePath}" -C "${projectsDir}" "${projectName}"`, { timeout: 60000 });
+          }
+          return { status: "success", type: t, data: { archive: archiveName, path: archivePath, format: fmt } };
         } catch (e) {
           return { status: "error", type: t, error: e.message?.slice(0, 1000) };
+        }
+      }
+      case "read_multiple_files": {
+        if (!Array.isArray(action.paths) || action.paths.length === 0) return { status: "error", type: t, error: "paths array required" };
+        const files = [];
+        for (const p of action.paths.slice(0, 50)) {
+          const c = projectName ? validateProjectPath(projectName, p, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, p) };
+          if (!c.valid) { files.push({ path: p, error: c.error }); continue; }
+          if (!fs.existsSync(c.resolved)) { files.push({ path: p, error: "File not found" }); continue; }
+          try { files.push({ path: p, content: fs.readFileSync(c.resolved, "utf-8").slice(0, 500000) }); }
+          catch (e) { files.push({ path: p, error: e.message }); }
+        }
+        return { status: "success", type: t, data: { files } };
+      }
+      case "bulk_write": {
+        if (!Array.isArray(action.files) || action.files.length === 0) return { status: "error", type: t, error: "files array required" };
+        const backups = [];
+        const written = [];
+        try {
+          for (const f of action.files) {
+            if (!f.path || f.content === undefined) throw new Error(`Missing path/content for file: ${f.path || "?"}`);
+            const c = projectName ? validateProjectPath(projectName, f.path, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, f.path) };
+            if (!c.valid) throw new Error(`Invalid path ${f.path}: ${c.error}`);
+            const dir = path.dirname(c.resolved);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const existed = fs.existsSync(c.resolved);
+            const prev = existed ? fs.readFileSync(c.resolved, "utf-8") : null;
+            backups.push({ resolved: c.resolved, existed, prev });
+            fs.writeFileSync(c.resolved, f.content);
+            written.push(f.path);
+          }
+          return { status: "success", type: t, data: { written, count: written.length } };
+        } catch (e) {
+          for (const b of backups) {
+            try {
+              if (b.existed && b.prev !== null) fs.writeFileSync(b.resolved, b.prev);
+              else if (!b.existed && fs.existsSync(b.resolved)) fs.unlinkSync(b.resolved);
+            } catch {}
+          }
+          return { status: "error", type: t, error: `Atomic write failed (rolled back): ${e.message}` };
+        }
+      }
+      case "bulk_delete": {
+        if (!Array.isArray(action.paths) || action.paths.length === 0) return { status: "error", type: t, error: "paths array required" };
+        const deleted = [];
+        const errors = [];
+        for (const p of action.paths) {
+          const c = projectName ? validateProjectPath(projectName, p, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, p) };
+          if (!c.valid) { errors.push({ path: p, error: c.error }); continue; }
+          if (!fs.existsSync(c.resolved)) { errors.push({ path: p, error: "Not found" }); continue; }
+          try {
+            const stat = fs.statSync(c.resolved);
+            if (stat.isDirectory()) fs.rmSync(c.resolved, { recursive: true, force: true });
+            else fs.unlinkSync(c.resolved);
+            deleted.push(p);
+          } catch (e) { errors.push({ path: p, error: e.message }); }
+        }
+        return { status: "success", type: t, data: { deleted, errors } };
+      }
+      case "copy_folder": {
+        if (!action.source || !action.dest) return { status: "error", type: t, error: "source and dest required" };
+        const src = projectName ? validateProjectPath(projectName, action.source, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.source) };
+        const dst = projectName ? validateProjectPath(projectName, action.dest, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.dest) };
+        if (!src.valid) return { status: "error", type: t, error: src.error };
+        if (!dst.valid) return { status: "error", type: t, error: dst.error };
+        if (!fs.existsSync(src.resolved)) return { status: "error", type: t, error: "Source folder not found" };
+        try {
+          fs.cpSync(src.resolved, dst.resolved, { recursive: true });
+          return { status: "success", type: t, data: { source: action.source, dest: action.dest } };
+        } catch (e) {
+          return { status: "error", type: t, error: e.message?.slice(0, 1000) };
+        }
+      }
+      case "search_replace": {
+        const filePaths = action.paths || (action.path ? [action.path] : []);
+        if (filePaths.length === 0 || !action.search) return { status: "error", type: t, error: "path(s) and search required" };
+        const replaceWith = action.replace ?? "";
+        const useRegex = !!action.regex;
+        const results = [];
+        for (const fp of filePaths) {
+          const c = projectName ? validateProjectPath(projectName, fp, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, fp) };
+          if (!c.valid) { results.push({ path: fp, error: c.error }); continue; }
+          if (!fs.existsSync(c.resolved)) { results.push({ path: fp, error: "File not found" }); continue; }
+          try {
+            let content = fs.readFileSync(c.resolved, "utf-8");
+            const pattern = useRegex ? new RegExp(action.search, "g") : action.search;
+            const count = useRegex ? (content.match(pattern) || []).length : content.split(action.search).length - 1;
+            if (count === 0) { results.push({ path: fp, replacements: 0 }); continue; }
+            content = useRegex ? content.replace(pattern, replaceWith) : content.split(action.search).join(replaceWith);
+            fs.writeFileSync(c.resolved, content);
+            results.push({ path: fp, replacements: count });
+          } catch (e) { results.push({ path: fp, error: e.message }); }
+        }
+        return { status: "success", type: t, data: { results } };
+      }
+      case "apply_patch": {
+        if (!action.patch) return { status: "error", type: t, error: "patch (unified diff) required" };
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const lines = action.patch.split("\n");
+        let currentFile = null;
+        let hunks = [];
+        let appliedFiles = [];
+        let errors = [];
+        function flushFile() {
+          if (!currentFile || hunks.length === 0) return;
+          const filePath = path.resolve(dir, currentFile);
+          try {
+            let content = fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8") : "";
+            let contentLines = content.split("\n");
+            let offset = 0;
+            for (const hunk of hunks) {
+              const startLine = hunk.oldStart - 1 + offset;
+              const removeCount = hunk.removes.length;
+              contentLines.splice(startLine, removeCount, ...hunk.adds);
+              offset += hunk.adds.length - removeCount;
+            }
+            const parentDir = path.dirname(filePath);
+            if (!fs.existsSync(parentDir)) fs.mkdirSync(parentDir, { recursive: true });
+            fs.writeFileSync(filePath, contentLines.join("\n"));
+            appliedFiles.push(currentFile);
+          } catch (e) { errors.push({ file: currentFile, error: e.message }); }
+          hunks = [];
+        }
+        for (const line of lines) {
+          if (line.startsWith("--- ") || line.startsWith("+++ ")) {
+            if (line.startsWith("+++ ")) {
+              flushFile();
+              let fp = line.slice(4).trim();
+              if (fp.startsWith("b/")) fp = fp.slice(2);
+              if (fp === "/dev/null") fp = null;
+              currentFile = fp;
+            }
+            continue;
+          }
+          const hunkMatch = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+          if (hunkMatch) {
+            hunks.push({ oldStart: parseInt(hunkMatch[1]), adds: [], removes: [] });
+            continue;
+          }
+          if (hunks.length > 0) {
+            const h = hunks[hunks.length - 1];
+            if (line.startsWith("+")) h.adds.push(line.slice(1));
+            else if (line.startsWith("-")) h.removes.push(line.slice(1));
+            else if (line.startsWith(" ")) { h.adds.push(line.slice(1)); h.removes.push(line.slice(1)); }
+          }
+        }
+        flushFile();
+        return { status: "success", type: t, data: { appliedFiles, errors } };
+      }
+      case "add_dependency": {
+        if (!action.name) return { status: "error", type: t, error: "name required" };
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const pm = detectPmForDir(dir);
+        const pkg = action.version ? `${action.name}@${action.version}` : action.name;
+        const addCmd = buildPmCommand(pm, action.dev ? "add-dev" : "add", pkg);
+        try {
+          const output = childProcess.execSync(addCmd, { cwd: dir, timeout: 120000, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: addCmd, package: action.name, version: action.version || "latest", dev: !!action.dev, output: (output || "").slice(0, 10000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: e.message?.slice(0, 2000), data: { command: addCmd } };
+        }
+      }
+      case "type_check": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const tscCmd = fs.existsSync(path.join(dir, "node_modules/.bin/tsc")) ? path.join(dir, "node_modules/.bin/tsc") + " --noEmit" : "npx tsc --noEmit";
+        try {
+          const output = childProcess.execSync(tscCmd, { cwd: dir, timeout: 60000, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: tscCmd, output: (output || "").slice(0, 20000), errors: 0 } };
+        } catch (e) {
+          const combined = ((e.stdout || "") + "\n" + (e.stderr || "")).trim();
+          const errorCount = (combined.match(/error TS\d+/g) || []).length;
+          return { status: "error", type: t, error: combined.slice(0, 5000), data: { command: tscCmd, errors: errorCount } };
+        }
+      }
+      case "lint_and_fix": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const target = action.files || ".";
+        let lintCmd;
+        if (fs.existsSync(path.join(dir, "node_modules/.bin/eslint"))) {
+          lintCmd = `${path.join(dir, "node_modules/.bin/eslint")} --fix ${target}`;
+        } else if (fs.existsSync(path.join(dir, "node_modules/.bin/prettier"))) {
+          lintCmd = `${path.join(dir, "node_modules/.bin/prettier")} --write ${target}`;
+        } else {
+          lintCmd = `npx eslint --fix ${target}`;
+        }
+        try {
+          const output = childProcess.execSync(lintCmd, { cwd: dir, timeout: 60000, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: lintCmd, output: (output || "").slice(0, 10000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: (e.stderr || e.message || "").slice(0, 5000), data: { command: lintCmd, stdout: (e.stdout || "").slice(0, 5000) } };
+        }
+      }
+      case "format_files": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const target = action.files || ".";
+        let fmtCmd;
+        if (fs.existsSync(path.join(dir, "node_modules/.bin/prettier"))) {
+          fmtCmd = `${path.join(dir, "node_modules/.bin/prettier")} --write "${target}"`;
+        } else {
+          fmtCmd = `npx prettier --write "${target}"`;
+        }
+        try {
+          const output = childProcess.execSync(fmtCmd, { cwd: dir, timeout: 60000, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: fmtCmd, output: (output || "").slice(0, 10000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: (e.stderr || e.message || "").slice(0, 5000), data: { command: fmtCmd } };
+        }
+      }
+      case "get_build_metrics": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const distDirs = ["dist", ".next", "build", "out"];
+        let distDir = null;
+        for (const d of distDirs) {
+          const p = path.join(dir, d);
+          if (fs.existsSync(p)) { distDir = p; break; }
+        }
+        const metrics = { distDir: distDir ? path.basename(distDir) : null, files: [], totalSize: 0 };
+        if (distDir) {
+          function walkDist(d, rel) {
+            try {
+              for (const item of fs.readdirSync(d)) {
+                const full = path.join(d, item);
+                const r = rel ? `${rel}/${item}` : item;
+                try {
+                  const stat = fs.statSync(full);
+                  if (stat.isDirectory()) walkDist(full, r);
+                  else { metrics.files.push({ path: r, size: stat.size }); metrics.totalSize += stat.size; }
+                } catch {}
+              }
+            } catch {}
+          }
+          walkDist(distDir, "");
+          metrics.files.sort((a, b) => b.size - a.size);
+          metrics.files = metrics.files.slice(0, 50);
+        }
+        return { status: "success", type: t, data: metrics };
+      }
+      case "restart_dev_server": {
+        for (const [name, entry] of sandboxProcesses) {
+          try { entry.proc.kill("SIGTERM"); } catch {}
+          sandboxProcesses.delete(name);
+        }
+        if (action.command) {
+          const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+          const parts = action.command.split(" ");
+          const proc = childProcess.spawn(parts[0], parts.slice(1), { cwd: dir, env: { ...process.env, ...(action.env || {}) }, stdio: ["pipe", "pipe", "pipe"], detached: false });
+          let stdout = "", stderr = "";
+          proc.stdout?.on("data", (d) => { stdout += d.toString(); if (stdout.length > 50000) stdout = stdout.slice(-25000); });
+          proc.stderr?.on("data", (d) => { stderr += d.toString(); if (stderr.length > 50000) stderr = stderr.slice(-25000); });
+          const pName = action.name || "dev-server";
+          proc.on("exit", () => { sandboxProcesses.delete(pName); });
+          sandboxProcesses.set(pName, { proc, cmd: action.command, startedAt: Date.now() });
+          return new Promise(resolve => {
+            setTimeout(() => {
+              resolve({ status: "success", type: t, data: { killedAll: true, restarted: pName, pid: proc.pid, output: stdout.slice(0, 5000) } });
+            }, 1000);
+          });
+        }
+        return { status: "success", type: t, data: { killedAll: true, restarted: false } };
+      }
+      case "list_open_ports": {
+        try {
+          const output = childProcess.execSync("ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo 'no port listing tool available'", { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          const ports = [];
+          const lines = output.split("\n");
+          for (const line of lines) {
+            const portMatch = line.match(/:(\d{4,5})\b/);
+            if (portMatch) {
+              const p = parseInt(portMatch[1]);
+              if (p >= 1024 && p <= 65535 && !ports.includes(p)) ports.push(p);
+            }
+          }
+          return { status: "success", type: t, data: { ports: ports.sort((a, b) => a - b), raw: output.slice(0, 5000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: e.message?.slice(0, 1000) };
+        }
+      }
+      case "git_push": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const remote = action.remote || "origin";
+        const branch = action.branch || "";
+        const gitCmd = branch ? `git push ${remote} ${branch}` : `git push ${remote}`;
+        try {
+          const output = childProcess.execSync(gitCmd, { cwd: dir, timeout: 30000, maxBuffer: 2 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: gitCmd, output: (output || "").trim().slice(0, 10000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: (e.stderr || e.message || "").slice(0, 2000), data: { command: gitCmd } };
+        }
+      }
+      case "git_pull": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const remote = action.remote || "origin";
+        const branch = action.branch || "";
+        const gitCmd = branch ? `git pull ${remote} ${branch}` : `git pull ${remote}`;
+        try {
+          const output = childProcess.execSync(gitCmd, { cwd: dir, timeout: 30000, maxBuffer: 2 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: gitCmd, output: (output || "").trim().slice(0, 10000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: (e.stderr || e.message || "").slice(0, 2000), data: { command: gitCmd } };
+        }
+      }
+      case "git_merge": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        if (!action.branch) return { status: "error", type: t, error: "branch required" };
+        const gitCmd = `git merge ${action.branch}`;
+        try {
+          const output = childProcess.execSync(gitCmd, { cwd: dir, timeout: 30000, maxBuffer: 2 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: gitCmd, output: (output || "").trim().slice(0, 10000) } };
+        } catch (e) {
+          return { status: "error", type: t, error: (e.stderr || e.message || "").slice(0, 2000), data: { command: gitCmd, stdout: (e.stdout || "").slice(0, 5000) } };
+        }
+      }
+      case "set_env_var": {
+        if (!action.key) return { status: "error", type: t, error: "key required" };
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const envPath = path.join(dir, action.file || ".env");
+        let envContent = "";
+        try { envContent = fs.readFileSync(envPath, "utf-8"); } catch {}
+        const envLines = envContent.split("\n");
+        const keyPattern = new RegExp(`^${action.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*=`);
+        let found = false;
+        for (let i = 0; i < envLines.length; i++) {
+          if (keyPattern.test(envLines[i])) {
+            envLines[i] = `${action.key}=${action.value ?? ""}`;
+            found = true;
+            break;
+          }
+        }
+        if (!found) envLines.push(`${action.key}=${action.value ?? ""}`);
+        fs.writeFileSync(envPath, envLines.join("\n"));
+        return { status: "success", type: t, data: { key: action.key, file: action.file || ".env", updated: found, created: !found } };
+      }
+      case "get_env_vars": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        const envPath = path.join(dir, action.file || ".env");
+        if (!fs.existsSync(envPath)) return { status: "success", type: t, data: { vars: {}, file: action.file || ".env", exists: false } };
+        const envContent = fs.readFileSync(envPath, "utf-8");
+        const vars = {};
+        for (const line of envContent.split("\n")) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) continue;
+          const eqIdx = trimmed.indexOf("=");
+          if (eqIdx > 0) vars[trimmed.slice(0, eqIdx).trim()] = trimmed.slice(eqIdx + 1).trim();
+        }
+        return { status: "success", type: t, data: { vars, file: action.file || ".env", exists: true } };
+      }
+      case "rollback_last_change": {
+        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        if (action.files) {
+          const gitCmd = `git checkout -- ${action.files}`;
+          try {
+            const output = childProcess.execSync(gitCmd, { cwd: dir, timeout: 10000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            return { status: "success", type: t, data: { command: gitCmd, output: (output || "").trim() } };
+          } catch (e) {
+            return { status: "error", type: t, error: (e.stderr || e.message || "").slice(0, 2000) };
+          }
+        }
+        try {
+          const output = childProcess.execSync("git stash pop", { cwd: dir, timeout: 10000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: "git stash pop", output: (output || "").trim() } };
+        } catch (e) {
+          try {
+            const output2 = childProcess.execSync("git checkout -- .", { cwd: dir, timeout: 10000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            return { status: "success", type: t, data: { command: "git checkout -- .", output: (output2 || "").trim() } };
+          } catch (e2) {
+            return { status: "error", type: t, error: (e2.stderr || e2.message || "").slice(0, 2000) };
+          }
         }
       }
       default:

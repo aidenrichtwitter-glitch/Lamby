@@ -1,0 +1,142 @@
+**Here is the complete, no-limits 100-command master list for the Lamby Workspace API.**
+
+I designed this as the ultimate future-proof toolkit. With these 100 actions (exactly 10 per category), I can:
+
+- Build entire features or apps from scratch  
+- Perform massive refactors  
+- Deep-dive analysis & audits  
+- Generate code intelligently  
+- Debug & profile at runtime  
+- Visualize everything (screenshots, DOM, performance)  
+- Test, deploy previews, git everything  
+- Handle any edge case or integration  
+
+All commands use the **same single POST endpoint** you already have (`/api/sandbox/execute`). Just add the new `type` cases to your handler.
+
+### Category 1: Advanced File Operations (1-10)
+1. `read_multiple_files` `{ paths: string[] }`  
+2. `bulk_write` `{ files: [{path, content}, ...] }` (atomic + rollback)  
+3. `search_replace` `{ path or paths, search, replace, regex? }`  
+4. `apply_patch` `{ patch: "diff --git ..." }`  
+5. `create_folder` `{ path: string }`  
+6. `delete_folder` `{ path, recursive? }`  
+7. `move_folder` `{ from, to }`  
+8. `copy_folder` `{ from, to }`  
+9. `rename_folder` `{ path, newName }`  
+10. `list_tree_filtered` `{ filter: "tsx|css|json" }`
+
+### Category 2: Code Intelligence & Analysis (11-20)
+11. `project_analyze` `{}` (routes, components, deps, size, tech stack)  
+12. `tailwind_audit` `{}` (colors, classes, consistency report)  
+13. `find_usages` `{ symbol: string }`  
+14. `component_tree` `{}` (full React/Next hierarchy)  
+15. `extract_theme` `{}` (all CSS vars/colors)  
+16. `dependency_graph` `{}` (import map)  
+17. `dead_code_detection` `{}`  
+18. `symbol_search` `{ query: string }`  
+19. `grep_advanced` `{ pattern, include, exclude }`  
+20. `extract_imports` `{ file: string }`
+
+### Category 3: Build, Test & Execution (21-30)
+21. `run_command_advanced` `{ command, cwd?, timeout? }`  
+22. `add_dependency` `{ name, version?, dev? }`  
+23. `lint_and_fix` `{ files: "all" or array }`  
+24. `type_check` `{}` (tsc --noEmit)  
+25. `format_files` `{ files? }` (Prettier)  
+26. `run_tests` `{ file?, watch? }`  
+27. `get_build_metrics` `{}` (bundle size, etc.)  
+28. `clean_build_cache` `{}`  
+29. `run_specific_test` `{ file }`  
+30. `build_with_flags` `{ flags }`
+
+### Category 4: Process & Server Management (31-40)
+31. `restart_dev_server` `{}`  
+32. `list_processes` `{}`  
+33. `kill_process` `{ pid or "all" }`  
+34. `start_process_named` `{ command, name }`  
+35. `monitor_process` `{ pid }`  
+36. `get_process_logs` `{ pid }`  
+37. `stop_all_processes` `{}`  
+38. `start_preview_server` `{}`  
+39. `switch_port` `{ port }`  
+40. `health_check` `{}`
+
+### Category 5: Git & Version Control (41-50)
+41. `git_push` `{ branch? }`  
+42. `git_pull` `{}`  
+43. `git_merge` `{ branch }`  
+44. `git_branch_list` `{}`  
+45. `git_create_branch` `{ name }`  
+46. `git_stash_pop` `{}`  
+47. `git_reset` `{}`  
+48. `git_revert` `{ commit }`  
+49. `git_remote_add` `{}`  
+50. `git_tag` `{ name }`
+
+### Category 6: Preview & Visual Feedback (51-60)
+51. `capture_preview` `{ url?, fullPage?, selector? }` (screenshot)  
+52. `take_screenshot` `{ selector? }`  
+53. `get_preview_url` `{}`  
+54. `lighthouse_audit` `{}`  
+55. `visual_diff` `{ beforeUrl, afterUrl }`  
+56. `capture_component` `{ componentName }`  
+57. `preview_in_browser` `{}`  
+58. `get_console_errors` `{}`  
+59. `record_video` `{ duration? }`  
+60. `get_dom_snapshot` `{}`
+
+### Category 7: AI Generation & Refactor (61-70)
+61. `generate_component` `{ name, spec }`  
+62. `generate_page` `{ route, spec }`  
+63. `refactor_file` `{ path, instructions }`  
+64. `refactor_project` `{ instructions }`  
+65. `generate_test` `{ file }`  
+66. `generate_storybook` `{ component }`  
+67. `migrate_framework` `{ target }`  
+68. `optimize_code` `{ file }`  
+69. `add_feature` `{ featureSpec }`  
+70. `convert_to_typescript` `{ file }`
+
+### Category 8: Debugging & Profiling (71-80)
+71. `profile_performance` `{}`  
+72. `react_profiler` `{}`  
+73. `memory_leak_detection` `{}`  
+74. `console_error_analysis` `{}`  
+75. `runtime_error_trace` `{}`  
+76. `bundle_analyzer` `{}`  
+77. `network_monitor` `{}`  
+78. `accessibility_audit` `{}`  
+79. `security_scan` `{}`  
+80. `debug_mode_toggle` `{}`
+
+### Category 9: Environment & Config (81-90)
+81. `set_env_var` `{ key, value }`  
+82. `get_env_vars` `{}`  
+83. `set_tailwind_config` `{ config }`  
+84. `set_next_config` `{ config }`  
+85. `update_package_json` `{ changes }`  
+86. `manage_scripts` `{ scriptName, command }`  
+87. `switch_package_manager` `{ manager }`  
+88. `install_global` `{ package }`  
+89. `clear_cache` `{}`  
+90. `reset_project` `{}`
+
+### Category 10: Advanced & Meta (91-100)
+91. `deploy_preview` `{}`  
+92. `export_project_zip` `{}`  
+93. `import_project` `{ url }`  
+94. `run_custom_script` `{ script }`  
+95. `ai_suggest_changes` `{ prompt }` (meta)  
+96. `validate_change` `{ file, newContent }`  
+97. `rollback_last_change` `{}`  
+98. `watch_file` `{ path }`  
+99. `bulk_delete` `{ paths }`  
+100. `super_command` `{ description }` (I describe what I want → you generate the action list)
+
+**Ready to go.**
+
+Just say “added” + any range (e.g. “added 1-10 and 51-60”) and I’ll immediately start using the new commands on the landing-page project (or whatever we build next).
+
+Want me to test the first 10 right now on this project? Or add the whole list at once?  
+
+We’re now at god-mode level. 🔥

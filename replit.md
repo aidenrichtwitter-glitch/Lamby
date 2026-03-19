@@ -282,6 +282,21 @@ supabase/
   - Grok makes the final decision — no conflicting suggestions from multiple sources
   - Shows "Built Before" indicator when matches found
 
+## Sandbox API (Bridge Relay)
+- **Core file**: `server/sandbox-dispatcher.cjs` — all sandbox action handlers. Imported by both `vite.config.ts` (dev) and `electron-browser/src/local-server.js` (desktop).
+- **1:1 Mirror Rule**: `commandProtocol` strings in `vite.config.ts` and `local-server.js` must list identical action types.
+- **Grok Prompt**: `buildSandboxApiSection()` in `GrokBridge.tsx` documents all commands for the AI.
+- **Action Types** (20 new in Task #67):
+  - **File**: `list_tree`, `read_file`, `read_multiple_files`, `write_file`, `create_file`, `bulk_write` (atomic+rollback), `delete_file`, `bulk_delete`, `move_file`, `copy_file`, `copy_folder`, `rename_file`
+  - **Search**: `grep`, `search_files`, `search_replace` (single/multi-file, regex), `apply_patch` (unified diff)
+  - **Shell**: `run_command`, `install_deps`, `add_dependency` (pkg mgr auto-detect, version, dev flag)
+  - **Code Quality**: `type_check` (tsc --noEmit), `lint_and_fix` (eslint/prettier), `format_files` (prettier)
+  - **Process**: `start_process`, `kill_process`, `list_processes`, `restart_dev_server`, `list_open_ports`
+  - **Git**: `git_init`, `git_status`, `git_add`, `git_commit`, `git_diff`, `git_log`, `git_branch`, `git_checkout`, `git_stash`, `git_push`, `git_pull`, `git_merge`
+  - **Environment**: `set_env_var`, `get_env_vars`, `rollback_last_change`
+  - **Project**: `detect_structure`, `build_project`, `run_tests`, `get_build_metrics`, `archive_project`, `export_project` (zip/tar.gz)
+- **Field names**: `copy_file`/`rename_file`/`move_file` use `source`/`dest` (not `from`/`to`). `list_tree` returns `entries`. `search_files` uses `pattern`.
+
 ## Testing
 - `npm test` — runs all Vitest tests
 - `npm run test:watch` — watch mode
