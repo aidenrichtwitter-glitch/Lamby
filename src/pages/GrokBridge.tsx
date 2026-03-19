@@ -338,6 +338,7 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    { type: "build_project", project: "${proj}" }  → runs the project build command\n`;
     section += `    { type: "run_tests", project: "${proj}" }  → runs the project test suite\n`;
     section += `    { type: "get_build_metrics", project: "${proj}" }  → dist/ file sizes and total\n`;
+    section += `    { type: "archive_project", project: "${proj}" }  → create git archive\n`;
     section += `    { type: "export_project", project: "${proj}", format: "zip" }  → archive project (zip or tar.gz)\n`;
     section += `  ANALYSIS:\n`;
     section += `    { type: "project_analyze", project: "${proj}" }  → routes, components, deps, file stats, CSS vars\n`;

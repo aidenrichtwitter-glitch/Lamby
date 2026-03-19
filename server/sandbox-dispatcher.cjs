@@ -1605,8 +1605,11 @@ function executeSandboxAction(action, projectsDir, options) {
         const cmdOutsideQuotes = cmd.replace(/"[^"]*"/g, "").replace(/'[^']*'/g, "");
         if (/[;&|`${}]/.test(cmdOutsideQuotes)) return { status: "error", type: t, error: "Shell metacharacters not allowed" };
         const timeout = Math.min(Math.max(parseInt(action.timeout, 10) || 30000, 1000), 120000);
+        const cmdParts = cmd.split(/\s+/);
+        const cmdBin = cmdParts[0];
+        const cmdArgs = cmdParts.slice(1);
         try {
-          const output = childProcess.execSync(cmd, { cwd: dir, timeout, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, ...(action.env || {}) }, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          const output = childProcess.execFileSync(cmdBin, cmdArgs, { cwd: dir, timeout, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, ...(action.env || {}) }, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
           return { status: "success", type: t, data: { command: cmd, output: (output || "").slice(0, 50000) } };
         } catch (e) {
           return { status: "error", type: t, error: e.message?.slice(0, 2000), data: { command: cmd, stdout: (e.stdout || "").slice(0, 10000), stderr: (e.stderr || "").slice(0, 10000) } };
@@ -1616,11 +1619,14 @@ function executeSandboxAction(action, projectsDir, options) {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
         const pm = detectPmForDir(dir);
-        const flags = Array.isArray(action.flags) ? action.flags.map(f => sanitizeGitArg(f)).filter(Boolean).join(" ") : "";
-        const buildCmd = buildPmCommand(pm, "build", flags ? `-- ${flags}` : "");
+        const safeFlags = Array.isArray(action.flags) ? action.flags.map(f => sanitizeGitArg(f)).filter(Boolean) : [];
+        const buildCmdStr = buildPmCommand(pm, "build");
+        const buildParts = buildCmdStr.split(/\s+/);
+        const buildBin = buildParts[0];
+        const buildArgs = [...buildParts.slice(1), ...(safeFlags.length > 0 ? ["--", ...safeFlags] : [])];
         try {
-          const output = childProcess.execSync(buildCmd, { cwd: dir, timeout: 120000, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
-          return { status: "success", type: t, data: { command: buildCmd, output: (output || "").slice(0, 20000) } };
+          const output = childProcess.execFileSync(buildBin, buildArgs, { cwd: dir, timeout: 120000, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: `${buildBin} ${buildArgs.join(" ")}`, output: (output || "").slice(0, 20000) } };
         } catch (e) {
           return { status: "error", type: t, error: e.message?.slice(0, 2000), data: { stdout: (e.stdout || "").slice(0, 10000), stderr: (e.stderr || "").slice(0, 10000) } };
         }
@@ -1685,7 +1691,22 @@ function executeSandboxAction(action, projectsDir, options) {
       case "switch_port": {
         const port = parseInt(action.port, 10);
         if (!port || port < 1 || port > 65535) return { status: "error", type: t, error: "Valid port number required (1-65535)" };
-        return { status: "success", type: t, data: { port, note: "Port preference registered. Restart dev server to use new port." } };
+        const extPreviews = _opts.previewProcesses;
+        let updated = false;
+        if (extPreviews && projectName && extPreviews.has(projectName)) {
+          const entry = extPreviews.get(projectName);
+          entry.port = port;
+          entry.url = `http://localhost:${port}`;
+          updated = true;
+        } else if (extPreviews) {
+          for (const [name, entry] of extPreviews) {
+            entry.port = port;
+            entry.url = `http://localhost:${port}`;
+            updated = true;
+            break;
+          }
+        }
+        return { status: "success", type: t, data: { port, updated, previewUrl: `http://localhost:${port}` } };
       }
       case "git_stash_pop": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
@@ -2125,12 +2146,34 @@ function executeSandboxAction(action, projectsDir, options) {
           const defaultFile = t === "set_tailwind_config" ? "tailwind.config.js" : "next.config.js";
           configPath = path.join(dir, defaultFile);
         }
-        const configContent = `module.exports = ${JSON.stringify(action.config, null, 2)};\n`;
         const existed = fs.existsSync(configPath);
-        let previousContent = null;
-        if (existed) { try { previousContent = fs.readFileSync(configPath, "utf-8"); } catch {} }
+        let mergedConfig = action.config;
+        if (existed) {
+          try {
+            const existingContent = fs.readFileSync(configPath, "utf-8");
+            const jsonMatch = existingContent.match(/module\.exports\s*=\s*(\{[\s\S]*\})\s*;?\s*$/);
+            if (jsonMatch) {
+              try {
+                const existingObj = JSON.parse(jsonMatch[1].replace(/'/g, '"').replace(/(\w+)\s*:/g, '"$1":').replace(/,\s*}/g, '}').replace(/,\s*]/g, ']'));
+                function deepMerge(target, source) {
+                  const result = { ...target };
+                  for (const [key, val] of Object.entries(source)) {
+                    if (val && typeof val === "object" && !Array.isArray(val) && result[key] && typeof result[key] === "object" && !Array.isArray(result[key])) {
+                      result[key] = deepMerge(result[key], val);
+                    } else {
+                      result[key] = val;
+                    }
+                  }
+                  return result;
+                }
+                mergedConfig = deepMerge(existingObj, action.config);
+              } catch {}
+            }
+          } catch {}
+        }
+        const configContent = `module.exports = ${JSON.stringify(mergedConfig, null, 2)};\n`;
         fs.writeFileSync(configPath, configContent);
-        return { status: "success", type: t, data: { file: path.basename(configPath), created: !existed, updated: existed, previousContentLength: previousContent ? previousContent.length : 0 } };
+        return { status: "success", type: t, data: { file: path.basename(configPath), created: !existed, merged: existed, config: JSON.stringify(mergedConfig).slice(0, 5000) } };
       }
       case "update_package_json": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;

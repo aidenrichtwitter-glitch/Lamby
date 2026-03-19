@@ -170,6 +170,7 @@ EXECUTE COMMANDS (write files, run shell, install deps, git, etc.):
     { type: "manage_scripts", project: "P", scriptName: "lint", command: "eslint src/" }  → add/update/delete npm scripts
     { type: "switch_package_manager", project: "P", manager: "pnpm" }  → switch between npm/yarn/pnpm
     { type: "run_tests", project: "P" }  → runs the project test suite
+    { type: "archive_project", project: "P" }  → create git archive
     { type: "export_project", project: "P", format: "zip" }  → archive project (zip or tar.gz)
 
   ── SUPER & META ──
