@@ -169,7 +169,7 @@ function executeSandboxAction(action, projectsDir, options) {
       }
       case "read_file": {
         if (!action.path) return { status: "error", type: t, error: "path required" };
-        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
+        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : validateBoundedPath(action.path, projectsDir);
         if (!c.valid) return { status: "error", type: t, error: c.error };
         if (!fs.existsSync(c.resolved)) return { status: "error", type: t, error: "File not found" };
         const content = fs.readFileSync(c.resolved, "utf-8");
@@ -178,7 +178,7 @@ function executeSandboxAction(action, projectsDir, options) {
       case "write_file":
       case "create_file": {
         if (!action.path || action.content === undefined) return { status: "error", type: t, error: "path and content required" };
-        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
+        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : validateBoundedPath(action.path, projectsDir);
         if (!c.valid) return { status: "error", type: t, error: c.error };
         const dir = path.dirname(c.resolved);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -190,7 +190,7 @@ function executeSandboxAction(action, projectsDir, options) {
       }
       case "delete_file": {
         if (!action.path) return { status: "error", type: t, error: "path required" };
-        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
+        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : validateBoundedPath(action.path, projectsDir);
         if (!c.valid) return { status: "error", type: t, error: c.error };
         if (!fs.existsSync(c.resolved)) return { status: "error", type: t, error: "File not found" };
         const stat = fs.statSync(c.resolved);
@@ -201,8 +201,8 @@ function executeSandboxAction(action, projectsDir, options) {
       case "move_file":
       case "rename_file": {
         if (!action.source || !action.dest) return { status: "error", type: t, error: "source and dest required" };
-        const src = projectName ? validateProjectPath(projectName, action.source, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.source) };
-        const dst = projectName ? validateProjectPath(projectName, action.dest, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.dest) };
+        const src = projectName ? validateProjectPath(projectName, action.source, projectsDir) : validateBoundedPath(action.source, projectsDir);
+        const dst = projectName ? validateProjectPath(projectName, action.dest, projectsDir) : validateBoundedPath(action.dest, projectsDir);
         if (!src.valid) return { status: "error", type: t, error: src.error };
         if (!dst.valid) return { status: "error", type: t, error: dst.error };
         if (!fs.existsSync(src.resolved)) return { status: "error", type: t, error: "Source not found" };
@@ -213,8 +213,8 @@ function executeSandboxAction(action, projectsDir, options) {
       }
       case "copy_file": {
         if (!action.source || !action.dest) return { status: "error", type: t, error: "source and dest required" };
-        const src = projectName ? validateProjectPath(projectName, action.source, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.source) };
-        const dst = projectName ? validateProjectPath(projectName, action.dest, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.dest) };
+        const src = projectName ? validateProjectPath(projectName, action.source, projectsDir) : validateBoundedPath(action.source, projectsDir);
+        const dst = projectName ? validateProjectPath(projectName, action.dest, projectsDir) : validateBoundedPath(action.dest, projectsDir);
         if (!src.valid) return { status: "error", type: t, error: src.error };
         if (!dst.valid) return { status: "error", type: t, error: dst.error };
         if (!fs.existsSync(src.resolved)) return { status: "error", type: t, error: "Source not found" };
@@ -501,8 +501,8 @@ function executeSandboxAction(action, projectsDir, options) {
       }
       case "copy_folder": {
         if (!action.source || !action.dest) return { status: "error", type: t, error: "source and dest required" };
-        const src = projectName ? validateProjectPath(projectName, action.source, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.source) };
-        const dst = projectName ? validateProjectPath(projectName, action.dest, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.dest) };
+        const src = projectName ? validateProjectPath(projectName, action.source, projectsDir) : validateBoundedPath(action.source, projectsDir);
+        const dst = projectName ? validateProjectPath(projectName, action.dest, projectsDir) : validateBoundedPath(action.dest, projectsDir);
         if (!src.valid) return { status: "error", type: t, error: src.error };
         if (!dst.valid) return { status: "error", type: t, error: dst.error };
         if (!fs.existsSync(src.resolved)) return { status: "error", type: t, error: "Source folder not found" };
@@ -1174,7 +1174,7 @@ function executeSandboxAction(action, projectsDir, options) {
         if (!previewUrl) return { status: "error", type: t, error: "No preview server detected. Start a dev server first." };
         let screenshotPath;
         if (action.output) {
-          const outCheck = projectName ? validateProjectPath(projectName, action.output, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.output) };
+          const outCheck = projectName ? validateProjectPath(projectName, action.output, projectsDir) : validateBoundedPath(action.output, projectsDir);
           if (!outCheck.valid) return { status: "error", type: t, error: outCheck.error };
           screenshotPath = outCheck.resolved;
         } else {
@@ -1217,7 +1217,7 @@ function executeSandboxAction(action, projectsDir, options) {
         if (t === "refactor_file") {
           if (!action.path) return { status: "error", type: t, error: "path required" };
           if (!action.instructions) return { status: "error", type: t, error: "instructions required" };
-          const fCheck = projectName ? validateProjectPath(projectName, action.path, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
+          const fCheck = projectName ? validateProjectPath(projectName, action.path, projectsDir) : validateBoundedPath(action.path, projectsDir);
           if (!fCheck.valid) return { status: "error", type: t, error: fCheck.error };
           if (!fs.existsSync(fCheck.resolved)) return { status: "error", type: t, error: "File not found" };
           const existingContent = fs.readFileSync(fCheck.resolved, "utf-8");
@@ -1587,7 +1587,7 @@ function executeSandboxAction(action, projectsDir, options) {
       }
       case "extract_imports": {
         if (!action.file) return { status: "error", type: t, error: "file required" };
-        const c = projectName ? validateProjectPath(projectName, action.file, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.file) };
+        const c = projectName ? validateProjectPath(projectName, action.file, projectsDir) : validateBoundedPath(action.file, projectsDir);
         if (!c.valid) return { status: "error", type: t, error: c.error };
         if (!fs.existsSync(c.resolved)) return { status: "error", type: t, error: "File not found" };
         const content = fs.readFileSync(c.resolved, "utf-8");
@@ -1878,7 +1878,7 @@ function executeSandboxAction(action, projectsDir, options) {
         let outPath = "";
         if (t === "generate_test") {
           if (!action.file) return { status: "error", type: t, error: "file required" };
-          const fc = projectName ? validateProjectPath(projectName, action.file, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.file) };
+          const fc = projectName ? validateProjectPath(projectName, action.file, projectsDir) : validateBoundedPath(action.file, projectsDir);
           if (!fc.valid) return { status: "error", type: t, error: fc.error };
           if (!fs.existsSync(fc.resolved)) return { status: "error", type: t, error: "File not found" };
           const src = fs.readFileSync(fc.resolved, "utf-8");
@@ -1903,7 +1903,7 @@ function executeSandboxAction(action, projectsDir, options) {
           aiPrompt = `Generate a Storybook story file for the component "${action.component}".${compSrc}\n\nReturn ONLY the complete stories file content.`;
         } else if (t === "optimize_code") {
           if (!action.file) return { status: "error", type: t, error: "file required" };
-          const fc = projectName ? validateProjectPath(projectName, action.file, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.file) };
+          const fc = projectName ? validateProjectPath(projectName, action.file, projectsDir) : validateBoundedPath(action.file, projectsDir);
           if (!fc.valid) return { status: "error", type: t, error: fc.error };
           if (!fs.existsSync(fc.resolved)) return { status: "error", type: t, error: "File not found" };
           const src = fs.readFileSync(fc.resolved, "utf-8");
@@ -1911,7 +1911,7 @@ function executeSandboxAction(action, projectsDir, options) {
           aiPrompt = `Optimize this code for performance, readability, and best practices. Preserve all functionality.\n\nFile: ${action.file}\n\`\`\`\n${src.slice(0, 50000)}\n\`\`\`\n\nReturn ONLY the complete optimized file content.`;
         } else if (t === "convert_to_typescript") {
           if (!action.file) return { status: "error", type: t, error: "file required" };
-          const fc = projectName ? validateProjectPath(projectName, action.file, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.file) };
+          const fc = projectName ? validateProjectPath(projectName, action.file, projectsDir) : validateBoundedPath(action.file, projectsDir);
           if (!fc.valid) return { status: "error", type: t, error: fc.error };
           if (!fs.existsSync(fc.resolved)) return { status: "error", type: t, error: "File not found" };
           const src = fs.readFileSync(fc.resolved, "utf-8");
