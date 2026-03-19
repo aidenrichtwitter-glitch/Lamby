@@ -376,7 +376,7 @@ Start by reading the files you need, then make all the changes.` }
       }
 
       let allResults = [];
-      let actionErrors = 0;
+      let writeErrors = 0;
       for (let bi = 0; bi < batches.length; bi++) {
         const batch = batches[bi];
         if (batches.length > 1) console.log(`  │ Posting batch ${bi + 1}/${batches.length} (${batch.length} actions)`);
@@ -386,7 +386,8 @@ Start by reading the files you need, then make all the changes.` }
         if (bridgeRes.status !== 200) {
           console.error(`  │ ✗ Bridge error (${bridgeRes.status}): ${bridgeRes.body.slice(0, 300)}`);
           allResults.push({ error: bridgeRes.body.slice(0, 500), status: bridgeRes.status });
-          actionErrors += batch.length;
+          const batchWriteCount = batch.filter(a => !classifyActions([a]).reads.length).length;
+          writeErrors += batchWriteCount;
           continue;
         }
 
@@ -398,7 +399,8 @@ Start by reading the files you need, then make all the changes.` }
         if (parsed.results) {
           for (const r of parsed.results) {
             if (r.status === 'error') {
-              actionErrors++;
+              const isWrite = r.type && !classifyActions([{ type: r.type }]).reads.length;
+              if (isWrite) writeErrors++;
               console.log(`  │ ✗ Action error [${r.type}]: ${(r.error || '').slice(0, 200)}`);
             }
           }
@@ -407,13 +409,13 @@ Start by reading the files you need, then make all the changes.` }
         allResults.push(parsed);
       }
 
-      const successfulWrites = writes.length - actionErrors;
+      const successfulWrites = writes.length - writeErrors;
       totalReads += reads.length;
       totalWrites += (successfulWrites > 0 ? successfulWrites : 0);
       if (successfulWrites > 0) lastWriteTurn = turn;
 
-      if (actionErrors > 0) {
-        console.log(`  │ ⚠ ${actionErrors} action(s) had errors`);
+      if (writeErrors > 0) {
+        console.log(`  │ ⚠ ${writeErrors} write action(s) had errors`);
       }
 
       const resultSummary = JSON.stringify(allResults).slice(0, 8000);
