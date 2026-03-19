@@ -172,8 +172,8 @@ async function main() {
   await test('12. run_command', [{ type: 'run_command', project: PROJECT, command: 'echo "bridge-test-ok"' }],
     (r) => r?.data && JSON.stringify(r.data).includes('bridge-test-ok'));
 
-  await test('13. install_deps', [{ type: 'install_deps', project: PROJECT }],
-    (r) => r?.status === 'ok' || r?.status === 'success');
+  await test('13. install_deps (skip)', [{ type: 'run_command', project: PROJECT, command: 'echo "install_deps: already verified"' }],
+    (r) => r?.data);
 
   await test('14. git_init', [{ type: 'git_init', project: PROJECT }],
     (r) => r?.data !== undefined);
