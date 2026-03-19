@@ -365,14 +365,14 @@ function executeSandboxAction(action, projectsDir, options) {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         const parts = action.command.split(" ");
         const proc = childProcess.spawn(parts[0], parts.slice(1), { cwd: dir, env: { ...process.env, ...(action.env || {}) }, stdio: ["pipe", "pipe", "pipe"], detached: false });
-        let stdout = "", stderr = "";
-        proc.stdout?.on("data", (d) => { stdout += d.toString(); if (stdout.length > 50000) stdout = stdout.slice(-25000); });
-        proc.stderr?.on("data", (d) => { stderr += d.toString(); if (stderr.length > 50000) stderr = stderr.slice(-25000); });
+        const logs = { stdout: "", stderr: "" };
+        proc.stdout?.on("data", (d) => { logs.stdout += d.toString(); if (logs.stdout.length > 50000) logs.stdout = logs.stdout.slice(-25000); });
+        proc.stderr?.on("data", (d) => { logs.stderr += d.toString(); if (logs.stderr.length > 50000) logs.stderr = logs.stderr.slice(-25000); });
         proc.on("exit", () => { sandboxProcesses.delete(pName); });
-        sandboxProcesses.set(pName, { proc, cmd: action.command, startedAt: Date.now() });
+        sandboxProcesses.set(pName, { proc, cmd: action.command, startedAt: Date.now(), logs });
         return new Promise(resolve => {
           setTimeout(() => {
-            resolve({ status: "success", type: t, data: { name: pName, pid: proc.pid, output: stdout.slice(0, 5000), stderr: stderr.slice(0, 2000) } });
+            resolve({ status: "success", type: t, data: { name: pName, pid: proc.pid, output: logs.stdout.slice(0, 5000), stderr: logs.stderr.slice(0, 2000) } });
           }, 500);
         });
       }
@@ -747,15 +747,15 @@ function executeSandboxAction(action, projectsDir, options) {
           const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
           const parts = action.command.split(" ");
           const proc = childProcess.spawn(parts[0], parts.slice(1), { cwd: dir, env: { ...process.env, ...(action.env || {}) }, stdio: ["pipe", "pipe", "pipe"], detached: false });
-          let stdout = "", stderr = "";
-          proc.stdout?.on("data", (d) => { stdout += d.toString(); if (stdout.length > 50000) stdout = stdout.slice(-25000); });
-          proc.stderr?.on("data", (d) => { stderr += d.toString(); if (stderr.length > 50000) stderr = stderr.slice(-25000); });
+          const logs = { stdout: "", stderr: "" };
+          proc.stdout?.on("data", (d) => { logs.stdout += d.toString(); if (logs.stdout.length > 50000) logs.stdout = logs.stdout.slice(-25000); });
+          proc.stderr?.on("data", (d) => { logs.stderr += d.toString(); if (logs.stderr.length > 50000) logs.stderr = logs.stderr.slice(-25000); });
           const pName = action.name || "dev-server";
           proc.on("exit", () => { sandboxProcesses.delete(pName); });
-          sandboxProcesses.set(pName, { proc, cmd: action.command, startedAt: Date.now() });
+          sandboxProcesses.set(pName, { proc, cmd: action.command, startedAt: Date.now(), logs });
           return new Promise(resolve => {
             setTimeout(() => {
-              resolve({ status: "success", type: t, data: { killedAll: true, restarted: pName, pid: proc.pid, output: stdout.slice(0, 5000) } });
+              resolve({ status: "success", type: t, data: { killedAll: true, restarted: pName, pid: proc.pid, output: logs.stdout.slice(0, 5000) } });
             }, 1000);
           });
         }
@@ -763,7 +763,9 @@ function executeSandboxAction(action, projectsDir, options) {
       }
       case "list_open_ports": {
         try {
-          const output = childProcess.execSync("ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo 'no port listing tool available'", { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          let output = "";
+          try { output = childProcess.execFileSync("ss", ["-tlnp"], { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }); }
+          catch { try { output = childProcess.execFileSync("netstat", ["-tlnp"], { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }); } catch { output = "no port listing tool available"; } }
           const ports = [];
           const lines = output.split("\n");
           for (const line of lines) {
@@ -1761,7 +1763,7 @@ function executeSandboxAction(action, projectsDir, options) {
         }
         if (!previewUrl) return { status: "success", type: t, data: { note: "No running preview server. Start a dev server first.", html: null } };
         try {
-          const html = childProcess.execSync(`curl -s -m 10 ${previewUrl}`, { timeout: 15000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          const html = childProcess.execFileSync("curl", ["-s", "-m", "10", previewUrl], { timeout: 15000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
           return { status: "success", type: t, data: { url: previewUrl, html: html.slice(0, 100000) } };
         } catch (e) {
           return { status: "success", type: t, data: { url: previewUrl, html: null, error: e.message?.slice(0, 500) } };
@@ -2033,7 +2035,9 @@ function executeSandboxAction(action, projectsDir, options) {
       }
       case "network_monitor": {
         try {
-          const output = childProcess.execSync("ss -tnp 2>/dev/null || netstat -tnp 2>/dev/null || echo 'no tool'", { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          let output = "";
+          try { output = childProcess.execFileSync("ss", ["-tnp"], { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }); }
+          catch { try { output = childProcess.execFileSync("netstat", ["-tnp"], { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }); } catch { output = "no tool available"; } }
           const connections = [];
           const lines = output.split("\n").slice(1);
           for (const line of lines) {
@@ -2079,10 +2083,11 @@ function executeSandboxAction(action, projectsDir, options) {
         const results = { npmAudit: null, envExposed: [], dangerousPatterns: [] };
         if (fs.existsSync(path.join(dir, "package.json"))) {
           try {
-            const output = childProcess.execSync("npm audit --json 2>/dev/null || echo '{}'", { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            const output = childProcess.execFileSync("npm", ["audit", "--json"], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
             try { results.npmAudit = JSON.parse(output); } catch { results.npmAudit = { raw: output.slice(0, 5000) }; }
           } catch (e) {
-            results.npmAudit = { error: (e.message || "").slice(0, 1000) };
+            const auditOut = e.stdout || "";
+            try { results.npmAudit = JSON.parse(auditOut); } catch { results.npmAudit = { error: (e.message || "").slice(0, 1000), raw: auditOut.slice(0, 5000) }; }
           }
         }
         const ignore = new Set(["node_modules", ".git", "dist", ".cache"]);
@@ -2119,12 +2124,13 @@ function executeSandboxAction(action, projectsDir, options) {
         if (!configPath) {
           const defaultFile = t === "set_tailwind_config" ? "tailwind.config.js" : "next.config.js";
           configPath = path.join(dir, defaultFile);
-          const defaultContent = `module.exports = ${JSON.stringify(action.config, null, 2)};\n`;
-          fs.writeFileSync(configPath, defaultContent);
-          return { status: "success", type: t, data: { file: defaultFile, created: true } };
         }
-        const configJson = JSON.stringify(action.config, null, 2);
-        return { status: "success", type: t, data: { file: path.basename(configPath), note: `Config object received. Use write_file to update ${path.basename(configPath)} with the merged content.`, config: configJson.slice(0, 5000) } };
+        const configContent = `module.exports = ${JSON.stringify(action.config, null, 2)};\n`;
+        const existed = fs.existsSync(configPath);
+        let previousContent = null;
+        if (existed) { try { previousContent = fs.readFileSync(configPath, "utf-8"); } catch {} }
+        fs.writeFileSync(configPath, configContent);
+        return { status: "success", type: t, data: { file: path.basename(configPath), created: !existed, updated: existed, previousContentLength: previousContent ? previousContent.length : 0 } };
       }
       case "update_package_json": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
@@ -2191,7 +2197,24 @@ function executeSandboxAction(action, projectsDir, options) {
         return { status: "success", type: t, data: { target, removedLockfiles: removed, note: `Switched to ${target}. Run install_deps to generate new lockfile.` } };
       }
       case "deploy_preview": {
-        return executeSandboxAction({ ...action, type: "start_process", command: action.command || "npm run dev", name: action.name || "preview-server" }, projectsDir, _opts);
+        const dpDir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        if (!fs.existsSync(dpDir)) return { status: "error", type: t, error: "Directory not found" };
+        const dpResultRaw = executeSandboxAction({ ...action, type: "start_process", command: action.command || "npm run dev", name: action.name || "preview-server" }, projectsDir, _opts);
+        const wrapResult = (dpResult) => {
+          let dpUrl = null;
+          const dpPort = action.port ? parseInt(action.port, 10) : null;
+          if (dpPort) dpUrl = `http://localhost:${dpPort}`;
+          if (!dpUrl && dpResult.data?.output) {
+            const portMatch = dpResult.data.output.match(/localhost:(\d+)|port\s+(\d+)/i);
+            if (portMatch) dpUrl = `http://localhost:${portMatch[1] || portMatch[2]}`;
+          }
+          if (!dpUrl) dpUrl = "http://localhost:3000";
+          return { status: dpResult.status, type: t, data: { ...dpResult.data, previewUrl: dpUrl } };
+        };
+        if (dpResultRaw && typeof dpResultRaw.then === "function") {
+          return dpResultRaw.then(wrapResult);
+        }
+        return wrapResult(dpResultRaw);
       }
       case "export_project_zip": {
         return executeSandboxAction({ ...action, type: "export_project", format: "zip" }, projectsDir, _opts);
