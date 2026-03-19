@@ -5143,7 +5143,7 @@ function projectManagementPlugin(): Plugin {
             console.log(`[Bridge] Received sandbox-execute-request (reqId: ${parsed.requestId.slice(0, 8)}, actions: ${(parsed.actions || []).length})`);
             try {
               const projectsDir = path.resolve(process.cwd(), "projects");
-              const result = await executeSandboxActions(parsed.actions || [], projectsDir, { auditLog: sandboxAuditLog });
+              const result = await executeSandboxActions(parsed.actions || [], projectsDir, { auditLog: sandboxAuditLog, previewProcesses });
               bridgeRelaySend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result }));
               console.log(`[Bridge] Sent sandbox-execute-response (reqId: ${parsed.requestId.slice(0, 8)})`);
             } catch (err: any) {
@@ -5363,7 +5363,7 @@ function projectManagementPlugin(): Plugin {
           }
 
           const projectsDir = path.resolve(process.cwd(), "projects");
-          const result = await executeSandboxActions(actions, projectsDir, { auditLog: sandboxAuditLog });
+          const result = await executeSandboxActions(actions, projectsDir, { auditLog: sandboxAuditLog, previewProcesses });
           res.setHeader("Content-Type", "application/json");
           res.end(JSON.stringify(result));
         } catch (err: any) {
@@ -5452,7 +5452,7 @@ function projectManagementPlugin(): Plugin {
                 const onActionResult = msg.stream ? (i: number, result: any) => {
                   try { ws.send(JSON.stringify({ type: "action-result", requestId: msg.requestId, actionIndex: i, actionType: result.type, status: result.status, data: result.data, error: result.error })); } catch {}
                 } : undefined;
-                const wsResult = await executeSandboxActions(actions, projectsDir, { auditLog: sandboxAuditLog, onActionResult });
+                const wsResult = await executeSandboxActions(actions, projectsDir, { auditLog: sandboxAuditLog, onActionResult, previewProcesses });
                 ws.send(JSON.stringify({ type: "result", requestId: msg.requestId, ...wsResult }));
               } else if (msg.type === "ping") {
                 ws.send(JSON.stringify({ type: "pong" }));

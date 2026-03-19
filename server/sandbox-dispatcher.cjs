@@ -1160,7 +1160,14 @@ function executeSandboxAction(action, projectsDir, options) {
           return { status: "success", type: t, data: { url: previewUrl, port: previewPort } };
         }
         if (!previewUrl) return { status: "error", type: t, error: "No preview server detected. Start a dev server first." };
-        const screenshotPath = action.output || path.join(dir, `preview-${Date.now()}.png`);
+        let screenshotPath;
+        if (action.output) {
+          const outCheck = projectName ? validateProjectPath(projectName, action.output, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.output) };
+          if (!outCheck.valid) return { status: "error", type: t, error: outCheck.error };
+          screenshotPath = outCheck.resolved;
+        } else {
+          screenshotPath = path.join(dir, `preview-${Date.now()}.png`);
+        }
         const playwrightBin = path.join(dir, "node_modules/playwright");
         const puppeteerBin = path.join(dir, "node_modules/puppeteer");
         const hasPlaywright = fs.existsSync(playwrightBin);
