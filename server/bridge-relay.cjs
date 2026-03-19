@@ -9,6 +9,7 @@ const snapshotKey = process.env.SNAPSHOT_KEY || crypto.randomBytes(16).toString(
 const bridgeClients = new Map();
 const pendingRelayRequests = new Map();
 const pendingSandboxRelayRequests = new Map();
+const pendingConsoleLogRequests = new Map();
 const sandboxAuditLog = [];
 
 function sendJson(res, obj, status) {
@@ -157,6 +158,13 @@ function handleWsUpgrade(req, socket, bridgeKey, clientSnapshotKey) {
             pendingSandboxRelayRequests.delete(msg.requestId);
             pending.resolve(JSON.stringify(msg.result || { error: "Empty sandbox response from desktop." }));
           }
+        } else if (msg.type === "console-logs-response" && msg.requestId) {
+          const pending = pendingConsoleLogRequests.get(msg.requestId);
+          if (pending) {
+            clearTimeout(pending.timer);
+            pendingConsoleLogRequests.delete(msg.requestId);
+            pending.resolve(msg.logs || { error: "Empty console logs response from desktop." });
+          }
         } else if (msg.type === "ping") {
           client.lastPing = Date.now();
           client.send(JSON.stringify({ type: "pong" }));
@@ -267,6 +275,40 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pathname === "/api/console-logs") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const providedKey = getKey(req, url);
+    const projectName = url.searchParams.get("project") || "";
+
+    const matchedClient = findBridgeClient(providedKey);
+    if (!matchedClient && providedKey !== snapshotKey) {
+      sendJson(res, { error: "Invalid key" }, 403);
+      return;
+    }
+    if (!matchedClient) {
+      sendJson(res, { error: "No desktop client connected." }, 503);
+      return;
+    }
+
+    const requestId = crypto.randomUUID();
+    const relayPromise = new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingConsoleLogRequests.delete(requestId);
+        resolve({ error: "Relay timeout — desktop app did not respond within 15 seconds." });
+      }, 15000);
+      pendingConsoleLogRequests.set(requestId, { resolve, timer });
+    });
+    try {
+      matchedClient.send(JSON.stringify({ type: "console-logs-request", requestId, projectName }));
+    } catch {
+      sendJson(res, { error: "Could not reach desktop app." }, 502);
+      return;
+    }
+    const logs = await relayPromise;
+    sendJson(res, logs);
+    return;
+  }
+
   if (pathname === "/api/sandbox/execute") {
     if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
     try {
@@ -321,7 +363,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   res.writeHead(404, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ error: "Not found", endpoints: ["/", "/api/snapshot-key", "/api/bridge-status", "/api/snapshot/:project", "/api/sandbox/execute", "/api/sandbox/audit-log"] }));
+  res.end(JSON.stringify({ error: "Not found", endpoints: ["/", "/api/snapshot-key", "/api/bridge-status", "/api/snapshot/:project", "/api/console-logs", "/api/sandbox/execute", "/api/sandbox/audit-log"] }));
 });
 
 server.on("upgrade", (req, socket, head) => {
@@ -371,6 +413,7 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`    GET  /api/snapshot-key       Get connection info`);
   console.log(`    GET  /api/bridge-status      Connected clients`);
   console.log(`    GET  /api/snapshot/:project   Get project snapshot (via desktop)`);
+  console.log(`    GET  /api/console-logs       Get desktop console logs (via desktop)`);
   console.log(`    POST /api/sandbox/execute    Execute actions (via desktop)`);
   console.log(`    GET  /api/sandbox/audit-log  Recent actions`);
   console.log(`    WS   /bridge-ws             Desktop WebSocket connection`);

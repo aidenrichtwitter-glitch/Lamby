@@ -112,6 +112,26 @@ function bridgeSend(data) {
   try { bridgeSocket.write(wsClientEncodeFrame(data)); } catch {}
 }
 
+function gatherConsoleLogs(projectName) {
+  const result = { previews: [] };
+  if (projectName) {
+    const entry = previewProcesses.get(projectName);
+    if (entry && entry.logs) {
+      result.previews.push({ name: projectName, port: entry.port, stdout: entry.logs.stdout, stderr: entry.logs.stderr });
+    } else {
+      result.previews.push({ name: projectName, error: "No preview running for this project" });
+    }
+  } else {
+    for (const [name, entry] of previewProcesses) {
+      result.previews.push({ name, port: entry.port, stdout: entry.logs ? entry.logs.stdout : "", stderr: entry.logs ? entry.logs.stderr : "" });
+    }
+    if (result.previews.length === 0) {
+      result.message = "No preview processes running";
+    }
+  }
+  return result;
+}
+
 async function handleBridgeMessage(msg) {
   try {
     const parsed = JSON.parse(msg);
@@ -125,6 +145,9 @@ async function handleBridgeMessage(msg) {
       } catch (err) {
         bridgeSend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result: { error: err.message } }));
       }
+    } else if (parsed.type === "console-logs-request" && parsed.requestId) {
+      const logs = gatherConsoleLogs(parsed.projectName || "");
+      bridgeSend(JSON.stringify({ type: "console-logs-response", requestId: parsed.requestId, logs }));
     } else if (parsed.type === "pong") {
     }
   } catch {}
@@ -845,12 +868,11 @@ const server = http.createServer(async (req, res) => {
         shell: process.platform === "win32",
       });
 
-      let lastStdout = "";
-      let lastStderr = "";
-      proc.stdout?.on("data", (d) => { lastStdout += d.toString(); if (lastStdout.length > 20000) lastStdout = lastStdout.slice(-10000); });
-      proc.stderr?.on("data", (d) => { lastStderr += d.toString(); if (lastStderr.length > 20000) lastStderr = lastStderr.slice(-10000); });
+      const logBuf = { stdout: "", stderr: "" };
+      proc.stdout?.on("data", (d) => { logBuf.stdout += d.toString(); if (logBuf.stdout.length > 20000) logBuf.stdout = logBuf.stdout.slice(-10000); });
+      proc.stderr?.on("data", (d) => { logBuf.stderr += d.toString(); if (logBuf.stderr.length > 20000) logBuf.stderr = logBuf.stderr.slice(-10000); });
 
-      previewProcesses.set(name, { process: proc, port });
+      previewProcesses.set(name, { process: proc, port, logs: logBuf });
 
       proc.on("exit", (code) => {
         console.log(`[Preview] ${name} exited with code ${code}`);
@@ -915,6 +937,15 @@ const server = http.createServer(async (req, res) => {
       relayUrl: bridgeConfig.relayUrl || "",
       key: snapshotKey,
     });
+    return;
+  }
+
+  if (pathname === "/api/console-logs") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const projectName = url.searchParams.get("project") || "";
+    const providedKey = getKey(req, url);
+    if (providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    sendJson(res, gatherConsoleLogs(projectName));
     return;
   }
 

@@ -812,7 +812,7 @@ function projectManagementPlugin(): Plugin {
         }
       });
 
-      const previewProcesses = new Map<string, { process: any; port: number }>();
+      const previewProcesses = new Map<string, { process: any; port: number; logs: { stdout: string; stderr: string } }>();
       const previewStoppedManually = new Set<string>();
       const projectPort = (name: string): number => {
         let hash = 0;
@@ -2450,10 +2450,18 @@ function projectManagementPlugin(): Plugin {
           let startupOutput = "";
           let serverReady = false;
           const startupErrors: string[] = [];
+          const logBuf = { stdout: "", stderr: "" };
 
-          const collectOutput = (data: Buffer) => {
+          const collectOutput = (data: Buffer, isStderr?: boolean) => {
             const text = data.toString();
             startupOutput += text;
+            if (isStderr) {
+              logBuf.stderr += text;
+              if (logBuf.stderr.length > 20000) logBuf.stderr = logBuf.stderr.slice(-10000);
+            } else {
+              logBuf.stdout += text;
+              if (logBuf.stdout.length > 20000) logBuf.stdout = logBuf.stdout.slice(-10000);
+            }
             console.log(`[Preview:${name}] ${text.trim()}`);
             if (/ready|VITE.*ready|compiled|started server|listening|Local:|Successfully compiled/i.test(text)) {
               serverReady = true;
@@ -2673,10 +2681,10 @@ function projectManagementPlugin(): Plugin {
             }
           };
 
-          child.stdout?.on("data", collectOutput);
-          child.stderr?.on("data", collectOutput);
+          child.stdout?.on("data", (d: Buffer) => collectOutput(d, false));
+          child.stderr?.on("data", (d: Buffer) => collectOutput(d, true));
 
-          previewProcesses.set(name, { process: child, port });
+          previewProcesses.set(name, { process: child, port, logs: logBuf });
 
           let exited = false;
           child.on("error", (err: any) => {
@@ -2756,9 +2764,9 @@ function projectManagementPlugin(): Plugin {
                     serverReady = false;
                     exited = false;
                     startupErrors.length = 0;
-                    child2.stdout?.on("data", collectOutput);
-                    child2.stderr?.on("data", collectOutput);
-                    previewProcesses.set(name, { process: child2, port });
+                    child2.stdout?.on("data", (d: Buffer) => collectOutput(d, false));
+                    child2.stderr?.on("data", (d: Buffer) => collectOutput(d, true));
+                    previewProcesses.set(name, { process: child2, port, logs: logBuf });
                     child2.on("error", () => { exited = true; });
                     child2.on("exit", (code: number | null) => {
                       exited = true;
@@ -2808,9 +2816,9 @@ function projectManagementPlugin(): Plugin {
                 serverReady = false;
                 exited = false;
                 startupErrors.length = 0;
-                child2.stdout?.on("data", collectOutput);
-                child2.stderr?.on("data", collectOutput);
-                previewProcesses.set(name, { process: child2, port });
+                child2.stdout?.on("data", (d: Buffer) => collectOutput(d, false));
+                child2.stderr?.on("data", (d: Buffer) => collectOutput(d, true));
+                previewProcesses.set(name, { process: child2, port, logs: logBuf });
                 child2.on("error", () => { exited = true; });
                 child2.on("exit", (code: number | null) => {
                   exited = true;
@@ -2881,16 +2889,23 @@ function projectManagementPlugin(): Plugin {
                 let serverReady3 = false;
                 let exited3 = false;
                 const startupErrors3: string[] = [];
-                const collectOutput3 = (data: Buffer) => {
+                const collectOutput3 = (data: Buffer, isStderr?: boolean) => {
                   const t = data.toString();
                   startupOutput3 += t;
+                  if (isStderr) {
+                    logBuf.stderr += t;
+                    if (logBuf.stderr.length > 20000) logBuf.stderr = logBuf.stderr.slice(-10000);
+                  } else {
+                    logBuf.stdout += t;
+                    if (logBuf.stdout.length > 20000) logBuf.stdout = logBuf.stdout.slice(-10000);
+                  }
                   console.log(`[Preview:${name}] ${t.trim()}`);
                   if (/ready|VITE.*ready|compiled|started server|listening|Local:|Successfully compiled/i.test(t)) serverReady3 = true;
                   if (/error|ERR!|Cannot find|MODULE_NOT_FOUND|SyntaxError|ENOENT|EADDRINUSE/i.test(t)) startupErrors3.push(t.trim().slice(0, 300));
                 };
-                child3.stdout.on("data", collectOutput3);
-                child3.stderr.on("data", collectOutput3);
-                previewProcesses.set(name, { process: child3, port });
+                child3.stdout.on("data", (d: Buffer) => collectOutput3(d, false));
+                child3.stderr.on("data", (d: Buffer) => collectOutput3(d, true));
+                previewProcesses.set(name, { process: child3, port, logs: logBuf });
                 child3.on("error", () => { exited3 = true; });
                 child3.on("exit", (code3) => {
                   exited3 = true;
@@ -3139,10 +3154,11 @@ function projectManagementPlugin(): Plugin {
           });
           if (!isWinR) child.unref();
 
-          previewProcesses.set(name, { process: child, port: oldPort });
+          const rLogBuf = { stdout: "", stderr: "" };
+          previewProcesses.set(name, { process: child, port: oldPort, logs: rLogBuf });
 
-          child.stdout?.on("data", (d: Buffer) => console.log(`[Preview:${name}] ${d.toString().trim()}`));
-          child.stderr?.on("data", (d: Buffer) => console.log(`[Preview:${name}] ${d.toString().trim()}`));
+          child.stdout?.on("data", (d: Buffer) => { const t = d.toString(); rLogBuf.stdout += t; if (rLogBuf.stdout.length > 20000) rLogBuf.stdout = rLogBuf.stdout.slice(-10000); console.log(`[Preview:${name}] ${t.trim()}`); });
+          child.stderr?.on("data", (d: Buffer) => { const t = d.toString(); rLogBuf.stderr += t; if (rLogBuf.stderr.length > 20000) rLogBuf.stderr = rLogBuf.stderr.slice(-10000); console.log(`[Preview:${name}] ${t.trim()}`); });
 
           child.on("error", (err: any) => {
             console.error(`[Preview] Process error for ${name}:`, err.message);
@@ -3247,9 +3263,10 @@ function projectManagementPlugin(): Plugin {
               shell: true, detached: !isWin, windowsHide: true,
             });
             if (!isWin) child2.unref();
-            child2.stdout?.on("data", (d: Buffer) => console.log(`[Preview:${name}] ${d.toString().trim()}`));
-            child2.stderr?.on("data", (d: Buffer) => console.log(`[Preview:${name}] ${d.toString().trim()}`));
-            previewProcesses.set(name, { process: child2, port });
+            const r2LogBuf = { stdout: "", stderr: "" };
+            child2.stdout?.on("data", (d: Buffer) => { const t = d.toString(); r2LogBuf.stdout += t; if (r2LogBuf.stdout.length > 20000) r2LogBuf.stdout = r2LogBuf.stdout.slice(-10000); console.log(`[Preview:${name}] ${t.trim()}`); });
+            child2.stderr?.on("data", (d: Buffer) => { const t = d.toString(); r2LogBuf.stderr += t; if (r2LogBuf.stderr.length > 20000) r2LogBuf.stderr = r2LogBuf.stderr.slice(-10000); console.log(`[Preview:${name}] ${t.trim()}`); });
+            previewProcesses.set(name, { process: child2, port, logs: r2LogBuf });
             child2.on("exit", (code2: number | null) => {
               if (code2 !== 0 && code2 !== null) {
                 previewProcesses.delete(name);
@@ -5081,6 +5098,26 @@ function projectManagementPlugin(): Plugin {
         try { bridgeRelaySocket.write(wsRelayEncodeFrame(data)); } catch {}
       }
 
+      function gatherConsoleLogs(projectName: string) {
+        const result: { previews: any[]; message?: string } = { previews: [] };
+        if (projectName) {
+          const entry = previewProcesses.get(projectName);
+          if (entry && entry.logs) {
+            result.previews.push({ name: projectName, port: entry.port, stdout: entry.logs.stdout, stderr: entry.logs.stderr });
+          } else {
+            result.previews.push({ name: projectName, error: "No preview running for this project" });
+          }
+        } else {
+          for (const [name, entry] of previewProcesses) {
+            result.previews.push({ name, port: entry.port, stdout: entry.logs ? entry.logs.stdout : "", stderr: entry.logs ? entry.logs.stderr : "" });
+          }
+          if (result.previews.length === 0) {
+            result.message = "No preview processes running";
+          }
+        }
+        return result;
+      }
+
       async function handleBridgeRelayMessage(msg: string) {
         try {
           const parsed = JSON.parse(msg);
@@ -5095,6 +5132,9 @@ function projectManagementPlugin(): Plugin {
             } catch (err: any) {
               bridgeRelaySend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result: { error: err.message } }));
             }
+          } else if (parsed.type === "console-logs-request" && parsed.requestId) {
+            const logs = gatherConsoleLogs(parsed.projectName || "");
+            bridgeRelaySend(JSON.stringify({ type: "console-logs-response", requestId: parsed.requestId, logs }));
           }
         } catch {}
       }
@@ -5221,6 +5261,16 @@ function projectManagementPlugin(): Plugin {
           relayUrl: BRIDGE_RELAY_URL,
           snapshotKey,
         }));
+      });
+
+      server.middlewares.use("/api/console-logs", async (req, res) => {
+        if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
+        const url = new URL(req.url || "", `http://${req.headers.host}`);
+        const projectName = url.searchParams.get("project") || "";
+        const providedKey = url.searchParams.get("key") || (req.headers.authorization || "").replace("Bearer ", "");
+        if (providedKey !== snapshotKey) { res.statusCode = 403; res.end(JSON.stringify({ error: "Invalid key" })); return; }
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify(gatherConsoleLogs(projectName)));
       });
 
       server.middlewares.use("/api/sandbox/execute", async (req, res) => {
