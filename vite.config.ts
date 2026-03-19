@@ -5012,6 +5012,217 @@ function projectManagementPlugin(): Plugin {
 
       const pendingSandboxRelayRequests = new Map<string, { resolve: (s: string) => void; timer: ReturnType<typeof setTimeout> }>();
 
+      const BRIDGE_RELAY_URL = process.env.BRIDGE_RELAY_URL || "https://bridge-relay.replit.app";
+      let bridgeRelaySocket: any = null;
+      let bridgeRelayConnected = false;
+      let bridgeRelayReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+      let bridgeRelayReconnectDelay = 2000;
+      let bridgeRelayPingTimer: ReturnType<typeof setInterval> | null = null;
+      let bridgeRelayBuffer = Buffer.alloc(0);
+      const bridgeRelayKey = crypto.randomBytes(16).toString("hex");
+
+      function wsRelayEncodeFrame(data: string): Buffer {
+        const payload = Buffer.from(data, "utf-8");
+        const len = payload.length;
+        const mask = crypto.randomBytes(4);
+        let header: Buffer;
+        if (len < 126) {
+          header = Buffer.alloc(6);
+          header[0] = 0x81;
+          header[1] = 0x80 | len;
+          mask.copy(header, 2);
+        } else if (len < 65536) {
+          header = Buffer.alloc(8);
+          header[0] = 0x81;
+          header[1] = 0x80 | 126;
+          header.writeUInt16BE(len, 2);
+          mask.copy(header, 4);
+        } else {
+          header = Buffer.alloc(14);
+          header[0] = 0x81;
+          header[1] = 0x80 | 127;
+          header.writeBigUInt64BE(BigInt(len), 2);
+          mask.copy(header, 10);
+        }
+        const masked = Buffer.alloc(len);
+        for (let i = 0; i < len; i++) masked[i] = payload[i] ^ mask[i % 4];
+        return Buffer.concat([header, masked]);
+      }
+
+      function wsRelayDecodeFrame(buf: Buffer): { data: string | null; opcode?: number; bytesConsumed: number } {
+        if (buf.length < 2) return { data: null, bytesConsumed: 0 };
+        const opcode = buf[0] & 0x0f;
+        const isMasked = (buf[1] & 0x80) !== 0;
+        let payloadLen = buf[1] & 0x7f;
+        let offset = 2;
+        if (payloadLen === 126) {
+          if (buf.length < 4) return { data: null, bytesConsumed: 0 };
+          payloadLen = buf.readUInt16BE(2);
+          offset = 4;
+        } else if (payloadLen === 127) {
+          if (buf.length < 10) return { data: null, bytesConsumed: 0 };
+          payloadLen = Number(buf.readBigUInt64BE(2));
+          offset = 10;
+        }
+        if (isMasked) {
+          if (buf.length < offset + 4 + payloadLen) return { data: null, bytesConsumed: 0 };
+          const maskKey = buf.slice(offset, offset + 4);
+          offset += 4;
+          const pl = Buffer.alloc(payloadLen);
+          for (let i = 0; i < payloadLen; i++) pl[i] = buf[offset + i] ^ maskKey[i % 4];
+          return { data: pl.toString("utf-8"), opcode, bytesConsumed: offset + payloadLen };
+        }
+        if (buf.length < offset + payloadLen) return { data: null, bytesConsumed: 0 };
+        return { data: buf.slice(offset, offset + payloadLen).toString("utf-8"), opcode, bytesConsumed: offset + payloadLen };
+      }
+
+      function bridgeRelaySend(data: string) {
+        if (!bridgeRelaySocket || !bridgeRelayConnected) return;
+        try { bridgeRelaySocket.write(wsRelayEncodeFrame(data)); } catch {}
+      }
+
+      async function handleBridgeRelayMessage(msg: string) {
+        try {
+          const parsed = JSON.parse(msg);
+          if (parsed.type === "snapshot-request" && parsed.requestId) {
+            const snapshot = await gatherProjectSnapshot(parsed.projectName || "");
+            bridgeRelaySend(JSON.stringify({ type: "snapshot-response", requestId: parsed.requestId, snapshot }));
+          } else if (parsed.type === "sandbox-execute-request" && parsed.requestId) {
+            try {
+              const projectsDir = path.resolve(process.cwd(), "projects");
+              const result = await executeSandboxActions(parsed.actions || [], projectsDir, { auditLog: sandboxAuditLog });
+              bridgeRelaySend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result }));
+            } catch (err: any) {
+              bridgeRelaySend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result: { error: err.message } }));
+            }
+          }
+        } catch {}
+      }
+
+      function processRelayBuffer() {
+        while (bridgeRelayBuffer.length > 0) {
+          const { data, opcode, bytesConsumed } = wsRelayDecodeFrame(bridgeRelayBuffer);
+          if (data === null) break;
+          bridgeRelayBuffer = bridgeRelayBuffer.slice(bytesConsumed);
+          if (opcode === 0x8) { if (bridgeRelaySocket) bridgeRelaySocket.destroy(); return; }
+          if (opcode === 0x9) {
+            const pong = Buffer.alloc(2); pong[0] = 0x8a; pong[1] = 0;
+            if (bridgeRelaySocket) bridgeRelaySocket.write(pong);
+            continue;
+          }
+          handleBridgeRelayMessage(data);
+        }
+      }
+
+      function scheduleRelayReconnect() {
+        if (bridgeRelayReconnectTimer) return;
+        const delay = Math.min(bridgeRelayReconnectDelay, 60000);
+        console.log(`[Bridge] Reconnecting in ${delay / 1000}s...`);
+        bridgeRelayReconnectTimer = setTimeout(() => {
+          bridgeRelayReconnectTimer = null;
+          bridgeRelayReconnectDelay = Math.min(bridgeRelayReconnectDelay * 1.5, 60000);
+          connectToRelay();
+        }, delay);
+      }
+
+      function connectToRelay() {
+        if (bridgeRelaySocket) { try { bridgeRelaySocket.destroy(); } catch {} bridgeRelaySocket = null; }
+        bridgeRelayConnected = false;
+        if (bridgeRelayPingTimer) { clearInterval(bridgeRelayPingTimer); bridgeRelayPingTimer = null; }
+
+        if (!BRIDGE_RELAY_URL) { console.log("[Bridge] No relay URL — skipping"); return; }
+        let parsed: URL;
+        try { parsed = new URL(BRIDGE_RELAY_URL); } catch { console.error("[Bridge] Invalid relay URL:", BRIDGE_RELAY_URL); return; }
+
+        const host = parsed.hostname;
+        const port = parsed.port ? parseInt(parsed.port) : (parsed.protocol === "https:" ? 443 : 80);
+        const useTls = parsed.protocol === "https:";
+        const wsPath = `/bridge-ws?key=${encodeURIComponent(bridgeRelayKey)}&snapshotKey=${encodeURIComponent(snapshotKey)}`;
+        const wsKeyRaw = crypto.randomBytes(16).toString("base64");
+
+        console.log(`[Bridge] Connecting to ${host}...`);
+
+        const tlsMod = _require("tls");
+        const netMod = _require("net");
+        const connectOpts = { host, port, servername: host };
+        const socket = useTls ? tlsMod.connect(connectOpts) : netMod.connect(connectOpts);
+
+        let handshakeDone = false;
+        let httpBuffer = "";
+        bridgeRelayBuffer = Buffer.alloc(0);
+
+        socket.on("connect", () => {
+          socket.write(
+            `GET ${wsPath} HTTP/1.1\r\n` +
+            `Host: ${host}\r\n` +
+            `Upgrade: websocket\r\n` +
+            `Connection: Upgrade\r\n` +
+            `Sec-WebSocket-Key: ${wsKeyRaw}\r\n` +
+            `Sec-WebSocket-Version: 13\r\n` +
+            `\r\n`
+          );
+        });
+
+        socket.on("data", (chunk: Buffer) => {
+          if (!handshakeDone) {
+            httpBuffer += chunk.toString("utf-8");
+            const headerEnd = httpBuffer.indexOf("\r\n\r\n");
+            if (headerEnd === -1) return;
+            const statusLine = httpBuffer.split("\r\n")[0];
+            if (!statusLine.includes("101")) {
+              console.error(`[Bridge] Handshake failed: ${statusLine}`);
+              socket.destroy();
+              scheduleRelayReconnect();
+              return;
+            }
+            handshakeDone = true;
+            bridgeRelaySocket = socket;
+            bridgeRelayConnected = true;
+            bridgeRelayReconnectDelay = 2000;
+            console.log(`[Bridge] Connected to relay at ${host}`);
+            bridgeRelayPingTimer = setInterval(() => {
+              bridgeRelaySend(JSON.stringify({ type: "ping" }));
+            }, 30000);
+            const remaining = chunk.slice(Buffer.from(httpBuffer.slice(0, headerEnd + 4)).length);
+            if (remaining.length > 0) {
+              bridgeRelayBuffer = Buffer.concat([bridgeRelayBuffer, remaining]);
+              processRelayBuffer();
+            }
+            return;
+          }
+          bridgeRelayBuffer = Buffer.concat([bridgeRelayBuffer, chunk]);
+          processRelayBuffer();
+        });
+
+        socket.on("close", () => {
+          if (bridgeRelayConnected) console.log("[Bridge] Disconnected from relay");
+          bridgeRelayConnected = false;
+          bridgeRelaySocket = null;
+          if (bridgeRelayPingTimer) { clearInterval(bridgeRelayPingTimer); bridgeRelayPingTimer = null; }
+          scheduleRelayReconnect();
+        });
+
+        socket.on("error", (err: any) => {
+          console.error(`[Bridge] Connection error: ${err.message}`);
+          bridgeRelayConnected = false;
+          bridgeRelaySocket = null;
+          if (bridgeRelayPingTimer) { clearInterval(bridgeRelayPingTimer); bridgeRelayPingTimer = null; }
+          scheduleRelayReconnect();
+        });
+      }
+
+      setTimeout(() => connectToRelay(), 2000);
+
+      server.middlewares.use("/api/bridge-relay-status", async (req, res) => {
+        if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({
+          status: bridgeRelayConnected ? "connected" : (bridgeRelayReconnectTimer ? "connecting" : "disconnected"),
+          relayUrl: BRIDGE_RELAY_URL,
+          snapshotKey,
+        }));
+      });
+
       server.middlewares.use("/api/sandbox/execute", async (req, res) => {
         if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
         try {

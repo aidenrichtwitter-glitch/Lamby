@@ -35,9 +35,13 @@ function getKey(req, url) {
 }
 
 function findBridgeClient(key) {
-  if (key !== snapshotKey) return null;
+  if (key === snapshotKey) {
+    for (const [, client] of bridgeClients) {
+      if (client.alive) return client;
+    }
+  }
   for (const [, client] of bridgeClients) {
-    if (client.alive) return client;
+    if (client.snapshotKey === key && client.alive) return client;
   }
   return null;
 }
@@ -214,12 +218,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === "/api/bridge-status") {
-    const providedKey = getKey(req, url);
-    if (providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
     const clients = Array.from(bridgeClients.entries()).map(([key, c]) => ({
       key: key.substring(0, 8) + "...",
       connected: c.alive,
       lastPing: c.lastPing,
+      snapshotKeyPrefix: c.snapshotKey ? c.snapshotKey.substring(0, 8) + "..." : "",
     }));
     sendJson(res, { connectedClients: clients.length, clients });
     return;
@@ -231,13 +234,12 @@ const server = http.createServer(async (req, res) => {
     const projectName = pathParts[0] || "";
     const providedKey = getKey(req, url);
 
-    if (providedKey !== snapshotKey) {
+    const matchedClient = findBridgeClient(providedKey);
+    if (!matchedClient && providedKey !== snapshotKey) {
       res.writeHead(403, { "Content-Type": "text/plain" });
       res.end("Lamby Bridge Relay\n\nAccess denied — invalid or missing key.\nProvide ?key=YOUR_KEY or Authorization: Bearer YOUR_KEY");
       return;
     }
-
-    const matchedClient = findBridgeClient(providedKey);
     if (matchedClient) {
       const requestId = crypto.randomUUID();
       const relayPromise = new Promise((resolve) => {
@@ -269,14 +271,13 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
     try {
       const providedKey = getKey(req, url);
-      if (providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+      const matchedClient = findBridgeClient(providedKey);
+      if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
 
       const body = JSON.parse(await readBody(req));
       const actions = body.actions;
       if (!Array.isArray(actions) || actions.length === 0) { sendJson(res, { error: "actions array required" }, 400); return; }
       if (actions.length > 50) { sendJson(res, { error: "Max 50 actions per request" }, 400); return; }
-
-      const matchedClient = findBridgeClient(providedKey);
       if (!matchedClient) {
         sendJson(res, { error: "No desktop client connected. Start your Lamby desktop app and connect it to this relay." }, 503);
         return;
@@ -314,7 +315,7 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/sandbox/audit-log") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     const providedKey = getKey(req, url);
-    if (providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    if (providedKey !== snapshotKey && !findBridgeClient(providedKey)) { sendJson(res, { error: "Invalid key" }, 403); return; }
     sendJson(res, { entries: sandboxAuditLog.slice(-100) });
     return;
   }
@@ -329,8 +330,8 @@ server.on("upgrade", (req, socket, head) => {
     const bridgeKey = reqUrl.searchParams.get("key") || "";
     const clientSnapshotKey = reqUrl.searchParams.get("snapshotKey") || "";
     if (!bridgeKey || bridgeKey.length < 8) { socket.destroy(); return; }
-    if (clientSnapshotKey !== snapshotKey) {
-      console.log(`[Bridge] Rejected — invalid snapshotKey`);
+    if (clientSnapshotKey !== snapshotKey && clientSnapshotKey.length < 16) {
+      console.log(`[Bridge] Rejected — snapshotKey too short`);
       socket.destroy();
       return;
     }

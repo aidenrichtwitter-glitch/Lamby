@@ -3667,15 +3667,30 @@ const GrokBridge: React.FC = () => {
       if (isElectron) {
         try {
           const ipcRenderer = (window as any).require('electron').ipcRenderer;
-          const [keyResult, statusResult] = await Promise.all([
-            ipcRenderer.invoke('bridge-snapshot-key'),
-            ipcRenderer.invoke('bridge-status'),
-          ]);
+          let keyResult: any = null;
+          let statusResult: any = null;
+          try {
+            [keyResult, statusResult] = await Promise.all([
+              ipcRenderer.invoke('bridge-snapshot-key'),
+              ipcRenderer.invoke('bridge-status'),
+            ]);
+          } catch {
+            try {
+              const [keyRes, statusRes] = await Promise.all([
+                fetch('http://localhost:4999/api/snapshot-key'),
+                fetch('http://localhost:4999/api/bridge-status'),
+              ]);
+              if (keyRes.ok) keyResult = await keyRes.json();
+              if (statusRes.ok) statusResult = await statusRes.json();
+            } catch {}
+          }
           const key = keyResult?.key || '';
-          setBridgeStatus(statusResult?.status || 'unknown');
-          setBridgeRelayUrl(statusResult?.relayUrl || '');
-          if (statusResult?.status === 'connected' && statusResult?.relayUrl) {
-            const relayBase = statusResult.relayUrl.replace(/\/$/, '');
+          const status = statusResult?.status || 'unknown';
+          const relayUrl = statusResult?.relayUrl || '';
+          setBridgeStatus(status);
+          setBridgeRelayUrl(relayUrl);
+          if (status === 'connected' && relayUrl) {
+            const relayBase = relayUrl.replace(/\/$/, '');
             setSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
             setCommandEndpoint(`${relayBase}/api/sandbox/execute?key=${key}`);
           } else {
@@ -3685,12 +3700,29 @@ const GrokBridge: React.FC = () => {
         } catch {}
       } else {
         try {
-          const res = await fetch('/api/snapshot-key');
-          if (res.ok) {
-            const data = await res.json();
-            setSnapshotUrl(`${data.baseUrl}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${data.key}`);
-            setCommandEndpoint(data.commandEndpoint || `${data.baseUrl}/api/sandbox/execute?key=${data.key}`);
-            setBridgeStatus('web-mode');
+          const [keyRes, relayRes] = await Promise.all([
+            fetch('/api/snapshot-key'),
+            fetch('/api/bridge-relay-status').catch(() => null),
+          ]);
+          if (keyRes.ok) {
+            const data = await keyRes.json();
+            let relayData: any = null;
+            if (relayRes && relayRes.ok) {
+              try { relayData = await relayRes.json(); } catch {}
+            }
+            if (relayData && relayData.status === 'connected' && relayData.relayUrl) {
+              const relayBase = relayData.relayUrl.replace(/\/$/, '');
+              const key = relayData.snapshotKey || data.key;
+              setSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
+              setCommandEndpoint(`${relayBase}/api/sandbox/execute?key=${key}`);
+              setBridgeStatus('connected');
+              setBridgeRelayUrl(relayData.relayUrl);
+            } else {
+              setSnapshotUrl(`${data.baseUrl}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${data.key}`);
+              setCommandEndpoint(data.commandEndpoint || `${data.baseUrl}/api/sandbox/execute?key=${data.key}`);
+              setBridgeStatus(relayData ? (relayData.status === 'connecting' ? 'connecting' : 'web-mode') : 'web-mode');
+              if (relayData?.relayUrl) setBridgeRelayUrl(relayData.relayUrl);
+            }
           }
         } catch {}
       }
@@ -5045,12 +5077,24 @@ const GrokBridge: React.FC = () => {
                           onClick={async () => {
                             if (!bridgeRelayInput.trim() || !bridgeKeyInput.trim()) return;
                             try {
-                              const ipcRenderer = (window as any).require('electron').ipcRenderer;
-                              const result = await ipcRenderer.invoke('bridge-config-save', {
-                                relayUrl: bridgeRelayInput.trim(),
-                                bridgeKey: bridgeKeyInput.trim(),
-                              });
-                              setStatusMessage(result.success ? 'Bridge config saved — reconnecting...' : `Config save failed: ${result.error}`);
+                              let result: any;
+                              if (isElectron) {
+                                try {
+                                  const ipcRenderer = (window as any).require('electron').ipcRenderer;
+                                  result = await ipcRenderer.invoke('bridge-config-save', {
+                                    relayUrl: bridgeRelayInput.trim(),
+                                    bridgeKey: bridgeKeyInput.trim(),
+                                  });
+                                } catch {
+                                  const res = await fetch('http://localhost:4999/api/bridge-config-save', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ relayUrl: bridgeRelayInput.trim(), bridgeKey: bridgeKeyInput.trim() }),
+                                  });
+                                  result = await res.json();
+                                }
+                              }
+                              setStatusMessage(result?.success ? 'Bridge config saved — reconnecting...' : `Config save failed: ${result?.error || 'unknown'}`);
                             } catch (e: any) { setStatusMessage(`Error: ${e.message}`); }
                           }}
                           className="flex-1 px-2 py-1 rounded text-[9px] bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20"
@@ -5061,8 +5105,14 @@ const GrokBridge: React.FC = () => {
                           data-testid="button-reconnect-bridge"
                           onClick={async () => {
                             try {
-                              const ipcRenderer = (window as any).require('electron').ipcRenderer;
-                              await ipcRenderer.invoke('bridge-reconnect');
+                              if (isElectron) {
+                                try {
+                                  const ipcRenderer = (window as any).require('electron').ipcRenderer;
+                                  await ipcRenderer.invoke('bridge-reconnect');
+                                } catch {
+                                  await fetch('http://localhost:4999/api/bridge-reconnect');
+                                }
+                              }
                               setStatusMessage('Bridge reconnecting...');
                             } catch {}
                           }}
