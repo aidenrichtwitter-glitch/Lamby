@@ -5004,7 +5004,9 @@ function projectManagementPlugin(): Plugin {
 
       const sandboxAuditLog: { ts: number; action: string; project: string; status: string; detail?: string }[] = [];
 
-      const sandboxDispatcher = require("./server/sandbox-dispatcher.js");
+      const { createRequire } = await import("module");
+      const _require = createRequire(import.meta.url);
+      const sandboxDispatcher = _require("./server/sandbox-dispatcher.cjs");
       const executeSandboxAction = (action: any, projectsDir: string) => sandboxDispatcher.executeSandboxAction(action, projectsDir);
       const executeSandboxActions = (actions: any[], projectsDir: string, opts?: any) => sandboxDispatcher.executeSandboxActions(actions, projectsDir, opts);
 

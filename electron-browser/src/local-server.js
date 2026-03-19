@@ -12,7 +12,7 @@ const {
   detectPmForDir,
   buildPmCommand,
   buildInstallCascade,
-} = require("../../server/sandbox-dispatcher.js");
+} = require("../../server/sandbox-dispatcher.cjs");
 
 const USER_DATA_DIR = path.join(os.homedir(), ".guardian-ai");
 const PROJECTS_DIR = path.join(USER_DATA_DIR, "projects");
