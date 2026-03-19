@@ -5003,261 +5003,10 @@ function projectManagementPlugin(): Plugin {
       });
 
       const sandboxAuditLog: { ts: number; action: string; project: string; status: string; detail?: string }[] = [];
-      const sandboxProcesses = new Map<string, { proc: any; cmd: string; startedAt: number }>();
 
-      async function executeSandboxAction(action: any, projectsDir: string): Promise<{ status: string; type: string; data?: any; error?: string }> {
-        const fs = await import("fs");
-        const childProcess = await import("child_process");
-        const t = action.type;
-        const projectName = action.project || "";
-        const check = projectName ? validateProjectPath(projectName, action.path) : { valid: true, resolved: projectsDir };
-
-        try {
-          switch (t) {
-            case "list_tree": {
-              const dir = projectName ? validateProjectPath(projectName).resolved : projectsDir;
-              if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-              const depth = action.depth ?? 4;
-              const ignore = new Set(action.ignore || ["node_modules", ".git", "dist", ".cache", ".next"]);
-              const entries: string[] = [];
-              function walk(d: string, rel: string, lvl: number) {
-                if (lvl > depth) return;
-                let items: string[];
-                try { items = fs.readdirSync(d); } catch { return; }
-                for (const item of items) {
-                  if (ignore.has(item)) continue;
-                  const full = path.join(d, item);
-                  const r = rel ? `${rel}/${item}` : item;
-                  let stat: any;
-                  try { stat = fs.statSync(full); } catch { continue; }
-                  if (stat.isDirectory()) { entries.push(r + "/"); walk(full, r, lvl + 1); }
-                  else entries.push(r);
-                }
-              }
-              walk(dir, "", 0);
-              return { status: "success", type: t, data: { entries } };
-            }
-            case "read_file": {
-              if (!action.path) return { status: "error", type: t, error: "path required" };
-              const c = projectName ? validateProjectPath(projectName, action.path) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
-              if (!c.valid) return { status: "error", type: t, error: c.error };
-              if (!fs.existsSync(c.resolved)) return { status: "error", type: t, error: "File not found" };
-              const content = fs.readFileSync(c.resolved, "utf-8");
-              return { status: "success", type: t, data: { path: action.path, content: content.slice(0, 500000) } };
-            }
-            case "write_file":
-            case "create_file": {
-              if (!action.path || action.content === undefined) return { status: "error", type: t, error: "path and content required" };
-              const c = projectName ? validateProjectPath(projectName, action.path) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
-              if (!c.valid) return { status: "error", type: t, error: c.error };
-              const dir = path.dirname(c.resolved);
-              if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-              const existed = fs.existsSync(c.resolved);
-              const prev = existed ? fs.readFileSync(c.resolved, "utf-8") : null;
-              if (action.mode === "append") { fs.appendFileSync(c.resolved, action.content); }
-              else { fs.writeFileSync(c.resolved, action.content); }
-              return { status: "success", type: t, data: { path: action.path, created: !existed, previousLength: prev?.length ?? 0 } };
-            }
-            case "delete_file": {
-              if (!action.path) return { status: "error", type: t, error: "path required" };
-              const c = projectName ? validateProjectPath(projectName, action.path) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
-              if (!c.valid) return { status: "error", type: t, error: c.error };
-              if (!fs.existsSync(c.resolved)) return { status: "error", type: t, error: "File not found" };
-              const stat = fs.statSync(c.resolved);
-              if (stat.isDirectory()) { fs.rmSync(c.resolved, { recursive: !!action.recursive, force: true }); }
-              else { fs.unlinkSync(c.resolved); }
-              return { status: "success", type: t, data: { path: action.path } };
-            }
-            case "move_file":
-            case "rename_file": {
-              if (!action.source || !action.dest) return { status: "error", type: t, error: "source and dest required" };
-              const src = projectName ? validateProjectPath(projectName, action.source) : { valid: true, resolved: path.resolve(projectsDir, action.source) };
-              const dst = projectName ? validateProjectPath(projectName, action.dest) : { valid: true, resolved: path.resolve(projectsDir, action.dest) };
-              if (!src.valid) return { status: "error", type: t, error: src.error };
-              if (!dst.valid) return { status: "error", type: t, error: dst.error };
-              if (!fs.existsSync(src.resolved)) return { status: "error", type: t, error: "Source not found" };
-              const dstDir = path.dirname(dst.resolved);
-              if (!fs.existsSync(dstDir)) fs.mkdirSync(dstDir, { recursive: true });
-              fs.renameSync(src.resolved, dst.resolved);
-              return { status: "success", type: t, data: { source: action.source, dest: action.dest } };
-            }
-            case "copy_file": {
-              if (!action.source || !action.dest) return { status: "error", type: t, error: "source and dest required" };
-              const src = projectName ? validateProjectPath(projectName, action.source) : { valid: true, resolved: path.resolve(projectsDir, action.source) };
-              const dst = projectName ? validateProjectPath(projectName, action.dest) : { valid: true, resolved: path.resolve(projectsDir, action.dest) };
-              if (!src.valid) return { status: "error", type: t, error: src.error };
-              if (!dst.valid) return { status: "error", type: t, error: dst.error };
-              if (!fs.existsSync(src.resolved)) return { status: "error", type: t, error: "Source not found" };
-              const dstDir = path.dirname(dst.resolved);
-              if (!fs.existsSync(dstDir)) fs.mkdirSync(dstDir, { recursive: true });
-              fs.copyFileSync(src.resolved, dst.resolved);
-              return { status: "success", type: t, data: { source: action.source, dest: action.dest } };
-            }
-            case "grep": {
-              if (!action.pattern) return { status: "error", type: t, error: "pattern required" };
-              const dir = projectName ? validateProjectPath(projectName).resolved : projectsDir;
-              if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-              const exts = action.extensions || [".ts", ".tsx", ".js", ".jsx", ".json", ".css", ".html", ".py", ".rs", ".go", ".txt", ".md", ".yaml", ".yml", ".toml", ".sh", ".sql", ".vue", ".svelte"];
-              const matches: { file: string; line: number; text: string }[] = [];
-              const re = new RegExp(action.pattern, action.case_sensitive ? "g" : "gi");
-              const ignore = new Set(["node_modules", ".git", "dist", ".cache", ".next"]);
-              function grepWalk(d: string, rel: string) {
-                let items: string[];
-                try { items = fs.readdirSync(d); } catch { return; }
-                for (const item of items) {
-                  if (ignore.has(item)) continue;
-                  const full = path.join(d, item);
-                  const r = rel ? `${rel}/${item}` : item;
-                  let stat: any;
-                  try { stat = fs.statSync(full); } catch { continue; }
-                  if (stat.isDirectory()) { grepWalk(full, r); }
-                  else if (exts.some(e => item.endsWith(e))) {
-                    try {
-                      const content = fs.readFileSync(full, "utf-8");
-                      const lines = content.split("\n");
-                      for (let i = 0; i < lines.length; i++) {
-                        if (re.test(lines[i])) { matches.push({ file: r, line: i + 1, text: lines[i].trim().slice(0, 200) }); }
-                        re.lastIndex = 0;
-                      }
-                    } catch {}
-                  }
-                  if (matches.length >= 100) return;
-                }
-              }
-              grepWalk(dir, "");
-              return { status: "success", type: t, data: { pattern: action.pattern, matches: matches.slice(0, 100) } };
-            }
-            case "run_command": {
-              if (!action.command) return { status: "error", type: t, error: "command required" };
-              const dir = projectName ? validateProjectPath(projectName).resolved : projectsDir;
-              if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-              const cmd = action.command.trim();
-              const allowedPfx = [
-                "npm ", "npx ", "yarn ", "pnpm ", "bun ",
-                "node ", "deno ", "tsc", "tsx ",
-                "mkdir ", "cp ", "mv ", "rm ", "touch ", "cat ", "ls ", "pwd",
-                "chmod ", "chown ", "ln ",
-                "git ", "curl ", "wget ",
-                "python", "pip", "cargo ", "go ", "rustc", "gcc", "g++", "make",
-                "docker ", "docker-compose ", "echo ",
-              ];
-              const isAllowed = allowedPfx.some(p => cmd.startsWith(p));
-              if (!isAllowed) return { status: "error", type: t, error: `Command not allowed: ${cmd.slice(0, 50)}` };
-              const cmdOutsideQuotes = cmd.replace(/"[^"]*"/g, "").replace(/'[^']*'/g, "");
-              if (/[;&|`${}]/.test(cmdOutsideQuotes)) return { status: "error", type: t, error: "Shell metacharacters not allowed" };
-              const timeout = Math.min(action.timeout || 30000, 120000);
-              try {
-                const output = childProcess.execSync(cmd, {
-                  cwd: dir, timeout, maxBuffer: 4 * 1024 * 1024,
-                  env: { ...process.env, ...(action.env || {}) },
-                  encoding: "utf-8",
-                  stdio: ["pipe", "pipe", "pipe"],
-                });
-                return { status: "success", type: t, data: { command: cmd, output: (output || "").slice(0, 50000) } };
-              } catch (e: any) {
-                return { status: "error", type: t, error: e.message?.slice(0, 2000), data: { command: cmd, stdout: (e.stdout || "").slice(0, 10000), stderr: (e.stderr || "").slice(0, 10000) } };
-              }
-            }
-            case "install_deps": {
-              const dir = projectName ? validateProjectPath(projectName).resolved : projectsDir;
-              if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-              const pm = detectPmForDir(dir);
-              const installCmd = buildPmCommand(pm, "install");
-              try {
-                const output = childProcess.execSync(installCmd, { cwd: dir, timeout: 120000, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
-                return { status: "success", type: t, data: { command: installCmd, output: (output || "").slice(0, 20000) } };
-              } catch (e: any) {
-                return { status: "error", type: t, error: e.message?.slice(0, 2000) };
-              }
-            }
-            case "git_status":
-            case "git_add":
-            case "git_commit":
-            case "git_diff":
-            case "git_log":
-            case "git_branch":
-            case "git_checkout":
-            case "git_stash":
-            case "git_init": {
-              const dir = projectName ? validateProjectPath(projectName).resolved : projectsDir;
-              if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-              let gitCmd = "";
-              switch (t) {
-                case "git_status": gitCmd = "git status --porcelain"; break;
-                case "git_add": gitCmd = `git add ${action.files || "."}`; break;
-                case "git_commit": gitCmd = `git commit -m "${(action.message || "auto-commit").replace(/"/g, '\\"')}"`; break;
-                case "git_diff": gitCmd = `git diff ${action.args || ""}`; break;
-                case "git_log": gitCmd = `git log --oneline -${action.count || 10}`; break;
-                case "git_branch": gitCmd = action.name ? `git branch ${action.name}` : "git branch"; break;
-                case "git_checkout": gitCmd = `git checkout ${action.ref || "main"}`; break;
-                case "git_stash": gitCmd = `git stash ${action.args || ""}`; break;
-                case "git_init": gitCmd = "git init"; break;
-              }
-              try {
-                const output = childProcess.execSync(gitCmd, { cwd: dir, timeout: 15000, maxBuffer: 2 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
-                return { status: "success", type: t, data: { command: gitCmd, output: (output || "").trim().slice(0, 50000) } };
-              } catch (e: any) {
-                return { status: "error", type: t, error: (e.stderr || e.message || "").slice(0, 2000), data: { command: gitCmd, stdout: (e.stdout || "").slice(0, 5000) } };
-              }
-            }
-            case "detect_structure": {
-              const dir = projectName ? validateProjectPath(projectName).resolved : projectsDir;
-              if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-              const hasPkg = fs.existsSync(path.join(dir, "package.json"));
-              const hasCargo = fs.existsSync(path.join(dir, "Cargo.toml"));
-              const hasGoMod = fs.existsSync(path.join(dir, "go.mod"));
-              const hasPy = fs.existsSync(path.join(dir, "requirements.txt")) || fs.existsSync(path.join(dir, "pyproject.toml"));
-              let pkg: any = {};
-              if (hasPkg) try { pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf-8")); } catch {}
-              const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-              let framework = "unknown";
-              if (deps?.next) framework = "next";
-              else if (deps?.react) framework = "react";
-              else if (deps?.vue) framework = "vue";
-              else if (deps?.svelte) framework = "svelte";
-              else if (deps?.express) framework = "express";
-              else if (deps?.fastify) framework = "fastify";
-              else if (hasCargo) framework = "rust";
-              else if (hasGoMod) framework = "go";
-              else if (hasPy) framework = "python";
-              const pm = hasPkg ? detectPmForDir(dir) : "none";
-              return { status: "success", type: t, data: { framework, packageManager: pm, hasPackageJson: hasPkg, hasCargo, hasGoMod, hasPython: hasPy, name: pkg.name || path.basename(dir) } };
-            }
-            case "start_process": {
-              if (!action.command) return { status: "error", type: t, error: "command required" };
-              const pName = action.name || `proc-${Date.now()}`;
-              if (sandboxProcesses.has(pName)) return { status: "error", type: t, error: `Process '${pName}' already running` };
-              const dir = projectName ? validateProjectPath(projectName).resolved : projectsDir;
-              const parts = action.command.split(" ");
-              const proc = childProcess.spawn(parts[0], parts.slice(1), { cwd: dir, env: { ...process.env, ...(action.env || {}) }, stdio: ["pipe", "pipe", "pipe"], detached: false });
-              let stdout = "", stderr = "";
-              proc.stdout?.on("data", (d: Buffer) => { stdout += d.toString(); if (stdout.length > 50000) stdout = stdout.slice(-25000); });
-              proc.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); if (stderr.length > 50000) stderr = stderr.slice(-25000); });
-              proc.on("exit", () => { sandboxProcesses.delete(pName); });
-              sandboxProcesses.set(pName, { proc, cmd: action.command, startedAt: Date.now() });
-              await new Promise(r => setTimeout(r, 500));
-              return { status: "success", type: t, data: { name: pName, pid: proc.pid, output: stdout.slice(0, 5000), stderr: stderr.slice(0, 2000) } };
-            }
-            case "kill_process": {
-              const pName = action.name;
-              if (!pName) return { status: "error", type: t, error: "name required" };
-              const entry = sandboxProcesses.get(pName);
-              if (!entry) return { status: "error", type: t, error: `No process named '${pName}'` };
-              try { entry.proc.kill("SIGTERM"); } catch {}
-              sandboxProcesses.delete(pName);
-              return { status: "success", type: t, data: { name: pName, killed: true } };
-            }
-            case "list_processes": {
-              const procs = Array.from(sandboxProcesses.entries()).map(([n, e]) => ({ name: n, cmd: e.cmd, pid: e.proc.pid, running: !e.proc.killed, startedAt: e.startedAt }));
-              return { status: "success", type: t, data: { processes: procs } };
-            }
-            default:
-              return { status: "error", type: t, error: `Unknown action type: ${t}` };
-          }
-        } catch (err: any) {
-          return { status: "error", type: t, error: err.message?.slice(0, 1000) || "Unknown error" };
-        }
-      }
+      const sandboxDispatcher = require("./server/sandbox-dispatcher.js");
+      const executeSandboxAction = (action: any, projectsDir: string) => sandboxDispatcher.executeSandboxAction(action, projectsDir);
+      const executeSandboxActions = (actions: any[], projectsDir: string, opts?: any) => sandboxDispatcher.executeSandboxActions(actions, projectsDir, opts);
 
       const pendingSandboxRelayRequests = new Map<string, { resolve: (s: string) => void; timer: ReturnType<typeof setTimeout> }>();
 
@@ -5307,17 +5056,9 @@ function projectManagementPlugin(): Plugin {
           }
 
           const projectsDir = path.resolve(process.cwd(), "projects");
-          const results: any[] = [];
-          for (let i = 0; i < actions.length; i++) {
-            const action = actions[i];
-            const result = await executeSandboxAction(action, projectsDir);
-            results.push({ actionIndex: i, ...result });
-            sandboxAuditLog.push({ ts: Date.now(), action: action.type, project: action.project || "", status: result.status, detail: result.error || undefined });
-            if (sandboxAuditLog.length > 1000) sandboxAuditLog.splice(0, sandboxAuditLog.length - 500);
-          }
-
+          const result = await executeSandboxActions(actions, projectsDir, { auditLog: sandboxAuditLog });
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ success: results.every(r => r.status === "success"), results }));
+          res.end(JSON.stringify(result));
         } catch (err: any) {
           res.statusCode = 500;
           res.end(JSON.stringify({ error: err.message }));
@@ -5401,18 +5142,11 @@ function projectManagementPlugin(): Plugin {
                   return;
                 }
                 const projectsDir = path.resolve(process.cwd(), "projects");
-                const results: any[] = [];
-                for (let i = 0; i < actions.length; i++) {
-                  const action = actions[i];
-                  const result = await executeSandboxAction(action, projectsDir);
-                  results.push({ actionIndex: i, ...result });
-                  sandboxAuditLog.push({ ts: Date.now(), action: action.type, project: action.project || "", status: result.status, detail: result.error || undefined });
-                  if (sandboxAuditLog.length > 1000) sandboxAuditLog.splice(0, sandboxAuditLog.length - 500);
-                  if (msg.stream) {
-                    try { ws.send(JSON.stringify({ type: "action-result", requestId: msg.requestId, actionIndex: i, actionType: result.type, status: result.status, data: result.data, error: result.error })); } catch {}
-                  }
-                }
-                ws.send(JSON.stringify({ type: "result", requestId: msg.requestId, success: results.every(r => r.status === "success"), results }));
+                const onActionResult = msg.stream ? (i: number, result: any) => {
+                  try { ws.send(JSON.stringify({ type: "action-result", requestId: msg.requestId, actionIndex: i, actionType: result.type, status: result.status, data: result.data, error: result.error })); } catch {}
+                } : undefined;
+                const wsResult = await executeSandboxActions(actions, projectsDir, { auditLog: sandboxAuditLog, onActionResult });
+                ws.send(JSON.stringify({ type: "result", requestId: msg.requestId, ...wsResult }));
               } else if (msg.type === "ping") {
                 ws.send(JSON.stringify({ type: "pong" }));
               }
@@ -5628,7 +5362,7 @@ function sourceDownloadPlugin(): Plugin {
           const archive = archiver("zip", { zlib: { level: 9 } });
           archive.pipe(res);
 
-          const includeDirs = ["src", "public", "supabase", "electron-browser"];
+          const includeDirs = ["src", "public", "supabase", "electron-browser", "server", "scripts", "test"];
           const includeFiles = [
             "package.json", "package-lock.json", "tsconfig.json", "tsconfig.app.json",
             "tsconfig.node.json", "vite.config.ts", "tailwind.config.ts", "postcss.config.js",

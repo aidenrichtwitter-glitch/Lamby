@@ -7,7 +7,7 @@ integrations = ["javascript_database:1.0.0", "github:1.0.0"]
 channel = "stable-25_05"
 
 [deployment]
-deploymentTarget = "vm"
+deploymentTarget = "gce"
 run = ["node", "server/production.cjs"]
 build = ["bash", "scripts/build-deploy.sh"]
 
