@@ -592,14 +592,21 @@ function executeSandboxAction(action, projectsDir) {
       }
       case "add_dependency": {
         if (!action.name) return { status: "error", type: t, error: "name required" };
+        const pkgName = action.name.trim();
+        if (!/^(@[a-z0-9\-~][a-z0-9\-._~]*\/)?[a-z0-9\-~][a-z0-9\-._~]*$/.test(pkgName)) {
+          return { status: "error", type: t, error: "Invalid package name" };
+        }
+        if (action.version && !/^[a-z0-9\-._~^<>=|*\s]+$/i.test(action.version)) {
+          return { status: "error", type: t, error: "Invalid version string" };
+        }
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
         const pm = detectPmForDir(dir);
-        const pkg = action.version ? `${action.name}@${action.version}` : action.name;
+        const pkg = action.version ? `${pkgName}@${action.version.trim()}` : pkgName;
         const addCmd = buildPmCommand(pm, action.dev ? "add-dev" : "add", pkg);
         try {
           const output = childProcess.execSync(addCmd, { cwd: dir, timeout: 120000, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
-          return { status: "success", type: t, data: { command: addCmd, package: action.name, version: action.version || "latest", dev: !!action.dev, output: (output || "").slice(0, 10000) } };
+          return { status: "success", type: t, data: { command: addCmd, package: pkgName, version: action.version || "latest", dev: !!action.dev, output: (output || "").slice(0, 10000) } };
         } catch (e) {
           return { status: "error", type: t, error: e.message?.slice(0, 2000), data: { command: addCmd } };
         }
@@ -778,9 +785,12 @@ function executeSandboxAction(action, projectsDir) {
       }
       case "set_env_var": {
         if (!action.key) return { status: "error", type: t, error: "key required" };
-        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
+        const envFileName = action.file || ".env";
+        const envCheck = projectName ? validateProjectPath(projectName, envFileName, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, envFileName) };
+        if (!envCheck.valid) return { status: "error", type: t, error: envCheck.error };
+        const dir = path.dirname(envCheck.resolved);
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-        const envPath = path.join(dir, action.file || ".env");
+        const envPath = envCheck.resolved;
         let envContent = "";
         try { envContent = fs.readFileSync(envPath, "utf-8"); } catch {}
         const envLines = envContent.split("\n");
@@ -798,9 +808,10 @@ function executeSandboxAction(action, projectsDir) {
         return { status: "success", type: t, data: { key: action.key, file: action.file || ".env", updated: found, created: !found } };
       }
       case "get_env_vars": {
-        const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
-        if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-        const envPath = path.join(dir, action.file || ".env");
+        const getEnvFileName = action.file || ".env";
+        const getEnvCheck = projectName ? validateProjectPath(projectName, getEnvFileName, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, getEnvFileName) };
+        if (!getEnvCheck.valid) return { status: "error", type: t, error: getEnvCheck.error };
+        const envPath = getEnvCheck.resolved;
         if (!fs.existsSync(envPath)) return { status: "success", type: t, data: { vars: {}, file: action.file || ".env", exists: false } };
         const envContent = fs.readFileSync(envPath, "utf-8");
         const vars = {};
@@ -832,8 +843,8 @@ function executeSandboxAction(action, projectsDir) {
           }
         }
         try {
-          const output = childProcess.execSync("git stash pop", { cwd: dir, timeout: 10000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
-          return { status: "success", type: t, data: { command: "git stash pop", output: (output || "").trim() } };
+          const output = childProcess.execSync("git stash apply", { cwd: dir, timeout: 10000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+          return { status: "success", type: t, data: { command: "git stash apply", output: (output || "").trim() } };
         } catch (e) {
           try {
             const output2 = childProcess.execSync("git checkout -- .", { cwd: dir, timeout: 10000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
