@@ -14,7 +14,7 @@ function getChromiumPath() {
   return null;
 }
 
-function uploadScreenshot(filePath) {
+function uploadScreenshotOnce(filePath) {
   return new Promise((resolve) => {
     try {
       const boundary = "----CatboxBoundary" + Date.now();
@@ -55,6 +55,30 @@ function uploadScreenshot(filePath) {
       resolve({ uploaded: false, reason: e.message });
     }
   });
+}
+
+function uploadScreenshotCurl(filePath) {
+  try {
+    const result = childProcess.execSync(
+      `curl -s -m 30 -F "reqtype=fileupload" -F "fileToUpload=@${filePath}" https://catbox.moe/user/api.php`,
+      { encoding: "utf-8", timeout: 35000, stdio: ["pipe", "pipe", "pipe"] }
+    ).trim();
+    if (result.startsWith("https://")) return { uploaded: true, url: result };
+    return { uploaded: false, reason: result.slice(0, 300) };
+  } catch (e) {
+    return { uploaded: false, reason: "curl: " + (e.message || "").slice(0, 200) };
+  }
+}
+
+async function uploadScreenshot(filePath, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const result = attempt <= 2
+      ? await uploadScreenshotOnce(filePath)
+      : uploadScreenshotCurl(filePath);
+    if (result.uploaded) return result;
+    if (attempt < maxRetries) await new Promise(r => setTimeout(r, 1500 * attempt));
+  }
+  return uploadScreenshotCurl(filePath);
 }
 
 function detectPmForDir(projDir) {
