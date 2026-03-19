@@ -363,6 +363,11 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `     - Current page status from snapshot\n`;
   section += `  Never claim a change happened unless you saw {"success":true}.\n\n`;
 
+  const keyMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/key=([^&]+)/);
+  const screenshotKey = keyMatch ? keyMatch[1] : 'KEY';
+  const relayBaseMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/^(https?:\/\/[^/]+)/);
+  const screenshotRelayBase = relayBaseMatch ? relayBaseMatch[1] : 'https://bridge-relay.replit.app';
+
   if (proxyBaseUrl) {
     section += `ADVANCED: GET proxy for multi-action chains (read + edit + run in one call):\n`;
     section += `  Use this when you need multiple actions in one request (read files, run commands, git, install deps, etc.).\n`;
@@ -392,10 +397,6 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    { type: "git_commit", project: "${proj}", message: "fix: description" }\n`;
     section += `    { type: "git_diff", project: "${proj}" }\n`;
     section += `    { type: "git_log", project: "${proj}", count: 10 }\n`;
-    const keyMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/key=([^&]+)/);
-    const screenshotKey = keyMatch ? keyMatch[1] : 'KEY';
-    const relayBaseMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/^(https?:\/\/[^/]+)/);
-    const screenshotRelayBase = relayBaseMatch ? relayBaseMatch[1] : 'https://bridge-relay.replit.app';
     section += `  SCREENSHOT — SIMPLE URL (NO encoding needed, just browse this URL):\n`;
     section += `    GET ${screenshotRelayBase}/api/screenshot/${screenshotKey}/${proj}\n`;
     section += `    Returns: { "success": true, "results": [{ "data": { "captured": true, "screenshotUrl": "https://files.catbox.moe/abc123.png" } }] }\n`;
