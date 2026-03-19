@@ -4090,6 +4090,228 @@ function projectManagementPlugin(): Plugin {
         res.end(JSON.stringify({ errors: recent, stats: { total, autoFixed, escalated } }));
       });
 
+      // ─── Grok Responses API with Function Calling ─────────────────────
+      const GROK_FC_TOOLS = [
+        { type: "function", name: "take_screenshot", description: "Take a screenshot of the running app preview. Returns a public Catbox.moe image URL.", parameters: { type: "object", properties: { project: { type: "string", description: "Project name" } }, required: ["project"] } },
+        { type: "function", name: "read_file", description: "Read a file from the project.", parameters: { type: "object", properties: { project: { type: "string" }, path: { type: "string" } }, required: ["project", "path"] } },
+        { type: "function", name: "write_file", description: "Write/overwrite a file in the project.", parameters: { type: "object", properties: { project: { type: "string" }, path: { type: "string" }, content: { type: "string" } }, required: ["project", "path", "content"] } },
+        { type: "function", name: "search_replace", description: "Find and replace text in a file.", parameters: { type: "object", properties: { project: { type: "string" }, path: { type: "string" }, search: { type: "string" }, replace: { type: "string" }, replaceAll: { type: "boolean" } }, required: ["project", "path", "search", "replace"] } },
+        { type: "function", name: "run_command", description: "Run a shell command in the project directory.", parameters: { type: "object", properties: { project: { type: "string" }, command: { type: "string" } }, required: ["project", "command"] } },
+        { type: "function", name: "list_tree", description: "List the file tree of the project.", parameters: { type: "object", properties: { project: { type: "string" } }, required: ["project"] } },
+        { type: "function", name: "grep_search", description: "Search for a pattern across all project files.", parameters: { type: "object", properties: { project: { type: "string" }, pattern: { type: "string" } }, required: ["project", "pattern"] } },
+        { type: "function", name: "console_logs", description: "Get console/preview logs from the running app.", parameters: { type: "object", properties: { project: { type: "string" } }, required: ["project"] } },
+        { type: "function", name: "read_snapshot", description: "Read the full project snapshot (file tree + all source files).", parameters: { type: "object", properties: { project: { type: "string" } }, required: ["project"] } },
+        { type: "function", name: "browser_interact", description: "Interact with the live preview (click, type, evaluate JS).", parameters: { type: "object", properties: { project: { type: "string" }, action: { type: "string", enum: ["click", "type", "evaluate", "waitFor"] }, selector: { type: "string" }, value: { type: "string" }, script: { type: "string" }, screenshot: { type: "boolean" } }, required: ["project", "action"] } },
+      ];
+
+      async function executeGrokFunctionCall(name: string, args: any, bridgeRelayUrl: string, bridgeKey: string): Promise<string> {
+        const project = args.project || "";
+        let actions: any[] = [];
+
+        switch (name) {
+          case "take_screenshot":
+            actions = [{ type: "screenshot_preview", project }];
+            break;
+          case "read_file":
+            actions = [{ type: "read_file", project, path: args.path }];
+            break;
+          case "write_file":
+            actions = [{ type: "write_file", project, path: args.path, content: args.content }];
+            break;
+          case "search_replace":
+            actions = [{ type: "search_replace", project, path: args.path, search: args.search, replace: args.replace, replaceAll: args.replaceAll }];
+            break;
+          case "run_command":
+            actions = [{ type: "run_command", project, command: args.command }];
+            break;
+          case "list_tree":
+            actions = [{ type: "list_tree", project }];
+            break;
+          case "grep_search":
+            actions = [{ type: "grep", project, pattern: args.pattern }];
+            break;
+          case "console_logs": {
+            try {
+              const clUrl = `${bridgeRelayUrl}/api/console-logs?key=${encodeURIComponent(bridgeKey)}&project=${encodeURIComponent(project)}`;
+              const clResp = await fetch(clUrl);
+              return await clResp.text();
+            } catch (e: any) {
+              return JSON.stringify({ error: e.message });
+            }
+          }
+          case "read_snapshot": {
+            try {
+              const snapUrl = `${bridgeRelayUrl}/api/snapshot/${encodeURIComponent(project)}?key=${encodeURIComponent(bridgeKey)}`;
+              const snapResp = await fetch(snapUrl);
+              const snapText = await snapResp.text();
+              return snapText.length > 80000 ? snapText.slice(0, 80000) + "\n...(truncated)" : snapText;
+            } catch (e: any) {
+              return JSON.stringify({ error: e.message });
+            }
+          }
+          case "browser_interact":
+            actions = [{ type: "browser_interact", project, action: args.action, selector: args.selector, value: args.value, script: args.script, screenshot: args.screenshot }];
+            break;
+          default:
+            return JSON.stringify({ error: `Unknown function: ${name}` });
+        }
+
+        try {
+          const execUrl = `${bridgeRelayUrl}/api/sandbox/execute?key=${encodeURIComponent(bridgeKey)}`;
+          const execResp = await fetch(execUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ actions }),
+          });
+          const result = await execResp.text();
+          return result.length > 80000 ? result.slice(0, 80000) + "\n...(truncated)" : result;
+        } catch (e: any) {
+          return JSON.stringify({ error: e.message });
+        }
+      }
+
+      server.middlewares.use("/api/grok-responses", async (req, res) => {
+        if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
+        try {
+          const body = JSON.parse(await readBody(req));
+          const { messages, model, project, bridgeRelayUrl: clientRelayUrl, bridgeKey: clientBridgeKey, systemPrompt } = body;
+
+          if (!messages || !Array.isArray(messages)) {
+            res.statusCode = 400; res.end(JSON.stringify({ error: "messages array required" })); return;
+          }
+
+          const fs2 = await import("fs");
+          let apiKey = process.env.XAI_API || process.env.XAI_API_KEY || "";
+          if (!apiKey) {
+            try {
+              const settingsPath = path.resolve(process.env.HOME || "~", ".guardian-ai", "settings.json");
+              const settings = JSON.parse(fs2.readFileSync(settingsPath, "utf-8"));
+              apiKey = settings.grokApiKey || "";
+            } catch {}
+          }
+          if (!apiKey) { res.statusCode = 400; res.end(JSON.stringify({ error: "XAI API key not configured" })); return; }
+
+          const relayUrl = clientRelayUrl || BRIDGE_RELAY_URL;
+          const bKey = clientBridgeKey || bridgeRelayKey || snapshotKey;
+          const useModel = model || "grok-4-0709";
+
+          res.setHeader("Content-Type", "text/event-stream");
+          res.setHeader("Cache-Control", "no-cache");
+          res.setHeader("Connection", "keep-alive");
+          res.setHeader("Access-Control-Allow-Origin", "*");
+
+          const sendSSE = (event: string, data: any) => {
+            if (res.destroyed) return;
+            res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+          };
+
+          const chatMessages = [
+            ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
+            ...messages,
+          ];
+
+          let loopCount = 0;
+          const MAX_LOOPS = 15;
+          let previousResponseId: string | null = null;
+
+          while (loopCount < MAX_LOOPS) {
+            loopCount++;
+            if (res.destroyed) { console.log("[grok-responses] Client disconnected, stopping loop"); return; }
+
+            sendSSE("status", { phase: loopCount === 1 ? "calling-grok" : "calling-grok-with-results", loop: loopCount });
+
+            let xaiBody: any;
+            if (previousResponseId) {
+              xaiBody = {
+                model: useModel,
+                previous_response_id: previousResponseId,
+                tools: GROK_FC_TOOLS,
+                input: chatMessages.slice(-1).map((m: any) => ({
+                  type: "function_call_output",
+                  call_id: m.call_id,
+                  output: m.output,
+                })),
+              };
+            } else {
+              xaiBody = {
+                model: useModel,
+                tools: GROK_FC_TOOLS,
+                input: chatMessages.map((m: any) => {
+                  if (m.role === "system") return { role: "developer", content: m.content };
+                  return { role: m.role, content: m.content };
+                }),
+              };
+            }
+
+            const xaiResp = await fetch("https://api.x.ai/v1/responses", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+              body: JSON.stringify(xaiBody),
+            });
+
+            if (!xaiResp.ok) {
+              const errText = await xaiResp.text();
+              sendSSE("error", { error: `xAI API error ${xaiResp.status}: ${errText}` });
+              res.end();
+              return;
+            }
+
+            const xaiData = await xaiResp.json();
+            previousResponseId = xaiData.id;
+
+            const output = xaiData.output || [];
+            const functionCalls = output.filter((o: any) => o.type === "function_call");
+            const textOutputs = output.filter((o: any) => o.type === "message");
+
+            if (functionCalls.length === 0) {
+              let finalText = "";
+              for (const msg of textOutputs) {
+                if (msg.content) {
+                  for (const part of msg.content) {
+                    if (part.type === "output_text" || part.text) finalText += part.text || "";
+                  }
+                }
+              }
+              sendSSE("text", { content: finalText });
+              sendSSE("done", { loops: loopCount });
+              res.end();
+              return;
+            }
+
+            const functionResults: any[] = [];
+            for (const fc of functionCalls) {
+              const fnName = fc.name;
+              let fnArgs: any = {};
+              try { fnArgs = typeof fc.arguments === "string" ? JSON.parse(fc.arguments) : fc.arguments || {}; } catch {}
+
+              if (!fnArgs.project && project) fnArgs.project = project;
+
+              sendSSE("function_call", { name: fnName, arguments: fnArgs, call_id: fc.call_id });
+
+              const result = await executeGrokFunctionCall(fnName, fnArgs, relayUrl, bKey);
+
+              sendSSE("function_result", { name: fnName, call_id: fc.call_id, result: result.length > 2000 ? result.slice(0, 2000) + "...(truncated in SSE, full sent to Grok)" : result });
+
+              functionResults.push({
+                type: "function_call_output",
+                call_id: fc.call_id,
+                output: result,
+              });
+            }
+
+            chatMessages.splice(0, chatMessages.length, ...functionResults);
+          }
+
+          sendSSE("error", { error: "Max function-calling loops reached" });
+          res.end();
+        } catch (err: any) {
+          if (!res.headersSent) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: err.message }));
+          }
+        }
+      });
+
       server.middlewares.use("/api/grok-fix", async (req, res) => {
         if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
         try {

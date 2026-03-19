@@ -362,8 +362,111 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pathname === "/api/grok-proxy") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const providedKey = getKey(req, url);
+    const matchedClient = findBridgeClient(providedKey);
+    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
+
+    const payloadB64 = url.searchParams.get("payload") || "";
+    if (!payloadB64) { sendJson(res, { error: "payload parameter required (base64-encoded JSON)" }, 400); return; }
+    let actions;
+    try {
+      const decoded = Buffer.from(payloadB64, "base64").toString("utf-8");
+      const parsed = JSON.parse(decoded);
+      actions = parsed.actions || [parsed];
+      if (!Array.isArray(actions)) actions = [actions];
+    } catch (e) {
+      sendJson(res, { error: "Invalid base64 payload: " + e.message }, 400);
+      return;
+    }
+    if (actions.length === 0) { sendJson(res, { error: "Empty actions" }, 400); return; }
+    if (actions.length > 50) { sendJson(res, { error: "Max 50 actions per request" }, 400); return; }
+
+    const project = url.searchParams.get("project") || "";
+    actions = actions.map(a => ({ ...a, project: a.project || project }));
+
+    const requestId = crypto.randomUUID();
+    const relayPromise = new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingSandboxRelayRequests.delete(requestId);
+        resolve(JSON.stringify({ error: "Relay timeout — desktop app did not respond within 60 seconds." }));
+      }, 60000);
+      pendingSandboxRelayRequests.set(requestId, { resolve, timer });
+    });
+    try {
+      matchedClient.send(JSON.stringify({ type: "sandbox-execute-request", requestId, actions }));
+    } catch {
+      sendJson(res, { error: "Could not reach desktop app through relay bridge." }, 502);
+      return;
+    }
+    for (const action of actions) {
+      sandboxAuditLog.push({ ts: Date.now(), action: action.type, project: action.project || "", status: "relayed-proxy" });
+    }
+    if (sandboxAuditLog.length > 1000) sandboxAuditLog.splice(0, sandboxAuditLog.length - 500);
+    const result = await relayPromise;
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(result);
+    return;
+  }
+
+  if (pathname === "/api/grok-edit") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const providedKey = getKey(req, url);
+    const matchedClient = findBridgeClient(providedKey);
+    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
+
+    const project = url.searchParams.get("project") || "";
+    const filePath = url.searchParams.get("path") || "";
+    const search = url.searchParams.get("search") || "";
+    const replace = url.searchParams.get("replace") || "";
+    const replaceAll = url.searchParams.get("replaceAll") === "true";
+
+    if (!filePath) { sendJson(res, { error: "path parameter required" }, 400); return; }
+    if (!search) { sendJson(res, { error: "search parameter required" }, 400); return; }
+
+    const actions = [{ type: "search_replace", project, path: filePath, search, replace, replaceAll }];
+    const requestId = crypto.randomUUID();
+    const relayPromise = new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingSandboxRelayRequests.delete(requestId);
+        resolve(JSON.stringify({ error: "Relay timeout — desktop app did not respond within 30 seconds." }));
+      }, 30000);
+      pendingSandboxRelayRequests.set(requestId, { resolve, timer });
+    });
+    try {
+      matchedClient.send(JSON.stringify({ type: "sandbox-execute-request", requestId, actions }));
+    } catch {
+      sendJson(res, { error: "Could not reach desktop app through relay bridge." }, 502);
+      return;
+    }
+    sandboxAuditLog.push({ ts: Date.now(), action: "search_replace", project, status: "relayed-edit" });
+    if (sandboxAuditLog.length > 1000) sandboxAuditLog.splice(0, sandboxAuditLog.length - 500);
+    const result = await relayPromise;
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(result);
+    return;
+  }
+
+  if (pathname === "/api/grok") {
+    sendJson(res, {
+      service: "Lamby Bridge Relay — Grok Integration",
+      endpoints: {
+        snapshot: "/api/snapshot/:project?key=KEY",
+        consoleLogs: "/api/console-logs?key=KEY&project=NAME",
+        execute: "POST /api/sandbox/execute?key=KEY",
+        grokProxy: "/api/grok-proxy?key=KEY&project=NAME&payload=BASE64_ACTIONS",
+        grokEdit: "/api/grok-edit?key=KEY&project=NAME&path=FILE&search=OLD&replace=NEW&replaceAll=true",
+      },
+      notes: "All grok-proxy and grok-edit endpoints are GET-based for use with browse_page. The payload for grok-proxy is base64-encoded JSON: {actions:[{type,project,...}]}.",
+    });
+    return;
+  }
+
   res.writeHead(404, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ error: "Not found", endpoints: ["/", "/api/snapshot-key", "/api/bridge-status", "/api/snapshot/:project", "/api/console-logs", "/api/sandbox/execute", "/api/sandbox/audit-log"] }));
+  res.end(JSON.stringify({ error: "Not found", endpoints: ["/", "/api/snapshot-key", "/api/bridge-status", "/api/snapshot/:project", "/api/console-logs", "/api/sandbox/execute", "/api/sandbox/audit-log", "/api/grok-proxy", "/api/grok-edit", "/api/grok"] }));
 });
 
 server.on("upgrade", (req, socket, head) => {
@@ -416,5 +519,8 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`    GET  /api/console-logs       Get desktop console logs (via desktop)`);
   console.log(`    POST /api/sandbox/execute    Execute actions (via desktop)`);
   console.log(`    GET  /api/sandbox/audit-log  Recent actions`);
+  console.log(`    GET  /api/grok-proxy         GET-based proxy for Grok (base64 payload)`);
+  console.log(`    GET  /api/grok-edit          GET-based file edit for Grok`);
+  console.log(`    GET  /api/grok              Endpoint discovery`);
   console.log(`    WS   /bridge-ws             Desktop WebSocket connection`);
 });

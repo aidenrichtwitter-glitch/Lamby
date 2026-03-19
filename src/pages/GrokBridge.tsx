@@ -161,6 +161,68 @@ async function streamGrok({ messages, model, onDelta, onDone, onError }: {
   } catch (e) { onError(e instanceof Error ? e.message : 'Stream failed'); }
 }
 
+async function streamGrokFC({ messages, model, project, bridgeRelayUrl, bridgeKey, systemPrompt, onDelta, onStatus, onDone, onError }: {
+  messages: Msg[]; model: string; project: string;
+  bridgeRelayUrl: string; bridgeKey: string; systemPrompt?: string;
+  onDelta: (text: string) => void; onStatus: (status: string) => void;
+  onDone: () => void; onError: (err: string) => void;
+}) {
+  try {
+    const resp = await fetch('/api/grok-responses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, model, project, bridgeRelayUrl, bridgeKey, systemPrompt }),
+    });
+    if (!resp.ok) { const d = await resp.json().catch(() => ({})); onError(d.error || `Error ${resp.status}`); return; }
+    if (!resp.body) { onError('No response body'); return; }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const blocks = buf.split('\n\n');
+      buf = blocks.pop() || '';
+      for (const block of blocks) {
+        const lines = block.split('\n');
+        let eventType = '';
+        let dataStr = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+          else if (line.startsWith('data: ')) dataStr = line.slice(6).trim();
+        }
+        if (!eventType || !dataStr) continue;
+        try {
+          const data = JSON.parse(dataStr);
+          switch (eventType) {
+            case 'status':
+              if (data.phase === 'calling-grok') onStatus('🧠 Grok is thinking...');
+              else if (data.phase === 'calling-grok-with-results') onStatus(`🔄 Grok processing results (loop ${data.loop})...`);
+              break;
+            case 'function_call':
+              onStatus(`⚡ Calling ${data.name}(${JSON.stringify(data.arguments || {}).slice(0, 80)})`);
+              break;
+            case 'function_result':
+              onStatus(`✅ ${data.name} returned`);
+              break;
+            case 'text':
+              if (data.content) onDelta(data.content);
+              break;
+            case 'done':
+              onDone();
+              return;
+            case 'error':
+              onError(data.error || 'Unknown error');
+              return;
+          }
+        } catch {}
+      }
+    }
+    onDone();
+  } catch (e) { onError(e instanceof Error ? e.message : 'Stream failed'); }
+}
+
 function generateTitle(messages: Msg[]): string {
   const first = messages.find(m => m.role === 'user');
   if (!first) return 'New conversation';
@@ -2994,95 +3056,120 @@ const GrokBridge: React.FC = () => {
       setActiveConvoId(convoId);
     }
     let assistantSoFar = '';
-    await streamGrok({
-      messages: allMessages, model,
-      onDelta: (chunk) => {
-        assistantSoFar += chunk;
-        setMessages(prev => {
-          const last = prev[prev.length - 1];
-          if (last?.role === 'assistant') return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantSoFar } : m);
-          return [...prev, { role: 'assistant', content: assistantSoFar }];
-        });
-      },
-      onDone: () => {
-        setIsLoading(false);
-        const msgIndex = allMessages.length;
-        setConversations(prev => prev.map(c => c.id === convoId ? { ...c, messages: [...allMessages, { role: 'assistant' as const, content: assistantSoFar }], title: generateTitle(allMessages), model } : c));
-        lastFullResponseRef.current = assistantSoFar;
-        const repoMatch = detectGitHubUrlInResponse(assistantSoFar);
-        if (repoMatch && !assistantSoFar.toLowerCase().includes('starting fresh')) {
-          setDetectedRepoUrl(repoMatch.fullUrl);
-          setStatusMessage(`Grok suggested repo: ${repoMatch.owner}/${repoMatch.repo} — click to clone`);
-          if (autoApplyEnabled && activeProject) {
-            getProjectFiles(activeProject).then(tree => {
-              const flatFiles: string[] = [];
-              const walk = (nodes: ProjectFileNode[], prefix = '') => {
-                for (const n of nodes) {
-                  const p = prefix ? `${prefix}/${n.name}` : n.name;
-                  if (n.type === 'file') flatFiles.push(p);
-                  if (n.children) walk(n.children, p);
-                }
-              };
-              walk(tree);
-              const sourceFiles = flatFiles.filter(f => !['package.json', 'package-lock.json'].includes(f));
-              if (sourceFiles.length === 0) {
-                setStatusMessage(`Auto-cloning ${repoMatch.owner}/${repoMatch.repo}...`);
-                handleGitHubImport(repoMatch.fullUrl);
-              } else if (autonomousState.enabled && assistantSoFar.toLowerCase().includes('suggest') && assistantSoFar.toLowerCase().includes('repo')) {
-                setStatusMessage(`Replacing repo with ${repoMatch.owner}/${repoMatch.repo}...`);
-                handleReplaceRepo(repoMatch.fullUrl);
-              }
-            }).catch(() => {});
-          }
-        }
-        const regexBlocks = parseCodeBlocks(assistantSoFar);
-        if (autoApplyEnabled && activeProject && regexBlocks.length > 0) {
-          const validBlocks = regexBlocks.filter(b => b.filePath);
-          if (validBlocks.length > 0) {
-            if (autonomousState.enabled) dispatchAutonomous({ type: 'APPLY_START' });
-            autoApplyBlocks(validBlocks).then(applied => {
-              if (applied) {
-                startPostApplyMonitoring(validBlocks);
-              } else {
-                setStatusMessage('Auto-apply skipped (safety checks failed) — review manually');
-                if (autonomousState.enabled) stopAutonomousLoop();
-              }
-            }).catch(() => {
-              if (autonomousState.enabled) stopAutonomousLoop();
-            });
-          }
-        }
+    const freshBridge = await fetchFreshBridgeEndpoints(activeProject || '');
+    const useFunctionCalling = freshBridge.online && !!activeProject && mode === 'api';
 
-        if (toasterAvailability?.available) {
-          cleanGrokResponse(assistantSoFar, toasterConfig).then(cleaned => {
-            if (cleaned && cleaned.files.length > 0) {
-              const ollamaBlocks = cleanedResponseToBlocks(cleaned);
-              if (ollamaBlocks.length > 0) {
-                const hasMorePaths = ollamaBlocks.filter(b => b.filePath).length >= regexBlocks.filter(b => b.filePath).length;
-                if (hasMorePaths) {
-                  setCleanedApiBlocks(prev => new Map(prev).set(msgIndex, ollamaBlocks));
-                }
+    const onDeltaHandler = (chunk: string) => {
+      assistantSoFar += chunk;
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === 'assistant') return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantSoFar } : m);
+        return [...prev, { role: 'assistant', content: assistantSoFar }];
+      });
+    };
+
+    const onDoneHandler = () => {
+      setIsLoading(false);
+      const msgIndex = allMessages.length;
+      setConversations(prev => prev.map(c => c.id === convoId ? { ...c, messages: [...allMessages, { role: 'assistant' as const, content: assistantSoFar }], title: generateTitle(allMessages), model } : c));
+      lastFullResponseRef.current = assistantSoFar;
+      const repoMatch = detectGitHubUrlInResponse(assistantSoFar);
+      if (repoMatch && !assistantSoFar.toLowerCase().includes('starting fresh')) {
+        setDetectedRepoUrl(repoMatch.fullUrl);
+        setStatusMessage(`Grok suggested repo: ${repoMatch.owner}/${repoMatch.repo} — click to clone`);
+        if (autoApplyEnabled && activeProject) {
+          getProjectFiles(activeProject).then(tree => {
+            const flatFiles: string[] = [];
+            const walk = (nodes: ProjectFileNode[], prefix = '') => {
+              for (const n of nodes) {
+                const p = prefix ? `${prefix}/${n.name}` : n.name;
+                if (n.type === 'file') flatFiles.push(p);
+                if (n.children) walk(n.children, p);
               }
+            };
+            walk(tree);
+            const sourceFiles = flatFiles.filter(f => !['package.json', 'package-lock.json'].includes(f));
+            if (sourceFiles.length === 0) {
+              setStatusMessage(`Auto-cloning ${repoMatch.owner}/${repoMatch.repo}...`);
+              handleGitHubImport(repoMatch.fullUrl);
+            } else if (autonomousState.enabled && assistantSoFar.toLowerCase().includes('suggest') && assistantSoFar.toLowerCase().includes('repo')) {
+              setStatusMessage(`Replacing repo with ${repoMatch.owner}/${repoMatch.repo}...`);
+              handleReplaceRepo(repoMatch.fullUrl);
             }
-            if (cleaned?.unparsed_text) {
-              const extraDeps = parseDependencies(cleaned.unparsed_text);
-              if (extraDeps.dependencies.length > 0 || extraDeps.devDependencies.length > 0) {
-                setDetectedDeps(prev => ({
-                  dependencies: [...new Set([...prev.dependencies, ...extraDeps.dependencies])],
-                  devDependencies: [...new Set([...prev.devDependencies, ...extraDeps.devDependencies])],
-                }));
-              }
-              const extraActions = parseActionItems(cleaned.unparsed_text);
-              if (extraActions.length > 0) {
-                setActionItems(prev => [...prev, ...extraActions]);
-              }
-            }
-          }).catch(err => console.error('[Toaster] API mode cleanGrokResponse failed:', err));
+          }).catch(() => {});
         }
-      },
-      onError: (err) => { setIsLoading(false); setStatusMessage(`⚠ ${err}`); },
-    });
-  }, [input, isLoading, messages, model, activeConvoId, toasterConfig, toasterAvailability, autonomousState.enabled, autonomousState.phase, stopAutonomousLoop, pendingNewProject, pendingNewProjectMode, activeProject, handleReplaceRepo]);
+      }
+      const regexBlocks = parseCodeBlocks(assistantSoFar);
+      if (autoApplyEnabled && activeProject && regexBlocks.length > 0) {
+        const validBlocks = regexBlocks.filter(b => b.filePath);
+        if (validBlocks.length > 0) {
+          if (autonomousState.enabled) dispatchAutonomous({ type: 'APPLY_START' });
+          autoApplyBlocks(validBlocks).then(applied => {
+            if (applied) {
+              startPostApplyMonitoring(validBlocks);
+            } else {
+              setStatusMessage('Auto-apply skipped (safety checks failed) — review manually');
+              if (autonomousState.enabled) stopAutonomousLoop();
+            }
+          }).catch(() => {
+            if (autonomousState.enabled) stopAutonomousLoop();
+          });
+        }
+      }
+
+      if (toasterAvailability?.available) {
+        cleanGrokResponse(assistantSoFar, toasterConfig).then(cleaned => {
+          if (cleaned && cleaned.files.length > 0) {
+            const ollamaBlocks = cleanedResponseToBlocks(cleaned);
+            if (ollamaBlocks.length > 0) {
+              const hasMorePaths = ollamaBlocks.filter(b => b.filePath).length >= regexBlocks.filter(b => b.filePath).length;
+              if (hasMorePaths) {
+                setCleanedApiBlocks(prev => new Map(prev).set(msgIndex, ollamaBlocks));
+              }
+            }
+          }
+          if (cleaned?.unparsed_text) {
+            const extraDeps = parseDependencies(cleaned.unparsed_text);
+            if (extraDeps.dependencies.length > 0 || extraDeps.devDependencies.length > 0) {
+              setDetectedDeps(prev => ({
+                dependencies: [...new Set([...prev.dependencies, ...extraDeps.dependencies])],
+                devDependencies: [...new Set([...prev.devDependencies, ...extraDeps.devDependencies])],
+              }));
+            }
+            const extraActions = parseActionItems(cleaned.unparsed_text);
+            if (extraActions.length > 0) {
+              setActionItems(prev => [...prev, ...extraActions]);
+            }
+          }
+        }).catch(err => console.error('[Toaster] API mode cleanGrokResponse failed:', err));
+      }
+    };
+
+    const onErrorHandler = (err: string) => { setIsLoading(false); setStatusMessage(`⚠ ${err}`); };
+
+    if (useFunctionCalling) {
+      const relayBase = extractBaseUrl(freshBridge.cmdUrl || freshBridge.snapUrl || '');
+      const keyMatch = (freshBridge.snapUrl || freshBridge.cmdUrl || '').match(/key=([^&]+)/);
+      const bKey = keyMatch ? keyMatch[1] : '';
+      setStatusMessage('🔧 Using function calling mode (Grok can execute tools directly)');
+      await streamGrokFC({
+        messages: allMessages, model, project: activeProject || '',
+        bridgeRelayUrl: relayBase, bridgeKey: bKey,
+        systemPrompt: `You are Grok, an autonomous AI coding assistant inside Lamby IDE. You have access to function tools that let you directly read files, write files, run commands, take screenshots, and more on the user's project "${activeProject}". Use these tools to fulfill the user's request. Always take a screenshot after making visual changes to show the result. When you use tools, the results are automatically fed back to you — you do NOT need to browse URLs or use browse_page.`,
+        onDelta: onDeltaHandler,
+        onStatus: (status) => setStatusMessage(status),
+        onDone: onDoneHandler,
+        onError: onErrorHandler,
+      });
+    } else {
+      await streamGrok({
+        messages: allMessages, model,
+        onDelta: onDeltaHandler,
+        onDone: onDoneHandler,
+        onError: onErrorHandler,
+      });
+    }
+  }, [input, isLoading, messages, model, activeConvoId, toasterConfig, toasterAvailability, autonomousState.enabled, autonomousState.phase, stopAutonomousLoop, pendingNewProject, pendingNewProjectMode, activeProject, handleReplaceRepo, mode]);
 
   sendMessageRef.current = sendMessage;
 

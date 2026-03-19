@@ -100,6 +100,16 @@ supabase/
 - Readiness is scoped per-prompt: `grok-send-prompt` snapshots baseline signal counts (copy buttons, reactions, follow-ups) before sending. `grok-check-response-ready` only triggers "ready" when signal counts INCREASE beyond that baseline — old responses from previous projects are ignored.
 - Manual send detection: A background watcher (3s interval) calls `grok-snapshot-baseline` to check if Grok is generating without the app having sent a prompt. If detected, it snapshots the baseline and starts the same polling loop to auto-capture and process the response.
 
+## Function Calling (Grok ↔ Bridge Relay)
+- **Endpoint**: `POST /api/grok-responses` in `vite.config.ts` — handles full xAI Responses API loop with function calling
+- **Flow**: Client sends messages → server calls xAI `/v1/responses` with 10 function tools → when Grok returns `function_call`, server executes it against the bridge relay → feeds result back as `function_call_output` → loops until Grok returns final text
+- **Tools registered**: `take_screenshot`, `read_file`, `write_file`, `search_replace`, `run_command`, `list_tree`, `grep_search`, `console_logs`, `read_snapshot`, `browser_interact`
+- **Client integration**: `streamGrokFC()` in GrokBridge.tsx — used when bridge is online + active project + API mode. Falls back to `streamGrok()` (Supabase proxy, no tools) otherwise
+- **SSE events**: `status`, `function_call`, `function_result`, `text`, `done`, `error` — streamed to client for live progress updates
+- **API key resolution**: `process.env.XAI_API` → `process.env.XAI_API_KEY` → `~/.guardian-ai/settings.json` `grokApiKey`
+- **Bridge relay endpoints** (`server/bridge-relay.cjs`): `/api/grok-proxy` (GET, base64 payload), `/api/grok-edit` (GET, query params), `/api/grok` (discovery)
+- **Why not browse_page**: Grok's built-in `browse_page` tool HTML-encodes `&` as `&amp;` in URLs (breaking query params) and has ~20s internal timeout (screenshots take 15-25s). Function calling bypasses both issues.
+
 ## Auto-Error-Recovery System
 - **Error Detection**: Global `window.onerror` + `unhandledrejection` + React ErrorBoundary catch all browser errors
 - **Error Classification**: Universal classifier maps errors to categories (export-missing, dependency-missing, syntax-error, type-error, vite-cache, etc.) with confidence scoring
