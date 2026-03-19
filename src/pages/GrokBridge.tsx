@@ -177,39 +177,72 @@ function saveConversations(convos: Conversation[]) {
 
 function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, project: string): string {
   if (!snapshotUrl && !cmdEndpoint) return '';
-  let section = '\n=== LAMBY WORKSPACE API ===\n';
+  const proj = project || 'PROJECT_NAME';
+  let section = '\n=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS) ===\n';
+  section += `You can directly read, write, execute, and manage files in this project. DO NOT just suggest code — USE this API to make changes yourself.\n\n`;
   if (snapshotUrl) {
-    section += `SNAPSHOT (read-only overview):\n  GET ${snapshotUrl}\n  Returns: plain-text snapshot with file tree, package.json, git status, and ALL source file contents.\n\n`;
+    section += `SNAPSHOT (read-only overview of entire project):\n  GET ${snapshotUrl}\n  Returns: plain-text snapshot with file tree, package.json, git status, and ALL source file contents.\n\n`;
+  }
+  const consoleLogsUrl = snapshotUrl ? snapshotUrl.replace(/\/api\/snapshot\/[^?]+/, '/api/console-logs') + `&project=${proj}` : '';
+  if (consoleLogsUrl) {
+    section += `CONSOLE LOGS (live preview output):\n  GET ${consoleLogsUrl}\n  Returns: { previews: [{ name, port, stdout, stderr }] } — live stdout/stderr from running dev servers.\n  Use this to check for runtime errors, build failures, or verify your fix worked.\n\n`;
   }
   if (cmdEndpoint) {
-    const proj = project || 'PROJECT_NAME';
     section += `SANDBOX COMMAND API (read/write/execute):\n  POST ${cmdEndpoint}\n  Content-Type: application/json\n  Body: { "actions": [ ...action objects... ] }\n\n`;
-    section += `Each action has a "type" and "project" field. Set "project": "${proj}" for the active project.\n\n`;
-    section += `Action types:\n`;
-    section += `  FILE OPS:\n`;
-    section += `    list_tree    — { type: "list_tree", project: "${proj}" }  → returns file tree\n`;
-    section += `    read_file    — { type: "read_file", project: "${proj}", path: "src/App.tsx" }  → returns file content\n`;
-    section += `    write_file   — { type: "write_file", project: "${proj}", path: "src/App.tsx", content: "..." }  → overwrites file\n`;
-    section += `    create_file  — { type: "create_file", project: "${proj}", path: "src/new.ts", content: "..." }  → creates new file\n`;
-    section += `    delete_file  — { type: "delete_file", project: "${proj}", path: "src/old.ts" }\n`;
-    section += `    grep         — { type: "grep", project: "${proj}", pattern: "TODO" }  → search files by regex\n`;
+    section += `Each action needs "type" and "project" fields. Set "project": "${proj}" for the active project.\n\n`;
+    section += `ACTION REFERENCE:\n`;
+    section += `  FILE OPERATIONS:\n`;
+    section += `    list_tree      — { type: "list_tree", project: "${proj}" }  → full file tree\n`;
+    section += `    read_file      — { type: "read_file", project: "${proj}", path: "src/App.tsx" }  → file content\n`;
+    section += `    write_file     — { type: "write_file", project: "${proj}", path: "src/App.tsx", content: "..." }  → overwrite file\n`;
+    section += `    create_file    — { type: "create_file", project: "${proj}", path: "src/new.ts", content: "..." }  → create new file\n`;
+    section += `    delete_file    — { type: "delete_file", project: "${proj}", path: "src/old.ts" }\n`;
+    section += `    move_file      — { type: "move_file", project: "${proj}", from: "old/path.ts", to: "new/path.ts" }  → move/rename\n`;
+    section += `    copy_file      — { type: "copy_file", project: "${proj}", from: "src/a.ts", to: "src/b.ts" }  → duplicate file\n`;
+    section += `    grep           — { type: "grep", project: "${proj}", pattern: "TODO" }  → regex search across all files\n`;
+    section += `    search_files   — { type: "search_files", project: "${proj}", query: "Button" }  → filename search\n`;
     section += `  COMMANDS:\n`;
-    section += `    run_command  — { type: "run_command", project: "${proj}", command: "node -e \\"console.log(1)\\"" }\n`;
-    section += `    install_deps — { type: "install_deps", project: "${proj}" }  → runs npm/yarn/pnpm install\n`;
+    section += `    run_command    — { type: "run_command", project: "${proj}", command: "node -e \\"console.log(1)\\"" }\n`;
+    section += `    install_deps   — { type: "install_deps", project: "${proj}" }  → auto-detects npm/yarn/pnpm/bun\n`;
+    section += `  PROCESS MANAGEMENT:\n`;
+    section += `    start_process  — { type: "start_process", project: "${proj}", command: "npm run dev" }  → start long-running process\n`;
+    section += `    list_processes — { type: "list_processes", project: "${proj}" }  → see running processes\n`;
+    section += `    kill_process   — { type: "kill_process", project: "${proj}", pid: 12345 }  → stop a process\n`;
     section += `  GIT:\n`;
-    section += `    git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init\n`;
-    section += `  PROJECT:\n`;
-    section += `    detect_structure — { type: "detect_structure", project: "${proj}" }  → framework, package manager info\n\n`;
-    section += `Example request:\n`;
-    section += `  POST ${cmdEndpoint}\n`;
-    section += `  { "actions": [\n`;
-    section += `    { "type": "read_file", "project": "${proj}", "path": "index.html" },\n`;
-    section += `    { "type": "write_file", "project": "${proj}", "path": "index.html", "content": "<!DOCTYPE html>..." }\n`;
-    section += `  ] }\n\n`;
-    section += `Response: { "success": true, "results": [ { "actionIndex": 0, "status": "success", "data": {...} }, ... ] }\n\n`;
-    section += `IMPORTANT: You can use this API to directly read, modify, and create project files. You can run commands to test changes. Use this instead of just suggesting code blocks — actually make the changes.\n`;
-    section += `When you want to fix or modify code, respond with a JSON actions array wrapped in a \`\`\`json code block so Lamby can execute it:\n`;
-    section += `\`\`\`json\n{"actions": [{"type": "read_file", "project": "${proj}", "path": "src/App.tsx"}, {"type": "write_file", "project": "${proj}", "path": "src/App.tsx", "content": "...fixed code..."}]}\n\`\`\`\n`;
+    section += `    git_init       — { type: "git_init", project: "${proj}" }\n`;
+    section += `    git_status     — { type: "git_status", project: "${proj}" }\n`;
+    section += `    git_add        — { type: "git_add", project: "${proj}", files: "." }\n`;
+    section += `    git_commit     — { type: "git_commit", project: "${proj}", message: "fix: resolve crash" }\n`;
+    section += `    git_diff       — { type: "git_diff", project: "${proj}" }\n`;
+    section += `    git_log        — { type: "git_log", project: "${proj}", count: 10 }\n`;
+    section += `    git_branch     — { type: "git_branch", project: "${proj}", name: "feature-x" }  → create branch (omit name to list)\n`;
+    section += `    git_checkout   — { type: "git_checkout", project: "${proj}", ref: "main" }\n`;
+    section += `    git_stash      — { type: "git_stash", project: "${proj}" }\n`;
+    section += `  PROJECT INFO:\n`;
+    section += `    detect_structure — { type: "detect_structure", project: "${proj}" }  → framework, entry point, package manager\n\n`;
+    section += `RESPONSE FORMAT:\n`;
+    section += `  { "success": true, "results": [ { "actionIndex": 0, "status": "success", "data": {...} }, ... ] }\n\n`;
+    section += `HOW TO USE — wrap actions in a \`\`\`json code block so Lamby auto-executes them:\n`;
+    section += `\`\`\`json\n{"actions": [{"type": "read_file", "project": "${proj}", "path": "src/App.tsx"}, {"type": "write_file", "project": "${proj}", "path": "src/App.tsx", "content": "...fixed code..."}]}\n\`\`\`\n\n`;
+    section += `WORKFLOW RECIPES:\n`;
+    section += `  Debug a crash:\n`;
+    section += `    1. read_file the files mentioned in the error stack trace\n`;
+    section += `    2. grep for the error message or broken symbol across the project\n`;
+    section += `    3. write_file with the corrected code\n`;
+    section += `    4. run_command to verify (e.g. "node -e \\"require('./src/App')\\"")\n`;
+    section += `    5. Check console logs: GET ${consoleLogsUrl || '(console-logs endpoint)'} to confirm fix\n\n`;
+    section += `  Add a feature:\n`;
+    section += `    1. detect_structure to understand the stack\n`;
+    section += `    2. list_tree + read_file key files to understand the codebase\n`;
+    section += `    3. create_file / write_file to add new code\n`;
+    section += `    4. install_deps if new packages are needed\n`;
+    section += `    5. run_command to test the changes\n\n`;
+    section += `  Set up a new project:\n`;
+    section += `    1. create_file for package.json, index.html, src/main.ts, etc.\n`;
+    section += `    2. install_deps to install dependencies\n`;
+    section += `    3. start_process to launch the dev server\n`;
+    section += `    4. Check console logs to confirm it started successfully\n\n`;
+    section += `CRITICAL: Always respond with \`\`\`json action blocks so Lamby can execute them automatically. Do NOT just paste code in text — use the API.\n`;
   }
   section += `=== END WORKSPACE API ===\n`;
   return section;
@@ -1879,12 +1912,14 @@ const GrokBridge: React.FC = () => {
     }
 
     if (commandEndpoint) {
-      prompt += `IMPORTANT: You have direct write access to this project via the Sandbox Command API above.\n`;
-      prompt += `Instead of just suggesting code blocks, USE the API to:\n`;
-      prompt += `1. read_file the broken source files to see their current state\n`;
-      prompt += `2. write_file with the corrected content to apply fixes directly\n`;
-      prompt += `3. run_command to verify the fix works\n`;
-      prompt += `Wrap your actions in a \`\`\`json code block with {"actions": [...]}\n\n`;
+      prompt += `YOU MUST USE THE SANDBOX API TO FIX THIS. Follow this exact workflow:\n`;
+      prompt += `1. read_file each file mentioned in the error stack traces above\n`;
+      prompt += `2. grep for the broken symbol/function if the root cause isn't obvious\n`;
+      prompt += `3. write_file with the corrected content for every file that needs fixing\n`;
+      prompt += `4. run_command to verify the fix (e.g. a quick node -e check or build command)\n`;
+      prompt += `5. Fetch console logs to confirm errors are resolved\n\n`;
+      prompt += `Respond with a \`\`\`json code block containing {"actions": [...]} so Lamby auto-executes your fix.\n`;
+      prompt += `Do NOT just describe the fix in text — actually apply it via the API.\n\n`;
     } else {
       prompt += `Fix the issue and provide updated code blocks for affected files only.\n`;
       prompt += `Use this format for each file:\n`;
@@ -1911,7 +1946,11 @@ const GrokBridge: React.FC = () => {
         const visionApiSection = buildSandboxApiSection(snapshotUrl, commandEndpoint, activeProject || '');
         if (visionApiSection) visionPrompt += visionApiSection;
         if (commandEndpoint) {
-          visionPrompt += `Use the Sandbox Command API to read the affected files and apply visual fixes directly via write_file actions.\n`;
+          visionPrompt += `USE THE SANDBOX API to fix these visual issues. Follow this workflow:\n`;
+          visionPrompt += `1. read_file the CSS/component files responsible for the broken layout or styling\n`;
+          visionPrompt += `2. write_file with corrected styles, classes, or JSX structure\n`;
+          visionPrompt += `3. run_command or check console logs to verify no build errors after your fix\n`;
+          visionPrompt += `Respond with a \`\`\`json code block containing {"actions": [...]} so Lamby auto-executes your fix.\n`;
         } else {
           visionPrompt += `Please fix these visual problems. Provide updated code blocks for affected files.`;
         }
@@ -2349,7 +2388,13 @@ const GrokBridge: React.FC = () => {
       enrichedPrompt += logsApiSection;
     }
     if (commandEndpoint) {
-      enrichedPrompt += `\nYou have direct access to read and fix project files via the Sandbox Command API above. Use it to investigate and resolve the errors shown in these logs.\n`;
+      enrichedPrompt += `\nYOU HAVE FULL READ/WRITE ACCESS to this project via the Sandbox API above.\n`;
+      enrichedPrompt += `Use it to investigate and fix the errors shown in these logs:\n`;
+      enrichedPrompt += `1. read_file the files referenced in the error traces\n`;
+      enrichedPrompt += `2. grep for the broken symbol if needed\n`;
+      enrichedPrompt += `3. write_file with corrected code\n`;
+      enrichedPrompt += `4. Fetch fresh console logs to confirm the fix\n`;
+      enrichedPrompt += `Respond with \`\`\`json {"actions": [...]} so Lamby auto-executes your fix.\n`;
     }
     try {
       if (isElectron) {
@@ -2560,6 +2605,9 @@ const GrokBridge: React.FC = () => {
     let enriched = prompt;
     const editorApiSection = buildSandboxApiSection(snapshotUrl, commandEndpoint, activeProject || '');
     if (editorApiSection) enriched += editorApiSection;
+    if (commandEndpoint) {
+      enriched += `\nUse the Sandbox API above to read, modify, and write files directly. Respond with \`\`\`json {"actions": [...]} so Lamby auto-executes your changes.\n`;
+    }
     if (mode === 'api') {
       setInput(enriched);
       inputRef.current?.focus();
@@ -3803,11 +3851,14 @@ const GrokBridge: React.FC = () => {
 
       const sandboxApiSection = buildSandboxApiSection(snapshotUrl, commandEndpoint, activeProject || '');
 
-      const hostSection = `\n=== LAMBY HOST ENVIRONMENT (READ-ONLY — NEVER MODIFY OR SUGGEST CHANGES TO) ===\nThis context is from Lamby — your local Electron/PWA coding IDE.\nLamby source repo: https://github.com/aidenrichtwitter-glitch/guardian-ai\nScan this repo to understand Lamby's full capabilities: its code parser (search/replace blocks, unified diffs, fenced code blocks), file structure, preview system, dependency installer, and command runner.\n\nImportant runtime facts (use these to make smart choices, but do NOT propose edits to them):\n- All user projects are sandboxed in /projects/<project-name>/ (isolated from Lamby's src/, public/, supabase/, etc.).\n- Preview: App auto-runs via Vite dev server inside a sandboxed iframe or embedded browser view in Lamby.\n  - Supports HMR for live updates.\n  - Responsive design assumed; fit viewport.\n  - Browser APIs only (Web Audio, Canvas, Three.js, mic access via getUserMedia).\n  - No Electron/node APIs in target app.\n- Lamby auto-handles: One-click clone from suggested GitHub URL, safe parsing/applying of copied code/diffs/deps/commands, dep install with safeguards, run/build commands.\n- You may choose ANY framework or tech stack that runs in a browser and can be previewed via Vite dev server. There are no framework restrictions — pick whatever best fits the user's request.\n- Strict rule: You are ONLY building the ACTIVE PROJECT above. NEVER suggest changes to Lamby itself (clipboard logic, context gen, parser, UI, Supabase bridge, etc.). Ignore any self-referential ideas.\n${sandboxApiSection}\nSTRICT INSTRUCTION: Respond only to the ACTIVE PROJECT section. Treat the HOST section as fixed background knowledge.\n`;
+      const hostSection = `\n=== LAMBY HOST ENVIRONMENT (READ-ONLY — NEVER MODIFY OR SUGGEST CHANGES TO) ===\nThis context is from Lamby — your local Electron/PWA coding IDE.\nLamby source repo: https://github.com/aidenrichtwitter-glitch/guardian-ai\nScan this repo to understand Lamby's full capabilities: its code parser (search/replace blocks, unified diffs, fenced code blocks), file structure, preview system, dependency installer, and command runner.\n\nImportant runtime facts (use these to make smart choices, but do NOT propose edits to them):\n- All user projects are sandboxed in /projects/<project-name>/ (isolated from Lamby's src/, public/, supabase/, etc.).\n- Preview: App auto-runs via Vite dev server inside a sandboxed iframe or embedded browser view in Lamby.\n  - Supports HMR for live updates.\n  - Responsive design assumed; fit viewport.\n  - Browser APIs only (Web Audio, Canvas, Three.js, mic access via getUserMedia).\n  - No Electron/node APIs in target app.\n- Lamby auto-handles: One-click clone from suggested GitHub URL, safe parsing/applying of copied code/diffs/deps/commands, dep install with safeguards, run/build commands.\n- You may choose ANY framework or tech stack that runs in a browser and can be previewed via Vite dev server. There are no framework restrictions — pick whatever best fits the user's request.\n- Strict rule: You are ONLY building the ACTIVE PROJECT above. NEVER suggest changes to Lamby itself (clipboard logic, context gen, parser, UI, Supabase bridge, etc.). Ignore any self-referential ideas.\n\nSTRICT INSTRUCTION: Respond only to the ACTIVE PROJECT section. Treat the HOST section as fixed background knowledge.\n`;
 
       const fileBudget = CHARS_BUDGET - hostSection.length - 6000;
 
       let active = `=== ACTIVE PROJECT (BUILD THIS ONLY) ===\n`;
+      if (sandboxApiSection) {
+        active += sandboxApiSection + '\n';
+      }
       if (activeProject) {
         active += `Project name: ${activeProject}\n`;
         const historySummary = summarizeChatHistory(messages);
@@ -4298,7 +4349,13 @@ const GrokBridge: React.FC = () => {
     let errorPrompt = `The following errors occurred after applying code changes:\n\n${errorText}\n\n` +
       analysisSection + errorApiSection;
     if (commandEndpoint) {
-      errorPrompt += `\nUse the Sandbox Command API above to read the broken files and apply fixes directly via write_file actions.\n`;
+      errorPrompt += `\nYOU MUST USE THE SANDBOX API TO FIX THESE ERRORS. Follow this workflow:\n`;
+      errorPrompt += `1. read_file the files mentioned in the error messages above\n`;
+      errorPrompt += `2. grep for broken imports, missing exports, or undefined symbols\n`;
+      errorPrompt += `3. write_file with corrected code for every broken file\n`;
+      errorPrompt += `4. run_command to verify the build succeeds\n`;
+      errorPrompt += `5. Fetch console logs to confirm errors are gone\n`;
+      errorPrompt += `Respond with \`\`\`json {"actions": [...]} so Lamby auto-executes your fix.\n\n`;
     } else {
       errorPrompt += `Please fix these errors. Return the corrected files using this format:\n` +
         `// file: path/to/file.tsx\n\`\`\`tsx\n// corrected content\n\`\`\`\n\n`;
