@@ -498,6 +498,8 @@ Start by reading the files you need, then make all the changes.` }
   }, null, 2));
 
   console.log(`\n  Logs saved to ${LOG_DIR}/grok_turn_*.txt and e2e_summary.json`);
+
+  if (!verification.passed) process.exit(1);
 }
 
 main().catch(err => { console.error('Fatal:', err.message); process.exit(1); });
