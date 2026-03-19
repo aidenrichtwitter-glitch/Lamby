@@ -6,3 +6,9 @@ id = "4VzvPP2N-Cddbp4O0-o2z"
 uri = "file://electron-browser/BRIDGE_PROMPT.md"
 type = "text"
 title = "Bridge Prompt - Paste into AI Chat"
+
+[[outputs]]
+id = "e_xCVxkVXLNqGSdohYe_D"
+uri = "file://electron-browser/BRIDGE_RELAY_UPDATE_PROMPT.md"
+type = "text"
+title = "Prompt to paste into Bridge Relay Replit app"
