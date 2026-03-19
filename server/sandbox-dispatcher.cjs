@@ -1668,7 +1668,17 @@ function executeSandboxAction(action, projectsDir, options) {
         for (const [name, entry] of sandboxProcesses) {
           if (entry.proc && entry.proc.pid === pid) { info = { name, cmd: entry.cmd, startedAt: entry.startedAt }; break; }
         }
-        return { status: "success", type: t, data: { pid, alive, processInfo: info } };
+        let resources = null;
+        if (alive) {
+          try {
+            const psOut = childProcess.execFileSync("ps", ["-p", String(pid), "-o", "pid,%cpu,%mem,rss,vsz,etime", "--no-headers"], { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }).trim();
+            if (psOut) {
+              const parts = psOut.split(/\s+/);
+              resources = { cpu: parts[1] || "0.0", memPercent: parts[2] || "0.0", rssKb: parseInt(parts[3], 10) || 0, vszKb: parseInt(parts[4], 10) || 0, elapsed: parts[5] || "unknown" };
+            }
+          } catch {}
+        }
+        return { status: "success", type: t, data: { pid, alive, processInfo: info, resources } };
       }
       case "get_process_logs": {
         const name = action.name;
@@ -1775,13 +1785,26 @@ function executeSandboxAction(action, projectsDir, options) {
           const outDir = path.join(dir, ".visual-diffs");
           if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
           const ts = Date.now();
-          const script = `const p=require("${puppeteerPath.replace(/\\/g, "/")}");(async()=>{const b=await p.launch({headless:"new",args:["--no-sandbox"]});const pg=await b.newPage();` +
-            (action.beforeUrl ? `await pg.goto(${JSON.stringify(action.beforeUrl)},{waitUntil:"networkidle2",timeout:15000});await pg.screenshot({path:${JSON.stringify(path.join(outDir, `before-${ts}.png`))},fullPage:true});` : "") +
-            (action.afterUrl ? `await pg.goto(${JSON.stringify(action.afterUrl)},{waitUntil:"networkidle2",timeout:15000});await pg.screenshot({path:${JSON.stringify(path.join(outDir, `after-${ts}.png`))},fullPage:true});` : "") +
-            `await b.close();console.log("done");})().catch(e=>{console.error(e.message);process.exit(1);})`;
+          const beforeFile = path.join(outDir, `before-${ts}.png`);
+          const afterFile = path.join(outDir, `after-${ts}.png`);
+          const diffScript = `const p=require("${puppeteerPath.replace(/\\/g, "/")}");const fs=require("fs");(async()=>{const b=await p.launch({headless:"new",args:["--no-sandbox"]});const pg=await b.newPage();` +
+            (action.beforeUrl ? `await pg.goto(${JSON.stringify(action.beforeUrl)},{waitUntil:"networkidle2",timeout:15000});await pg.screenshot({path:${JSON.stringify(beforeFile)},fullPage:true});` : "") +
+            (action.afterUrl ? `await pg.goto(${JSON.stringify(action.afterUrl)},{waitUntil:"networkidle2",timeout:15000});await pg.screenshot({path:${JSON.stringify(afterFile)},fullPage:true});` : "") +
+            `await b.close();` +
+            `const result={captured:true};` +
+            `if(fs.existsSync(${JSON.stringify(beforeFile)})&&fs.existsSync(${JSON.stringify(afterFile)})){` +
+            `const b1=fs.readFileSync(${JSON.stringify(beforeFile)});const b2=fs.readFileSync(${JSON.stringify(afterFile)});` +
+            `result.beforeSize=b1.length;result.afterSize=b2.length;result.sizeMatch=b1.length===b2.length;` +
+            `let diffBytes=0;const minLen=Math.min(b1.length,b2.length);for(let i=0;i<minLen;i++){if(b1[i]!==b2[i])diffBytes++;}` +
+            `diffBytes+=Math.abs(b1.length-b2.length);result.diffBytes=diffBytes;result.diffPercent=minLen>0?((diffBytes/minLen)*100).toFixed(2):"N/A";` +
+            `result.identical=diffBytes===0;}` +
+            `console.log(JSON.stringify(result));` +
+            `})().catch(e=>{console.error(e.message);process.exit(1);})`;
           try {
-            childProcess.execFileSync("node", ["-e", script], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
-            return { status: "success", type: t, data: { beforeFile: action.beforeUrl ? `before-${ts}.png` : null, afterFile: action.afterUrl ? `after-${ts}.png` : null, outputDir: ".visual-diffs" } };
+            const output = childProcess.execFileSync("node", ["-e", diffScript], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+            let comparison = {};
+            try { comparison = JSON.parse(output); } catch {}
+            return { status: "success", type: t, data: { beforeFile: action.beforeUrl ? `before-${ts}.png` : null, afterFile: action.afterUrl ? `after-${ts}.png` : null, outputDir: ".visual-diffs", comparison } };
           } catch (e) {
             return { status: "error", type: t, error: `Visual diff capture failed: ${(e.stderr || e.message || "").slice(0, 500)}` };
           }
@@ -1964,19 +1987,46 @@ function executeSandboxAction(action, projectsDir, options) {
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
         const target = action.target;
         if (!target) return { status: "error", type: t, error: "target framework required (vite, react, next)" };
+        const generated = [];
         const suggestions = [];
         if (target === "vite") {
-          suggestions.push("Install vite: npm install -D vite @vitejs/plugin-react");
-          suggestions.push("Create vite.config.ts with React plugin");
-          suggestions.push("Update package.json scripts: dev -> vite, build -> vite build");
-          suggestions.push("Move index.html to project root if not already there");
+          const viteConfigPath = path.join(dir, "vite.config.ts");
+          if (!fs.existsSync(viteConfigPath)) {
+            const hasReact = fs.existsSync(path.join(dir, "node_modules/react"));
+            const viteConfig = hasReact
+              ? `import { defineConfig } from 'vite';\nimport react from '@vitejs/plugin-react';\n\nexport default defineConfig({\n  plugins: [react()],\n  server: { port: 3000 }\n});\n`
+              : `import { defineConfig } from 'vite';\n\nexport default defineConfig({\n  server: { port: 3000 }\n});\n`;
+            fs.writeFileSync(viteConfigPath, viteConfig);
+            generated.push("vite.config.ts");
+          }
+          const indexHtmlPath = path.join(dir, "index.html");
+          if (!fs.existsSync(indexHtmlPath)) {
+            const entryFile = fs.existsSync(path.join(dir, "src/main.tsx")) ? "/src/main.tsx" : fs.existsSync(path.join(dir, "src/index.tsx")) ? "/src/index.tsx" : "/src/main.ts";
+            fs.writeFileSync(indexHtmlPath, `<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <title>App</title>\n</head>\n<body>\n  <div id="root"></div>\n  <script type="module" src="${entryFile}"></script>\n</body>\n</html>\n`);
+            generated.push("index.html");
+          }
+          suggestions.push("Run: npm install -D vite" + (fs.existsSync(path.join(dir, "node_modules/react")) ? " @vitejs/plugin-react" : ""));
+          suggestions.push("Update package.json scripts: dev -> vite, build -> vite build, preview -> vite preview");
         } else if (target === "next") {
-          suggestions.push("Install next: npm install next react react-dom");
-          suggestions.push("Create next.config.js");
-          suggestions.push("Move pages to /pages or /app directory");
-          suggestions.push("Update package.json scripts: dev -> next dev, build -> next build");
+          const nextConfigPath = path.join(dir, "next.config.js");
+          if (!fs.existsSync(nextConfigPath)) {
+            fs.writeFileSync(nextConfigPath, `/** @type {import('next').NextConfig} */\nconst nextConfig = {\n  reactStrictMode: true,\n};\n\nmodule.exports = nextConfig;\n`);
+            generated.push("next.config.js");
+          }
+          const pagesDir = path.join(dir, "pages");
+          const appDir = path.join(dir, "app");
+          if (!fs.existsSync(pagesDir) && !fs.existsSync(appDir)) {
+            fs.mkdirSync(appDir, { recursive: true });
+            fs.writeFileSync(path.join(appDir, "layout.tsx"), `export default function RootLayout({ children }: { children: React.ReactNode }) {\n  return (\n    <html lang="en">\n      <body>{children}</body>\n    </html>\n  );\n}\n`);
+            fs.writeFileSync(path.join(appDir, "page.tsx"), `export default function Home() {\n  return <main><h1>Hello</h1></main>;\n}\n`);
+            generated.push("app/layout.tsx", "app/page.tsx");
+          }
+          suggestions.push("Run: npm install next react react-dom");
+          suggestions.push("Update package.json scripts: dev -> next dev, build -> next build, start -> next start");
+        } else {
+          suggestions.push(`Framework "${target}" not auto-scaffolded. Use write_file to create config manually.`);
         }
-        return { status: "success", type: t, data: { target, suggestions, note: "Use generate_component or write_file to create config files. Use add_dependency to install packages." } };
+        return { status: "success", type: t, data: { target, generated, suggestions } };
       }
       case "react_profiler": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
