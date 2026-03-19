@@ -185,7 +185,7 @@ function extractBaseUrl(endpoint: string): string {
   }
 }
 
-async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: string; cmdUrl: string; online: boolean }> {
+async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: string; cmdUrl: string; proxyUrl: string; online: boolean }> {
   const isElectronEnv = typeof window !== 'undefined' && (window as any).process?.type === 'renderer';
   try {
     if (isElectronEnv) {
@@ -218,6 +218,7 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
         return {
           snapUrl: `${relayBase}/api/snapshot/${project || 'PROJECT_NAME'}?key=${key}`,
           cmdUrl: `${relayBase}/api/sandbox/execute?key=${key}`,
+          proxyUrl: `${relayBase}/api/grok-proxy?key=${key}`,
           online: statusData?.status === 'connected',
         };
       }
@@ -235,19 +236,20 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
         return {
           snapUrl: `${relayBase}/api/snapshot/${project || 'PROJECT_NAME'}?key=${key}`,
           cmdUrl: `${relayBase}/api/sandbox/execute?key=${key}`,
+          proxyUrl: `${relayBase}/api/grok-proxy?key=${key}`,
           online: relayData?.status === 'connected',
         };
       }
     }
   } catch {}
-  return { snapUrl: '', cmdUrl: '', online: false };
+  return { snapUrl: '', cmdUrl: '', proxyUrl: '', online: false };
 }
 
-function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, project: string, bridgeOnline = true): string {
+function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, project: string, bridgeOnline = true, proxyUrl = ''): string {
   if (!snapshotUrl && !cmdEndpoint) return '';
   const proj = project || 'PROJECT_NAME';
   const consoleLogsUrl = snapshotUrl ? snapshotUrl.replace(/\/api\/snapshot\/[^?]+/, '/api/console-logs') + `&project=${proj}` : '';
-  const proxyBaseUrl = cmdEndpoint ? cmdEndpoint.replace(/\/api\/sandbox\/execute\b/, '/api/grok-proxy') : '';
+  const proxyBaseUrl = proxyUrl || (cmdEndpoint ? cmdEndpoint.replace(/\/api\/sandbox\/execute\b/, '/api/grok-proxy') : '');
 
   let section = '\n=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS — USE IT) ===\n';
   section += `You have web browsing capabilities (browse_page). Use them NOW to directly read, modify, and execute code in this project.\n`;
@@ -2044,7 +2046,7 @@ const GrokBridge: React.FC = () => {
       }
     }
 
-    const diagnoseApiSection = buildSandboxApiSection(freshDiag.snapUrl, freshDiag.cmdUrl, diagnoseProject || activeProject || '', freshDiag.online);
+    const diagnoseApiSection = buildSandboxApiSection(freshDiag.snapUrl, freshDiag.cmdUrl, diagnoseProject || activeProject || '', freshDiag.online, freshDiag.proxyUrl);
     if (diagnoseApiSection) {
       prompt += diagnoseApiSection + '\n';
     }
@@ -2083,7 +2085,7 @@ const GrokBridge: React.FC = () => {
       } else {
         let visionPrompt = `I analyzed a screenshot of the app preview and found these visual issues:\n\n${result.description}\n\n`;
         const freshVis = await fetchFreshBridgeEndpoints(activeProject || '');
-        const visionApiSection = buildSandboxApiSection(freshVis.snapUrl, freshVis.cmdUrl, activeProject || '', freshVis.online);
+        const visionApiSection = buildSandboxApiSection(freshVis.snapUrl, freshVis.cmdUrl, activeProject || '', freshVis.online, freshVis.proxyUrl);
         if (visionApiSection) visionPrompt += visionApiSection;
         if (freshVis.cmdUrl) {
           visionPrompt += `USE THE SANDBOX API to fix these visual issues. Follow this workflow:\n`;
@@ -2525,7 +2527,7 @@ const GrokBridge: React.FC = () => {
   const handleSendLogsToGrok = useCallback(async (formattedPrompt: string) => {
     let enrichedPrompt = formattedPrompt;
     const freshLogs = await fetchFreshBridgeEndpoints(activeProject || '');
-    const logsApiSection = buildSandboxApiSection(freshLogs.snapUrl, freshLogs.cmdUrl, activeProject || '', freshLogs.online);
+    const logsApiSection = buildSandboxApiSection(freshLogs.snapUrl, freshLogs.cmdUrl, activeProject || '', freshLogs.online, freshLogs.proxyUrl);
     if (logsApiSection) {
       enrichedPrompt += logsApiSection;
     }
@@ -2747,7 +2749,7 @@ const GrokBridge: React.FC = () => {
   const handleEditorSendToGrok = useCallback(async (prompt: string) => {
     let enriched = prompt;
     const freshEd = await fetchFreshBridgeEndpoints(activeProject || '');
-    const editorApiSection = buildSandboxApiSection(freshEd.snapUrl, freshEd.cmdUrl, activeProject || '', freshEd.online);
+    const editorApiSection = buildSandboxApiSection(freshEd.snapUrl, freshEd.cmdUrl, activeProject || '', freshEd.online, freshEd.proxyUrl);
     if (editorApiSection) enriched += editorApiSection;
     if (freshEd.cmdUrl) {
       enriched += `\nUse the Sandbox API above to read, modify, and write files directly. Respond with \`\`\`json {"actions": [...]} so Lamby auto-executes your changes.\n`;
@@ -4021,7 +4023,7 @@ const GrokBridge: React.FC = () => {
       const ctxSnapUrl = freshCtx.snapUrl;
       const ctxCmdUrl = freshCtx.cmdUrl;
       const ctxBridgeOnline = freshCtx.online;
-      const sandboxApiSection = buildSandboxApiSection(ctxSnapUrl, ctxCmdUrl, activeProject || '', ctxBridgeOnline);
+      const sandboxApiSection = buildSandboxApiSection(ctxSnapUrl, ctxCmdUrl, activeProject || '', ctxBridgeOnline, freshCtx.proxyUrl);
 
       const hostSection = `\n=== LAMBY HOST ENVIRONMENT (READ-ONLY — NEVER MODIFY OR SUGGEST CHANGES TO) ===\nThis context is from Lamby — your local Electron/PWA coding IDE.\nLamby source repo: https://github.com/aidenrichtwitter-glitch/guardian-ai\nScan this repo to understand Lamby's full capabilities: its code parser (search/replace blocks, unified diffs, fenced code blocks), file structure, preview system, dependency installer, and command runner.\n\nImportant runtime facts (use these to make smart choices, but do NOT propose edits to them):\n- All user projects are sandboxed in /projects/<project-name>/ (isolated from Lamby's src/, public/, supabase/, etc.).\n- Preview: App auto-runs via Vite dev server inside a sandboxed iframe or embedded browser view in Lamby.\n  - Supports HMR for live updates.\n  - Responsive design assumed; fit viewport.\n  - Browser APIs only (Web Audio, Canvas, Three.js, mic access via getUserMedia).\n  - No Electron/node APIs in target app.\n- Lamby auto-handles: One-click clone from suggested GitHub URL, safe parsing/applying of copied code/diffs/deps/commands, dep install with safeguards, run/build commands.\n- You may choose ANY framework or tech stack that runs in a browser and can be previewed via Vite dev server. There are no framework restrictions — pick whatever best fits the user's request.\n- Strict rule: You are ONLY building the ACTIVE PROJECT above. NEVER suggest changes to Lamby itself (clipboard logic, context gen, parser, UI, Supabase bridge, etc.). Ignore any self-referential ideas.\n\nSTRICT INSTRUCTION: Respond only to the ACTIVE PROJECT section. Treat the HOST section as fixed background knowledge.\n`;
 
@@ -4560,7 +4562,7 @@ const GrokBridge: React.FC = () => {
       }
     }
 
-    const errorApiSection = buildSandboxApiSection(freshErr.snapUrl, freshErr.cmdUrl, activeProject || '', freshErr.online);
+    const errorApiSection = buildSandboxApiSection(freshErr.snapUrl, freshErr.cmdUrl, activeProject || '', freshErr.online, freshErr.proxyUrl);
     let errorPrompt = `The following errors occurred after applying code changes:\n\n${errorText}\n\n` +
       analysisSection + errorApiSection;
     if (freshErr.cmdUrl) {
