@@ -185,7 +185,7 @@ function extractBaseUrl(endpoint: string): string {
   }
 }
 
-async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: string; cmdUrl: string; proxyUrl: string; online: boolean }> {
+async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: string; cmdUrl: string; proxyUrl: string; editUrl: string; online: boolean }> {
   const isElectronEnv = typeof window !== 'undefined' && (window as any).process?.type === 'renderer';
   try {
     if (isElectronEnv) {
