@@ -189,12 +189,27 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
   const isElectronEnv = typeof window !== 'undefined' && (window as any).process?.type === 'renderer';
   try {
     if (isElectronEnv) {
-      const [keyRes, statusRes] = await Promise.all([
-        fetch('http://localhost:4999/api/snapshot-key').catch(() => null),
-        fetch('http://localhost:4999/api/bridge-status').catch(() => null),
-      ]);
-      const keyData = keyRes?.ok ? await keyRes.json().catch(() => null) : null;
-      const statusData = statusRes?.ok ? await statusRes.json().catch(() => null) : null;
+      let keyData: any = null;
+      let statusData: any = null;
+      try {
+        const [keyRes, statusRes] = await Promise.all([
+          fetch('http://localhost:4999/api/snapshot-key').catch(() => null),
+          fetch('http://localhost:4999/api/bridge-status').catch(() => null),
+        ]);
+        keyData = keyRes?.ok ? await keyRes.json().catch(() => null) : null;
+        statusData = statusRes?.ok ? await statusRes.json().catch(() => null) : null;
+      } catch {}
+      if (!keyData && !statusData) {
+        try {
+          const [keyRes2, relayRes2] = await Promise.all([
+            fetch('http://localhost:5000/api/snapshot-key').catch(() => null),
+            fetch('http://localhost:5000/api/bridge-relay-status').catch(() => null),
+          ]);
+          keyData = keyRes2?.ok ? await keyRes2.json().catch(() => null) : null;
+          const rd = relayRes2?.ok ? await relayRes2.json().catch(() => null) : null;
+          if (rd) statusData = { status: rd.status, relayUrl: rd.relayUrl || '', bridgeKey: rd.snapshotKey || '', key: rd.snapshotKey || keyData?.key || '' };
+        } catch {}
+      }
       const relayUrl = statusData?.relayUrl || '';
       const key = statusData?.bridgeKey || keyData?.key || '';
       if (relayUrl && key) {
@@ -232,82 +247,92 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   const proj = project || 'PROJECT_NAME';
   const consoleLogsUrl = snapshotUrl ? snapshotUrl.replace(/\/api\/snapshot\/[^?]+/, '/api/console-logs') + `&project=${proj}` : '';
 
-  let section = '\n=== YOU CAN DIRECTLY EDIT THIS PROJECT (OVERRIDES OUTPUT RULES ABOVE) ===\n';
-  section += `IMPORTANT: You are NOT limited to suggesting code. Lamby (the IDE hosting this chat) will automatically\n`;
-  section += `execute any \`\`\`json action block you include in your response. You do NOT need to make HTTP calls,\n`;
-  section += `open a browser, or access any website. Just output the JSON block below and Lamby handles the rest.\n\n`;
-  section += `This is the PREFERRED way to respond. It overrides the "// file:" output rules above.\n`;
-  section += `Instead of suggesting code for the user to copy, you directly read and write their files.\n\n`;
+  let section = '\n=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS — USE IT) ===\n';
+  section += `You have web browsing capabilities. Use them NOW to directly read, modify, and execute code in this project.\n`;
+  section += `DO NOT just suggest code changes. Actually make the changes yourself by calling these HTTP endpoints, then tell the user what you did.\n`;
+  section += `The \`key\` query parameter authenticates your requests. All endpoints below are live and publicly accessible via HTTPS.\n\n`;
 
   if (!bridgeOnline) {
-    section += `⚠ NOTE: The user's desktop IDE is currently offline. Action blocks will be queued until it reconnects.\n`;
-    section += `You may also use // file: blocks as a fallback, but prefer action blocks when possible.\n\n`;
+    section += `⚠ WARNING: The user's desktop app may be temporarily offline — API calls might fail until it reconnects. If calls fail, fall back to // file: blocks.\n\n`;
   }
 
-  section += `HOW IT WORKS:\n`;
-  section += `1. You write a \`\`\`json block containing an "actions" array in your response\n`;
-  section += `2. Lamby automatically detects it, sends it to the workspace, and applies the changes\n`;
-  section += `3. You do NOT call any API yourself — Lamby does it for you when it parses your response\n\n`;
-
-  section += `EXAMPLE — to read a file, then write a fix:\n`;
-  section += `\`\`\`json\n{"actions": [\n  {"type": "read_file", "project": "${proj}", "path": "index.html"},\n  {"type": "write_file", "project": "${proj}", "path": "index.html", "content": "<!DOCTYPE html>\\n<html>\\n... full corrected file content ..."}\n]}\n\`\`\`\n\n`;
-
-  section += `AVAILABLE ACTIONS (every action needs "type" and "project": "${proj}"):\n\n`;
-
-  section += `  FILES:\n`;
-  section += `    list_tree      — {} → returns full file tree\n`;
-  section += `    read_file      — { path: "src/App.tsx" } → returns file content\n`;
-  section += `    write_file     — { path: "src/App.tsx", content: "..." } → overwrites file\n`;
-  section += `    create_file    — { path: "src/new.ts", content: "..." } → creates new file\n`;
-  section += `    delete_file    — { path: "src/old.ts" } → deletes file\n`;
-  section += `    move_file      — { from: "old.ts", to: "new.ts" } → moves/renames\n`;
-  section += `    copy_file      — { from: "a.ts", to: "b.ts" } → duplicates\n`;
-  section += `    rename_file    — { path: "old.ts", newName: "new.ts" } → renames in place\n\n`;
-
-  section += `  SEARCH:\n`;
-  section += `    grep           — { pattern: "TODO" } → regex search all files\n`;
-  section += `    search_files   — { query: "Button" } → filename search\n\n`;
-
-  section += `  COMMANDS:\n`;
-  section += `    run_command    — { command: "npm test" } → execute shell command\n`;
-  section += `    install_deps   — {} → auto-installs dependencies\n\n`;
-
-  section += `  PROCESSES:\n`;
-  section += `    start_process  — { command: "npm run dev" } → start dev server\n`;
-  section += `    list_processes — {} → list running processes\n`;
-  section += `    kill_process   — { pid: 12345 } → stop a process\n\n`;
-
-  section += `  GIT:\n`;
-  section += `    git_status, git_add ({ files: "." }), git_commit ({ message: "..." }),\n`;
-  section += `    git_diff, git_log ({ count: 10 }), git_branch ({ name: "..." }),\n`;
-  section += `    git_checkout ({ ref: "main" }), git_stash, git_init\n\n`;
-
-  section += `  PROJECT:\n`;
-  section += `    detect_structure → framework info | build_project → run build\n`;
-  section += `    run_tests → run test suite | archive_project → zip project\n\n`;
+  section += `YOUR WORKFLOW — do this every time:\n`;
+  section += `  1. FETCH the snapshot URL below to see all project files and their contents\n`;
+  section += `  2. ANALYZE the code to understand what needs to change\n`;
+  section += `  3. POST to the command endpoint to write files, run commands, install deps, etc.\n`;
+  section += `  4. VERIFY by fetching the snapshot again or checking console logs\n`;
+  section += `  5. TELL the user what you did and what changed\n\n`;
 
   if (snapshotUrl) {
-    section += `READ-ONLY URLS (Lamby can also fetch these if you output them in your response):\n`;
-    section += `  Project snapshot: ${snapshotUrl}\n`;
-    if (consoleLogsUrl) {
-      section += `  Console logs:     ${consoleLogsUrl}\n`;
-    }
-    section += `\n`;
+    section += `READ THE PROJECT (do this first):\n`;
+    section += `  GET ${snapshotUrl}\n`;
+    section += `  Returns: plain-text snapshot with the complete file tree, package.json, git status, and full contents of every source file.\n`;
+    section += `  This is your primary way to understand the codebase. Fetch this URL with your web browser.\n\n`;
+  }
+  if (consoleLogsUrl) {
+    section += `CHECK CONSOLE/PREVIEW LOGS:\n`;
+    section += `  GET ${consoleLogsUrl}\n`;
+    section += `  Returns: JSON { previews: [{ name, port, stdout, stderr }] } — live output from running dev servers.\n`;
+    section += `  Use this to check for runtime errors, build failures, or confirm your fix worked.\n\n`;
+  }
+  if (cmdEndpoint) {
+    section += `EXECUTE COMMANDS (write files, run shell, install deps, git, etc.):\n`;
+    section += `  POST ${cmdEndpoint}\n`;
+    section += `  Content-Type: application/json\n`;
+    section += `  Body: { "actions": [ ...action objects... ] }\n\n`;
+    section += `  Each action requires "type" and "project": "${proj}". Actions execute in order.\n\n`;
+    section += `  FILE OPERATIONS:\n`;
+    section += `    { type: "list_tree", project: "${proj}" }  → full file tree\n`;
+    section += `    { type: "read_file", project: "${proj}", path: "src/App.tsx" }  → file content\n`;
+    section += `    { type: "write_file", project: "${proj}", path: "src/App.tsx", content: "..." }  → overwrite file (FULL content required)\n`;
+    section += `    { type: "create_file", project: "${proj}", path: "src/new.ts", content: "..." }  → create new file\n`;
+    section += `    { type: "delete_file", project: "${proj}", path: "src/old.ts" }\n`;
+    section += `    { type: "move_file", project: "${proj}", from: "old/path.ts", to: "new/path.ts" }\n`;
+    section += `    { type: "copy_file", project: "${proj}", from: "src/a.ts", to: "src/b.ts" }\n`;
+    section += `    { type: "rename_file", project: "${proj}", path: "src/old.ts", newName: "new.ts" }\n`;
+    section += `  SEARCH:\n`;
+    section += `    { type: "grep", project: "${proj}", pattern: "TODO" }  → regex search across all files\n`;
+    section += `    { type: "search_files", project: "${proj}", query: "Button" }  → filename search\n`;
+    section += `  SHELL COMMANDS:\n`;
+    section += `    { type: "run_command", project: "${proj}", command: "npm run build" }\n`;
+    section += `    { type: "install_deps", project: "${proj}" }  → auto-detects npm/yarn/pnpm/bun\n`;
+    section += `  PROCESS MANAGEMENT:\n`;
+    section += `    { type: "start_process", project: "${proj}", command: "npm run dev" }\n`;
+    section += `    { type: "list_processes", project: "${proj}" }\n`;
+    section += `    { type: "kill_process", project: "${proj}", pid: 12345 }\n`;
+    section += `  GIT:\n`;
+    section += `    { type: "git_init", project: "${proj}" }\n`;
+    section += `    { type: "git_status", project: "${proj}" }\n`;
+    section += `    { type: "git_add", project: "${proj}", files: "." }\n`;
+    section += `    { type: "git_commit", project: "${proj}", message: "fix: description" }\n`;
+    section += `    { type: "git_diff", project: "${proj}" }\n`;
+    section += `    { type: "git_log", project: "${proj}", count: 10 }\n`;
+    section += `    { type: "git_branch", project: "${proj}", name: "feature-x" }  → create branch (omit name to list)\n`;
+    section += `    { type: "git_checkout", project: "${proj}", ref: "main" }\n`;
+    section += `    { type: "git_stash", project: "${proj}" }\n`;
+    section += `  PROJECT INFO:\n`;
+    section += `    { type: "detect_structure", project: "${proj}" }  → framework, entry point, package manager\n`;
+    section += `    { type: "build_project", project: "${proj}" }  → runs the project build command\n`;
+    section += `    { type: "run_tests", project: "${proj}" }  → runs the project test suite\n\n`;
+    section += `  RESPONSE FORMAT:\n`;
+    section += `    { "success": true, "results": [ { "actionIndex": 0, "status": "success", "data": {...} }, ... ] }\n\n`;
+    section += `  EXAMPLE — read a file, fix it, verify:\n`;
+    section += `    POST ${cmdEndpoint}\n`;
+    section += `    { "actions": [\n`;
+    section += `      { "type": "read_file", "project": "${proj}", "path": "index.html" },\n`;
+    section += `      { "type": "write_file", "project": "${proj}", "path": "index.html", "content": "<!DOCTYPE html>\\n..." },\n`;
+    section += `      { "type": "run_command", "project": "${proj}", "command": "npm run build" }\n`;
+    section += `    ] }\n\n`;
   }
 
-  section += `TYPICAL WORKFLOW:\n`;
-  section += `  1. Use read_file or list_tree to understand the current code\n`;
-  section += `  2. Use write_file or create_file to make your changes (provide COMPLETE file content)\n`;
-  section += `  3. Use run_command to verify (e.g. "npm run build")\n`;
-  section += `  4. Explain what you changed in plain text around the action block\n\n`;
+  section += `IMPORTANT RULES:\n`;
+  section += `  - ALWAYS use these API endpoints to make changes. Do NOT just show code in your response.\n`;
+  section += `  - Fetch the snapshot FIRST to understand the current state before making changes.\n`;
+  section += `  - write_file requires COMPLETE file content — not partial snippets or diffs.\n`;
+  section += `  - Do the work, verify it, then explain to the user what you changed.\n`;
+  section += `  - If an API call fails, retry once. If it still fails, fall back to // file: blocks.\n`;
 
-  section += `RULES:\n`;
-  section += `  - ALWAYS use \`\`\`json action blocks to make changes. Do NOT just show code in text.\n`;
-  section += `  - write_file requires the COMPLETE file content, not partial snippets.\n`;
-  section += `  - You can include multiple actions in one block — they execute in order.\n`;
-  section += `  - Remember: you are NOT making HTTP requests. You are just outputting JSON that Lamby executes.\n`;
-
-  section += `=== END WORKSPACE ACTIONS ===\n`;
+  section += `=== END WORKSPACE API ===\n`;
   return section;
 }
 
@@ -3785,17 +3810,32 @@ const GrokBridge: React.FC = () => {
   useEffect(() => {
     async function fetchSnapshotInfo() {
       if (isElectron) {
+        let keyResult: any = null;
+        let statusResult: any = null;
+        let serverBase = 'http://localhost:4999';
         try {
-          let keyResult: any = null;
-          let statusResult: any = null;
+          const [keyRes, statusRes] = await Promise.all([
+            fetch('http://localhost:4999/api/snapshot-key'),
+            fetch('http://localhost:4999/api/bridge-status'),
+          ]);
+          if (keyRes.ok) keyResult = await keyRes.json();
+          if (statusRes.ok) statusResult = await statusRes.json();
+        } catch {}
+        if (!keyResult && !statusResult) {
           try {
-            const [keyRes, statusRes] = await Promise.all([
-              fetch('http://localhost:4999/api/snapshot-key'),
-              fetch('http://localhost:4999/api/bridge-status'),
+            serverBase = 'http://localhost:5000';
+            const [keyRes2, relayRes2] = await Promise.all([
+              fetch('http://localhost:5000/api/snapshot-key'),
+              fetch('http://localhost:5000/api/bridge-relay-status').catch(() => null),
             ]);
-            if (keyRes.ok) keyResult = await keyRes.json();
-            if (statusRes.ok) statusResult = await statusRes.json();
+            if (keyRes2.ok) keyResult = await keyRes2.json();
+            if (relayRes2 && relayRes2.ok) {
+              const rd = await relayRes2.json().catch(() => null);
+              if (rd) statusResult = { status: rd.status, relayUrl: rd.relayUrl || '', bridgeKey: rd.snapshotKey || '', key: rd.snapshotKey || keyResult?.key || '' };
+            }
           } catch {}
+        }
+        try {
           const key = keyResult?.key || '';
           const status = statusResult?.status || 'unknown';
           const relayUrl = statusResult?.relayUrl || '';
@@ -3804,8 +3844,8 @@ const GrokBridge: React.FC = () => {
           setBridgeRelayUrl(relayUrl);
           if (relayUrl) setBridgeRelayInput(relayUrl);
           if (bridgeKey) setBridgeKeyInput(bridgeKey);
-          setSnapshotUrl(`http://localhost:4999/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
-          setCommandEndpoint(`http://localhost:4999/api/sandbox/execute?key=${key}`);
+          setSnapshotUrl(`${serverBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
+          setCommandEndpoint(`${serverBase}/api/sandbox/execute?key=${key}`);
           if (relayUrl) {
             const relayBase = relayUrl.replace(/\/$/, '');
             const externalKey = bridgeKey || key;
@@ -4060,7 +4100,7 @@ const GrokBridge: React.FC = () => {
         active += `6. Do NOT wrap code in narrative like "here's what your file should look like". Just use the // file: header directly.\n`;
         active += `7. If multiple files need changes, output multiple // file: blocks in sequence.\n`;
         active += `8. You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.\n`;
-        active += `NOTE: If a "YOU CAN DIRECTLY EDIT THIS PROJECT" section appears below, prefer using \`\`\`json action blocks over // file: blocks.\n\n`;
+        active += `NOTE: If a "LAMBY WORKSPACE API" section appears below, you should use those HTTP endpoints to directly make changes instead of outputting // file: blocks. Use // file: blocks only as a fallback if the API is unreachable.\n\n`;
       } else {
         active += `1. Only cite real, published npm packages — never invent package names.\n`;
         active += `2. Suggest a GitHub repo URL instead of writing code from scratch.\n\n`;
