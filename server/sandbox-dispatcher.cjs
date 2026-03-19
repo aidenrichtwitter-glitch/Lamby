@@ -106,6 +106,16 @@ function validateProjectPath(projectName, filePath, projectsDir) {
   return { valid: true, resolved: projectDir };
 }
 
+function validateBoundedPath(filePath, rootDir) {
+  if (!filePath || typeof filePath !== "string") return { valid: false, resolved: "", error: "path required" };
+  if (/\0/.test(filePath)) return { valid: false, resolved: "", error: "Null bytes not allowed" };
+  const resolved = path.resolve(rootDir, filePath);
+  if (!resolved.startsWith(rootDir + path.sep) && resolved !== rootDir) {
+    return { valid: false, resolved: "", error: "Path traversal blocked" };
+  }
+  return { valid: true, resolved };
+}
+
 function sanitizeGitArg(val) {
   if (!val || typeof val !== "string") return "";
   const clean = val.trim();
@@ -1377,14 +1387,14 @@ function executeSandboxAction(action, projectsDir, options) {
       }
       case "create_folder": {
         if (!action.path) return { status: "error", type: t, error: "path required" };
-        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
+        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : validateBoundedPath(action.path, projectsDir);
         if (!c.valid) return { status: "error", type: t, error: c.error };
         fs.mkdirSync(c.resolved, { recursive: true });
         return { status: "success", type: t, data: { path: action.path, created: true } };
       }
       case "delete_folder": {
         if (!action.path) return { status: "error", type: t, error: "path required" };
-        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, action.path) };
+        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : validateBoundedPath(action.path, projectsDir);
         if (!c.valid) return { status: "error", type: t, error: c.error };
         if (!fs.existsSync(c.resolved)) return { status: "error", type: t, error: "Folder not found" };
         fs.rmSync(c.resolved, { recursive: action.recursive !== false, force: true });
@@ -1397,8 +1407,8 @@ function executeSandboxAction(action, projectsDir, options) {
         const srcPath = action.from || action.source;
         let dstPath = action.to || action.dest;
         if (!dstPath && action.newName) dstPath = path.join(path.dirname(srcPath), action.newName);
-        const src = projectName ? validateProjectPath(projectName, srcPath, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, srcPath) };
-        const dst = projectName ? validateProjectPath(projectName, dstPath, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, dstPath) };
+        const src = projectName ? validateProjectPath(projectName, srcPath, projectsDir) : validateBoundedPath(srcPath, projectsDir);
+        const dst = projectName ? validateProjectPath(projectName, dstPath, projectsDir) : validateBoundedPath(dstPath, projectsDir);
         if (!src.valid) return { status: "error", type: t, error: src.error };
         if (!dst.valid) return { status: "error", type: t, error: dst.error };
         if (!fs.existsSync(src.resolved)) return { status: "error", type: t, error: "Source folder not found" };
@@ -1495,8 +1505,8 @@ function executeSandboxAction(action, projectsDir, options) {
             try {
               const content = fs.readFileSync(full, "utf-8");
               const imports = [];
-              const re = /(?:import|require)\s*\(?['"]([^'"]+)['"]\)?/g;
-              let m; while ((m = re.exec(content)) !== null) imports.push(m[1]);
+              const re = /(?:import\s+(?:[\w{},*\s]+\s+from\s+)?['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\))/g;
+              let m; while ((m = re.exec(content)) !== null) imports.push(m[1] || m[2]);
               graph[r] = { imports: imports.slice(0, 50) };
             } catch {}
           }
@@ -1757,11 +1767,55 @@ function executeSandboxAction(action, projectsDir, options) {
       }
       case "visual_diff": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
-        return { status: "success", type: t, data: { beforeUrl: action.beforeUrl, afterUrl: action.afterUrl, note: "Visual diff requires puppeteer/playwright. Use capture_preview for each URL separately and compare manually." } };
+        if (!action.beforeUrl && !action.afterUrl) return { status: "error", type: t, error: "beforeUrl and afterUrl required" };
+        let puppeteerPath = null;
+        try { puppeteerPath = require.resolve("puppeteer"); } catch {}
+        if (!puppeteerPath) { try { puppeteerPath = require.resolve("puppeteer-core"); } catch {} }
+        if (puppeteerPath) {
+          const outDir = path.join(dir, ".visual-diffs");
+          if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+          const ts = Date.now();
+          const script = `const p=require("${puppeteerPath.replace(/\\/g, "/")}");(async()=>{const b=await p.launch({headless:"new",args:["--no-sandbox"]});const pg=await b.newPage();` +
+            (action.beforeUrl ? `await pg.goto(${JSON.stringify(action.beforeUrl)},{waitUntil:"networkidle2",timeout:15000});await pg.screenshot({path:${JSON.stringify(path.join(outDir, `before-${ts}.png`))},fullPage:true});` : "") +
+            (action.afterUrl ? `await pg.goto(${JSON.stringify(action.afterUrl)},{waitUntil:"networkidle2",timeout:15000});await pg.screenshot({path:${JSON.stringify(path.join(outDir, `after-${ts}.png`))},fullPage:true});` : "") +
+            `await b.close();console.log("done");})().catch(e=>{console.error(e.message);process.exit(1);})`;
+          try {
+            childProcess.execFileSync("node", ["-e", script], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            return { status: "success", type: t, data: { beforeFile: action.beforeUrl ? `before-${ts}.png` : null, afterFile: action.afterUrl ? `after-${ts}.png` : null, outputDir: ".visual-diffs" } };
+          } catch (e) {
+            return { status: "error", type: t, error: `Visual diff capture failed: ${(e.stderr || e.message || "").slice(0, 500)}` };
+          }
+        }
+        return { status: "success", type: t, data: { beforeUrl: action.beforeUrl, afterUrl: action.afterUrl, available: false, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer" } };
       }
       case "capture_component": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
-        return { status: "success", type: t, data: { componentName: action.componentName, note: "Component capture requires a running Storybook or isolated render. Use capture_preview with the component's URL." } };
+        if (!action.componentName && !action.url) return { status: "error", type: t, error: "componentName or url required" };
+        let puppeteerPath = null;
+        try { puppeteerPath = require.resolve("puppeteer"); } catch {}
+        if (!puppeteerPath) { try { puppeteerPath = require.resolve("puppeteer-core"); } catch {} }
+        if (puppeteerPath && action.url) {
+          const outDir = path.join(dir, ".component-captures");
+          if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+          const ts = Date.now();
+          const safeName = (action.componentName || "component").replace(/[^a-zA-Z0-9_-]/g, "_");
+          const outFile = path.join(outDir, `${safeName}-${ts}.png`);
+          const selectorCode = action.selector
+            ? `const el=await pg.$(${JSON.stringify(action.selector)});if(el){await el.screenshot({path:${JSON.stringify(outFile)}})}else{await pg.screenshot({path:${JSON.stringify(outFile)},fullPage:true})}`
+            : `await pg.screenshot({path:${JSON.stringify(outFile)},fullPage:true})`;
+          const script = `const p=require("${puppeteerPath.replace(/\\/g, "/")}");(async()=>{const b=await p.launch({headless:"new",args:["--no-sandbox"]});const pg=await b.newPage();` +
+            `await pg.goto(${JSON.stringify(action.url)},{waitUntil:"networkidle2",timeout:15000});${selectorCode};await b.close();console.log("done");})().catch(e=>{console.error(e.message);process.exit(1);})`;
+          try {
+            childProcess.execFileSync("node", ["-e", script], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            return { status: "success", type: t, data: { file: `${safeName}-${ts}.png`, outputDir: ".component-captures", componentName: action.componentName } };
+          } catch (e) {
+            return { status: "error", type: t, error: `Component capture failed: ${(e.stderr || e.message || "").slice(0, 500)}` };
+          }
+        }
+        if (!puppeteerPath) {
+          return { status: "success", type: t, data: { componentName: action.componentName, available: false, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer. Then provide a url to capture." } };
+        }
+        return { status: "success", type: t, data: { componentName: action.componentName, available: true, note: "Provide a url parameter pointing to the component's isolated render (Storybook URL or dev server route) to capture it." } };
       }
       case "record_video": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
