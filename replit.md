@@ -308,6 +308,20 @@ supabase/
 - **Bridge Prompt Doc**: `electron-browser/BRIDGE_PROMPT.md` — paste-ready prompt for AI chat with all ~110 commands documented.
 - **Field names**: `copy_file`/`rename_file`/`move_file` use `source`/`dest` (not `from`/`to`). `move_folder`/`rename_folder` accept `from`/`source` + `to`/`dest`/`newName`. `list_tree` returns `entries`. `search_files` uses `pattern`.
 
+## Batch Command Testing
+- **Test harness**: `server/batch-cmd-test.cjs` — 9 groups covering all 84+ sandbox commands
+- **Two phases**: Phase 1 (direct HTTP tests), Phase 2 (Grok-4 autonomous execution via bridge relay)
+- **Run**: `node server/batch-cmd-test.cjs <group> [p1|p2]` — group 1-9, p1=direct, p2=Grok
+- **All 59 Phase 1 direct tests pass** (9 groups × 100%)
+- **All 9 Phase 2 groups pass** — Grok-4 autonomously exercised 65 commands across all groups
+- **Key param fixes found during testing**:
+  - `extract_imports` uses `file` (not `path`)
+  - `generate_test`/`optimize_code` use `file` (not `path`)
+  - `generate_component` needs `description` or `spec` (not `props`)
+  - `super_command` needs `description` (not `command`)
+  - `manage_scripts` now supports read-only mode (omit `command` field to read without writing)
+  - `git_tag` always requires `name` — use `run_command` with `git tag` to list tags
+
 ## Testing
 - `npm test` — runs all Vitest tests
 - `npm run test:watch` — watch mode

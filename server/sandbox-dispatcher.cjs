@@ -2307,13 +2307,16 @@ function executeSandboxAction(action, projectsDir, options) {
         try {
           const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
           if (!pkg.scripts) pkg.scripts = {};
-          if (action.command === null || action.command === "") {
-            delete pkg.scripts[action.scriptName];
-          } else if (action.command) {
-            pkg.scripts[action.scriptName] = action.command;
+          const isWrite = action.hasOwnProperty("command");
+          if (isWrite) {
+            if (action.command === null || action.command === "") {
+              delete pkg.scripts[action.scriptName];
+            } else {
+              pkg.scripts[action.scriptName] = action.command;
+            }
+            fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
           }
-          fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
-          return { status: "success", type: t, data: { scriptName: action.scriptName, command: action.command || "(deleted)", scripts: pkg.scripts } };
+          return { status: "success", type: t, data: { scriptName: action.scriptName, command: isWrite ? (action.command || "(deleted)") : (pkg.scripts[action.scriptName] || "(not found)"), scripts: pkg.scripts } };
         } catch (e) {
           return { status: "error", type: t, error: e.message?.slice(0, 1000) };
         }
