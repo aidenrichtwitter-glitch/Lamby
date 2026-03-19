@@ -44,6 +44,7 @@ function saveBridgeConfig(config) {
   }
 }
 
+const CANONICAL_RELAY_URL = "https://bridge-relay.replit.app";
 let bridgeConfig = loadBridgeConfig();
 let bridgeSocket = null;
 let bridgeConnected = false;
@@ -51,6 +52,8 @@ let bridgeReconnectTimer = null;
 let bridgeReconnectDelay = 2000;
 let bridgePingTimer = null;
 let bridgeBuffer = Buffer.alloc(0);
+let bridgeFailCount = 0;
+let bridgeTriedFallback = false;
 
 function wsClientEncodeFrame(data) {
   const payload = Buffer.from(data, "utf-8");
@@ -161,7 +164,14 @@ function connectToBridgeRelay() {
   bridgeConnected = false;
   if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
 
-  const relayUrl = bridgeConfig.relayUrl || "https://bridge-relay.replit.app";
+  let relayUrl = bridgeConfig.relayUrl || CANONICAL_RELAY_URL;
+  if (bridgeFailCount >= 3 && !bridgeTriedFallback && relayUrl !== CANONICAL_RELAY_URL) {
+    console.log(`[Bridge] Stored relay URL failed ${bridgeFailCount} times — falling back to ${CANONICAL_RELAY_URL}`);
+    relayUrl = CANONICAL_RELAY_URL;
+    bridgeTriedFallback = true;
+    bridgeConfig.relayUrl = CANONICAL_RELAY_URL;
+    saveBridgeConfig(bridgeConfig);
+  }
   if (!relayUrl) { console.log("[Bridge] No relay URL configured — skipping auto-connect"); return; }
 
   let parsed;
@@ -207,6 +217,7 @@ function connectToBridgeRelay() {
       const statusLine = httpBuffer.split("\r\n")[0];
       if (!statusLine.includes("101")) {
         console.error(`[Bridge] Handshake failed: ${statusLine}`);
+        bridgeFailCount++;
         socket.destroy();
         scheduleBridgeReconnect();
         return;
@@ -215,6 +226,8 @@ function connectToBridgeRelay() {
       bridgeSocket = socket;
       bridgeConnected = true;
       bridgeReconnectDelay = 2000;
+      bridgeFailCount = 0;
+      bridgeTriedFallback = false;
       console.log(`[Bridge] Connected to relay at ${host}`);
       bridgePingTimer = setInterval(() => {
         bridgeSend(JSON.stringify({ type: "ping" }));
@@ -957,6 +970,8 @@ const server = http.createServer(async (req, res) => {
       saveBridgeConfig(bridgeConfig);
       if (bridgeReconnectTimer) { clearTimeout(bridgeReconnectTimer); bridgeReconnectTimer = null; }
       bridgeReconnectDelay = 2000;
+      bridgeFailCount = 0;
+      bridgeTriedFallback = false;
       connectToBridgeRelay();
       sendJson(res, { success: true });
     } catch (err) {
@@ -969,6 +984,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "POST" && req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     if (bridgeReconnectTimer) { clearTimeout(bridgeReconnectTimer); bridgeReconnectTimer = null; }
     bridgeReconnectDelay = 2000;
+    bridgeFailCount = 0;
+    bridgeTriedFallback = false;
     connectToBridgeRelay();
     sendJson(res, { success: true, status: "reconnecting" });
     return;

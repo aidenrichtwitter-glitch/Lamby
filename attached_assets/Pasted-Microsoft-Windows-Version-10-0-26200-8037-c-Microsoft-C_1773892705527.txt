@@ -1,0 +1,47 @@
+Microsoft Windows [Version 10.0.26200.8037]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:dev
+
+> guardian-ai@1.0.0 electron:dev
+> concurrently --kill-others "vite --host 0.0.0.0 --port 5000" "wait-on http://localhost:5000 && cd electron-browser && npx electron ."
+
+[0] [Lamby] Snapshot key generated (use /api/snapshot-key from localhost to retrieve)
+[0]
+[0]   VITE v5.4.19  ready in 246 ms
+[0]
+[0]   ➜  Local:   http://localhost:5000/
+[0]   ➜  Network: http://192.168.1.182:5000/
+[1]
+[1] Grok Desktop: GPU acceleration enabled
+[0] [Bridge] Connecting to bridge-relay.replit.app...
+[0] [Bridge] Connected to relay at bridge-relay.replit.app
+[1] [Lamby Local] Server running on port 4999
+[1] [Lamby Local] Snapshot key: 5cc4b25dcf5645f472d91f512335fbf5
+[1] [Lamby Local] Projects dir: C:\Users\Aiden\.guardian-ai\projects
+[1] [Lamby Local] Sandbox API: http://localhost:4999/api/sandbox/execute
+[1] [Lamby Local] Bridge relay: https://1c939773-48b7-4bc9-a756-e1662d029e2d-00-2lo4tnwfe5r7g.worf.replit.dev
+[1] [Bridge] Connecting to 1c939773-48b7-4bc9-a756-e1662d029e2d-00-2lo4tnwfe5r7g.worf.replit.dev:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 502 Bad Gateway
+[1] [Bridge] Reconnecting in 2s...
+[1] [Bridge] Connecting to 1c939773-48b7-4bc9-a756-e1662d029e2d-00-2lo4tnwfe5r7g.worf.replit.dev:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 502 Bad Gateway
+[1] [Bridge] Reconnecting in 3s...
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [Bridge] Connecting to 1c939773-48b7-4bc9-a756-e1662d029e2d-00-2lo4tnwfe5r7g.worf.replit.dev:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 502 Bad Gateway
+[1] [Bridge] Reconnecting in 4.5s...
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [Bridge] Connecting to 1c939773-48b7-4bc9-a756-e1662d029e2d-00-2lo4tnwfe5r7g.worf.replit.dev:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 502 Bad Gateway
+[1] [Bridge] Reconnecting in 6.75s...
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [Bridge] Connecting to 1c939773-48b7-4bc9-a756-e1662d029e2d-00-2lo4tnwfe5r7g.worf.replit.dev:443/bridge-ws...
+[1] [Bridge] Handshake failed: HTTP/1.1 502 Bad Gateway
+[1] [Bridge] Reconnecting in 10.125s...
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[1] [GROK-IPC] grok-snapsho
