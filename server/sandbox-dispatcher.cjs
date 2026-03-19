@@ -3,6 +3,17 @@ const path = require("path");
 const childProcess = require("child_process");
 const https = require("https");
 
+let _chromiumPath = null;
+function getChromiumPath() {
+  if (_chromiumPath) return _chromiumPath;
+  try {
+    _chromiumPath = childProcess.execSync("which chromium", { encoding: "utf-8", timeout: 3000 }).trim();
+    if (_chromiumPath && fs.existsSync(_chromiumPath)) return _chromiumPath;
+  } catch {}
+  _chromiumPath = null;
+  return null;
+}
+
 function uploadScreenshot(filePath) {
   return new Promise((resolve) => {
     try {
@@ -1231,10 +1242,13 @@ function executeSandboxAction(action, projectsDir, options) {
         if (hasPlaywright || hasPuppeteer) {
           const captureScript = hasPlaywright
             ? `const { chromium } = require('playwright'); (async()=>{ const b=await chromium.launch({headless:true}); const p=await b.newPage(); await p.setViewportSize({width:${action.width||1280},height:${action.height||720}}); await p.goto('${previewUrl}',{waitUntil:'networkidle',timeout:15000}).catch(()=>{}); await p.screenshot({path:'${screenshotPath.replace(/'/g,"\\'")}',fullPage:${!!action.fullPage}}); await b.close(); })();`
-            : `const pup = require('puppeteer'); (async()=>{ const b=await pup.launch({headless:'new',args:['--no-sandbox']}); const p=await b.newPage(); await p.setViewport({width:${action.width||1280},height:${action.height||720}}); await p.goto('${previewUrl}',{waitUntil:'networkidle0',timeout:15000}).catch(()=>{}); await p.screenshot({path:'${screenshotPath.replace(/'/g,"\\'")}',fullPage:${!!action.fullPage}}); await b.close(); })();`;
+            : `const pup = require('puppeteer'); (async()=>{ const b=await pup.launch({headless:'new',args:['--no-sandbox','--disable-gpu'],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined}); const p=await b.newPage(); await p.setViewport({width:${action.width||1280},height:${action.height||720}}); await p.goto('${previewUrl}',{waitUntil:'networkidle0',timeout:15000}).catch(()=>{}); await p.screenshot({path:'${screenshotPath.replace(/'/g,"\\'")}',fullPage:${!!action.fullPage}}); await b.close(); })();`;
           return new Promise((resolve) => {
             try {
-              childProcess.execSync(`node -e "${captureScript.replace(/"/g, '\\"')}"`, { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+              const chromExecEnv = Object.assign({}, process.env);
+              const chromPath = getChromiumPath();
+              if (chromPath) chromExecEnv.PUPPETEER_CHROMIUM_PATH = chromPath;
+              childProcess.execSync(`node -e "${captureScript.replace(/"/g, '\\"')}"`, { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env: chromExecEnv });
               if (fs.existsSync(screenshotPath)) {
                 const imgData = fs.readFileSync(screenshotPath);
                 const base64 = imgData.toString("base64");
@@ -1310,10 +1324,13 @@ function executeSandboxAction(action, projectsDir, options) {
         ) : `await p.screenshot({path:ss,fullPage:${!!action.fullPage}})`;
         const captureScript = hasPlaywright
           ? `const{chromium}=require('playwright');(async()=>{const b=await chromium.launch({headless:true});const p=await b.newPage();await p.setViewportSize({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle',timeout:15000}).catch(()=>{});await p.waitForTimeout(${waitMs});const ss=${JSON.stringify(screenshotPath)};${selectorSnippet};await b.close()})();`
-          : `const pup=require(${JSON.stringify(puppeteerPath || "puppeteer")});(async()=>{const b=await pup.launch({headless:'new',args:['--no-sandbox']});const p=await b.newPage();await p.setViewport({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle0',timeout:15000}).catch(()=>{});await new Promise(r=>setTimeout(r,${waitMs}));const ss=${JSON.stringify(screenshotPath)};${selectorSnippet};await b.close()})();`;
+          : `const pup=require(${JSON.stringify(puppeteerPath || "puppeteer")});(async()=>{const b=await pup.launch({headless:'new',args:['--no-sandbox','--disable-gpu'],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined});const p=await b.newPage();await p.setViewport({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle0',timeout:15000}).catch(()=>{});await new Promise(r=>setTimeout(r,${waitMs}));const ss=${JSON.stringify(screenshotPath)};${selectorSnippet};await b.close()})();`;
         return new Promise(async (resolve) => {
           try {
-            childProcess.execSync(`node -e "${captureScript.replace(/"/g, '\\"')}"`, { cwd: dir, timeout: 45000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            const chromExecEnv2 = Object.assign({}, process.env);
+            const chromPath2 = getChromiumPath();
+            if (chromPath2) chromExecEnv2.PUPPETEER_CHROMIUM_PATH = chromPath2;
+            childProcess.execSync(`node -e "${captureScript.replace(/"/g, '\\"')}"`, { cwd: dir, timeout: 45000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env: chromExecEnv2 });
             if (fs.existsSync(screenshotPath)) {
               const screenshotRelPath = `_screenshots/${screenshotName}`;
               const upload = await uploadScreenshot(screenshotPath);
@@ -1453,10 +1470,13 @@ function executeSandboxAction(action, projectsDir, options) {
           : "";
         const script = hasPlaywright2
           ? `const{chromium}=require('playwright');const fs=require('fs');(async()=>{const b=await chromium.launch({headless:true});const p=await b.newPage();await p.setViewportSize({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle',timeout:15000}).catch(()=>{});await p.waitForTimeout(${waitMs});const result={action:${JSON.stringify(interactAction)},success:true};${actionCode}${ssCode}${getTextCode}fs.writeFileSync(${JSON.stringify(resultFile)},JSON.stringify(result));await b.close()})().catch(e=>{require('fs').writeFileSync(${JSON.stringify(resultFile)},JSON.stringify({error:e.message}))});`
-          : `const pup=require(${JSON.stringify(puppeteerPath||"puppeteer")});const fs=require('fs');(async()=>{const b=await pup.launch({headless:'new',args:['--no-sandbox']});const p=await b.newPage();await p.setViewport({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle0',timeout:15000}).catch(()=>{});await new Promise(r=>setTimeout(r,${waitMs}));const result={action:${JSON.stringify(interactAction)},success:true};${actionCode}${ssCode}${getTextCode}fs.writeFileSync(${JSON.stringify(resultFile)},JSON.stringify(result));await b.close()})().catch(e=>{require('fs').writeFileSync(${JSON.stringify(resultFile)},JSON.stringify({error:e.message}))});`;
+          : `const pup=require(${JSON.stringify(puppeteerPath||"puppeteer")});const fs=require('fs');(async()=>{const b=await pup.launch({headless:'new',args:['--no-sandbox','--disable-gpu'],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined});const p=await b.newPage();await p.setViewport({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle0',timeout:15000}).catch(()=>{});await new Promise(r=>setTimeout(r,${waitMs}));const result={action:${JSON.stringify(interactAction)},success:true};${actionCode}${ssCode}${getTextCode}fs.writeFileSync(${JSON.stringify(resultFile)},JSON.stringify(result));await b.close()})().catch(e=>{require('fs').writeFileSync(${JSON.stringify(resultFile)},JSON.stringify({error:e.message}))});`;
         return new Promise(async (resolve) => {
           try {
-            childProcess.execSync(`node -e "${script.replace(/"/g, '\\"')}"`, { cwd: dir, timeout: 60000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            const chromExecEnv3 = Object.assign({}, process.env);
+            const chromPath3 = getChromiumPath();
+            if (chromPath3) chromExecEnv3.PUPPETEER_CHROMIUM_PATH = chromPath3;
+            childProcess.execSync(`node -e "${script.replace(/"/g, '\\"')}"`, { cwd: dir, timeout: 60000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env: chromExecEnv3 });
             let result = { action: interactAction, success: true };
             if (fs.existsSync(resultFile)) {
               try { result = { ...result, ...JSON.parse(fs.readFileSync(resultFile, "utf-8")) }; } catch {}
@@ -2060,7 +2080,7 @@ function executeSandboxAction(action, projectsDir, options) {
           const ts = Date.now();
           const beforeFile = path.join(outDir, `before-${ts}.png`);
           const afterFile = path.join(outDir, `after-${ts}.png`);
-          const diffScript = `const p=require("${puppeteerPath.replace(/\\/g, "/")}");const fs=require("fs");(async()=>{const b=await p.launch({headless:"new",args:["--no-sandbox"]});const pg=await b.newPage();` +
+          const diffScript = `const p=require("${puppeteerPath.replace(/\\/g, "/")}");const fs=require("fs");(async()=>{const b=await p.launch({headless:"new",args:["--no-sandbox","--disable-gpu"],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined});const pg=await b.newPage();` +
             (action.beforeUrl ? `await pg.goto(${JSON.stringify(action.beforeUrl)},{waitUntil:"networkidle2",timeout:15000});await pg.screenshot({path:${JSON.stringify(beforeFile)},fullPage:true});` : "") +
             (action.afterUrl ? `await pg.goto(${JSON.stringify(action.afterUrl)},{waitUntil:"networkidle2",timeout:15000});await pg.screenshot({path:${JSON.stringify(afterFile)},fullPage:true});` : "") +
             `await b.close();` +
@@ -2074,7 +2094,10 @@ function executeSandboxAction(action, projectsDir, options) {
             `console.log(JSON.stringify(result));` +
             `})().catch(e=>{console.error(e.message);process.exit(1);})`;
           try {
-            const output = childProcess.execFileSync("node", ["-e", diffScript], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+            const chromExecEnv4 = Object.assign({}, process.env);
+            const chromPath4 = getChromiumPath();
+            if (chromPath4) chromExecEnv4.PUPPETEER_CHROMIUM_PATH = chromPath4;
+            const output = childProcess.execFileSync("node", ["-e", diffScript], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env: chromExecEnv4 }).trim();
             let comparison = {};
             try { comparison = JSON.parse(output); } catch {}
             return { status: "success", type: t, data: { beforeFile: action.beforeUrl ? `before-${ts}.png` : null, afterFile: action.afterUrl ? `after-${ts}.png` : null, outputDir: ".visual-diffs", comparison } };
@@ -2099,10 +2122,13 @@ function executeSandboxAction(action, projectsDir, options) {
           const selectorCode = action.selector
             ? `const el=await pg.$(${JSON.stringify(action.selector)});if(el){await el.screenshot({path:${JSON.stringify(outFile)}})}else{await pg.screenshot({path:${JSON.stringify(outFile)},fullPage:true})}`
             : `await pg.screenshot({path:${JSON.stringify(outFile)},fullPage:true})`;
-          const script = `const p=require("${puppeteerPath.replace(/\\/g, "/")}");(async()=>{const b=await p.launch({headless:"new",args:["--no-sandbox"]});const pg=await b.newPage();` +
+          const script = `const p=require("${puppeteerPath.replace(/\\/g, "/")}");(async()=>{const b=await p.launch({headless:"new",args:["--no-sandbox","--disable-gpu"],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined});const pg=await b.newPage();` +
             `await pg.goto(${JSON.stringify(action.url)},{waitUntil:"networkidle2",timeout:15000});${selectorCode};await b.close();console.log("done");})().catch(e=>{console.error(e.message);process.exit(1);})`;
           try {
-            childProcess.execFileSync("node", ["-e", script], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            const chromExecEnv5 = Object.assign({}, process.env);
+            const chromPath5 = getChromiumPath();
+            if (chromPath5) chromExecEnv5.PUPPETEER_CHROMIUM_PATH = chromPath5;
+            childProcess.execFileSync("node", ["-e", script], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env: chromExecEnv5 });
             return { status: "success", type: t, data: { file: `${safeName}-${ts}.png`, outputDir: ".component-captures", componentName: action.componentName } };
           } catch (e) {
             return { status: "error", type: t, error: `Component capture failed: ${(e.stderr || e.message || "").slice(0, 500)}` };

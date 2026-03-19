@@ -5,6 +5,7 @@ integrations = ["javascript_database:1.0.0", "github:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
+packages = ["glib", "nss", "nspr", "at-spi2-atk", "cups", "dbus", "libdrm", "gtk3", "pango", "cairo", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libxcb", "mesa", "expat", "alsa-lib", "xorg.libxshmfence", "libxkbcommon", "xorg.libXcursor", "xorg.libXi", "xorg.libXtst", "xorg.libXScrnSaver", "chromium"]
 
 [deployment]
 deploymentTarget = "gce"
