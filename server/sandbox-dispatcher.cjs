@@ -993,7 +993,10 @@ function executeSandboxAction(action, projectsDir) {
           }
         }
         twWalk(dir);
-        return { status: "success", type: t, data: { hasTailwind: hasTw, configFile: twConfigPath, configContent: twConfig ? twConfig.slice(0, 5000) : null, customColors, breakpoints, plugins, usedClassesSample: Array.from(usedClasses).slice(0, 200) } };
+        const commonUtilities = ["flex","grid","block","inline","hidden","relative","absolute","fixed","sticky","p-","m-","w-","h-","text-","bg-","border","rounded","shadow","opacity","overflow","z-","gap-","justify-","items-","self-","font-","leading-","tracking-","space-","divide-","ring-","transition","duration-","ease-","animate-","cursor-","select-","resize","fill-","stroke-","sr-only","container","mx-auto","max-w-","min-w-","max-h-","min-h-"];
+        const usedArray = Array.from(usedClasses);
+        const unusedUtilities = commonUtilities.filter(prefix => !usedArray.some(c => c.startsWith(prefix) || c.includes(`:${prefix}`)));
+        return { status: "success", type: t, data: { hasTailwind: hasTw, configFile: twConfigPath, configContent: twConfig ? twConfig.slice(0, 5000) : null, customColors, breakpoints, plugins, usedClassesSample: usedArray.slice(0, 200), unusedUtilityPrefixes: unusedUtilities, totalUsedClasses: usedClasses.size } };
       }
       case "find_usages": {
         if (!action.symbol) return { status: "error", type: t, error: "symbol required" };
@@ -1143,14 +1146,31 @@ function executeSandboxAction(action, projectsDir) {
           return { status: "success", type: t, data: { url: previewUrl, port: previewPort } };
         }
         if (!previewUrl) return { status: "error", type: t, error: "No preview server detected. Start a dev server first." };
-        let screenshot = null;
-        try {
-          const puppeteerCheck = fs.existsSync(path.join(dir, "node_modules/puppeteer")) || fs.existsSync(path.join(dir, "node_modules/playwright"));
-          if (puppeteerCheck) {
-            screenshot = { available: true, note: "Puppeteer/Playwright found but screenshot capture requires explicit setup" };
-          }
-        } catch {}
-        return { status: "success", type: t, data: { url: previewUrl, port: previewPort, screenshot, note: "Use this URL in a browser to view the preview. For automated screenshots, install puppeteer." } };
+        const screenshotPath = action.output || path.join(dir, `preview-${Date.now()}.png`);
+        const playwrightBin = path.join(dir, "node_modules/playwright");
+        const puppeteerBin = path.join(dir, "node_modules/puppeteer");
+        const hasPlaywright = fs.existsSync(playwrightBin);
+        const hasPuppeteer = fs.existsSync(puppeteerBin);
+        if (hasPlaywright || hasPuppeteer) {
+          const captureScript = hasPlaywright
+            ? `const { chromium } = require('playwright'); (async()=>{ const b=await chromium.launch({headless:true}); const p=await b.newPage(); await p.setViewportSize({width:${action.width||1280},height:${action.height||720}}); await p.goto('${previewUrl}',{waitUntil:'networkidle',timeout:15000}).catch(()=>{}); await p.screenshot({path:'${screenshotPath.replace(/'/g,"\\'")}',fullPage:${!!action.fullPage}}); await b.close(); })();`
+            : `const pup = require('puppeteer'); (async()=>{ const b=await pup.launch({headless:'new',args:['--no-sandbox']}); const p=await b.newPage(); await p.setViewport({width:${action.width||1280},height:${action.height||720}}); await p.goto('${previewUrl}',{waitUntil:'networkidle0',timeout:15000}).catch(()=>{}); await p.screenshot({path:'${screenshotPath.replace(/'/g,"\\'")}',fullPage:${!!action.fullPage}}); await b.close(); })();`;
+          return new Promise((resolve) => {
+            try {
+              childProcess.execSync(`node -e "${captureScript.replace(/"/g, '\\"')}"`, { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+              if (fs.existsSync(screenshotPath)) {
+                const imgData = fs.readFileSync(screenshotPath);
+                const base64 = imgData.toString("base64");
+                resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, screenshotPath, base64: base64.length < 5000000 ? base64 : null, base64Length: base64.length, captured: true } });
+              } else {
+                resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: "Screenshot file not created" } });
+              }
+            } catch (e) {
+              resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: `Screenshot failed: ${e.message}`.slice(0, 500) } });
+            }
+          });
+        }
+        return { status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, note: "Install puppeteer or playwright for automated screenshots. Use the URL to view the preview manually." } };
       }
       case "generate_component":
       case "generate_page":
@@ -1216,10 +1236,8 @@ function executeSandboxAction(action, projectsDir) {
                 const content = parsed.choices?.[0]?.message?.content;
                 if (!content) { resolve({ status: "error", type: _t, error: "No content in API response" }); return; }
                 let cleanContent = content.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "").trim();
-                const outCheck = _projectName ? validateProjectPath(_projectName, _outputPath, _projectsDir) : { valid: true, resolved: path.resolve(_projectsDir, _outputPath) };
-                const outDir = path.dirname(outCheck.resolved);
-                if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-                fs.writeFileSync(outCheck.resolved, cleanContent);
+                const writeResult = executeSandboxAction({ type: "write_file", project: _projectName, path: _outputPath, content: cleanContent }, _projectsDir);
+                if (writeResult.status === "error") { resolve({ status: "error", type: _t, error: `Write failed: ${writeResult.error}` }); return; }
                 resolve({ status: "success", type: _t, data: { path: _outputPath, generated: true, length: cleanContent.length, preview: cleanContent.slice(0, 500) } });
               } catch (e) {
                 resolve({ status: "error", type: _t, error: `AI generation failed: ${e.message}`.slice(0, 2000) });
@@ -1253,9 +1271,17 @@ function executeSandboxAction(action, projectsDir) {
         try {
           const eslintPath = fs.existsSync(path.join(dir, "node_modules/.bin/eslint")) ? path.join(dir, "node_modules/.bin/eslint") : null;
           if (eslintPath) {
-            const lintTarget = action.files || "src/";
+            let lintTargets = action.files || "src/";
+            if (typeof lintTargets === "string") lintTargets = [lintTargets];
+            const safeTargets = lintTargets.map(f => {
+              const clean = f.replace(/[;&|`${}()\n\r\t\\]/g, "");
+              if (clean.startsWith("-") || clean.includes("..")) return null;
+              return clean;
+            }).filter(Boolean);
+            if (safeTargets.length === 0) safeTargets.push("src/");
             try {
-              childProcess.execSync(`${eslintPath} ${lintTarget}`, { cwd: dir, timeout: 60000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+              const args = [...safeTargets];
+              childProcess.execFileSync(eslintPath, args, { cwd: dir, timeout: 60000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
               results.lint = { passed: true, errors: 0 };
             } catch (e) {
               const output = (e.stdout || "") + (e.stderr || "");
@@ -1295,8 +1321,32 @@ function executeSandboxAction(action, projectsDir) {
             break;
           }
         }
-        const hasLighthouse = fs.existsSync(path.join(dir, "node_modules/.bin/lhci")) || fs.existsSync(path.join(dir, "node_modules/.bin/lighthouse"));
-        results.lighthouse = { available: hasLighthouse, note: hasLighthouse ? "Run `npx lhci autorun` or `npx lighthouse URL` manually" : "Install @lhci/cli or lighthouse for automated audits" };
+        const lhciPath = fs.existsSync(path.join(dir, "node_modules/.bin/lhci")) ? path.join(dir, "node_modules/.bin/lhci") : null;
+        const lighthousePath = fs.existsSync(path.join(dir, "node_modules/.bin/lighthouse")) ? path.join(dir, "node_modules/.bin/lighthouse") : null;
+        if (lhciPath || lighthousePath) {
+          try {
+            const lhCmd = lhciPath ? `${lhciPath} autorun` : `${lighthousePath} http://localhost:${action.port || 3000} --output=json --chrome-flags="--no-sandbox --headless"`;
+            const lhOutput = childProcess.execSync(lhCmd, { cwd: dir, timeout: 120000, maxBuffer: 8 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            results.lighthouse = { available: true, ran: true, output: lhOutput.slice(0, 20000) };
+          } catch (e) {
+            results.lighthouse = { available: true, ran: false, error: (e.stderr || e.message || "").slice(0, 2000), output: (e.stdout || "").slice(0, 5000) };
+          }
+        } else {
+          const wbaPath = fs.existsSync(path.join(dir, "node_modules/.bin/webpack-bundle-analyzer")) ? path.join(dir, "node_modules/.bin/webpack-bundle-analyzer") : null;
+          if (wbaPath) {
+            results.lighthouse = { available: false };
+            try {
+              const statsPath = path.join(dir, "dist/stats.json");
+              if (fs.existsSync(statsPath)) {
+                results.bundleAnalyzer = { available: true, statsFile: "dist/stats.json" };
+              } else {
+                results.bundleAnalyzer = { available: true, note: "Run build with --json to generate stats.json" };
+              }
+            } catch {}
+          } else {
+            results.lighthouse = { available: false, note: "Install @lhci/cli or lighthouse for automated performance audits" };
+          }
+        }
         return { status: "success", type: t, data: results };
       }
       default:
