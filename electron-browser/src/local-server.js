@@ -154,9 +154,14 @@ async function handleBridgeMessage(msg) {
     const parsed = JSON.parse(msg);
     if (parsed.type === "snapshot-request" && parsed.requestId) {
       console.log(`[Bridge] Received snapshot-request for "${parsed.projectName || ""}" (reqId: ${parsed.requestId.slice(0, 8)})`);
-      const snapshot = gatherProjectSnapshot(parsed.projectName || "", PROJECTS_DIR);
-      bridgeSend(JSON.stringify({ type: "snapshot-response", requestId: parsed.requestId, snapshot }));
-      console.log(`[Bridge] Sent snapshot-response (reqId: ${parsed.requestId.slice(0, 8)}, len: ${typeof snapshot === 'string' ? snapshot.length : JSON.stringify(snapshot).length})`);
+      try {
+        const snapshot = gatherProjectSnapshot(parsed.projectName || "", PROJECTS_DIR);
+        bridgeSend(JSON.stringify({ type: "snapshot-response", requestId: parsed.requestId, snapshot }));
+        console.log(`[Bridge] Sent snapshot-response (reqId: ${parsed.requestId.slice(0, 8)}, len: ${typeof snapshot === 'string' ? snapshot.length : JSON.stringify(snapshot).length})`);
+      } catch (err) {
+        console.error(`[Bridge] snapshot error: ${err.message}`);
+        bridgeSend(JSON.stringify({ type: "snapshot-response", requestId: parsed.requestId, snapshot: `Error gathering snapshot: ${err.message}` }));
+      }
     } else if (parsed.type === "sandbox-execute-request" && parsed.requestId) {
       console.log(`[Bridge] Received sandbox-execute-request (reqId: ${parsed.requestId.slice(0, 8)}, actions: ${(parsed.actions || []).length})`);
       try {
@@ -169,9 +174,14 @@ async function handleBridgeMessage(msg) {
       }
     } else if (parsed.type === "console-logs-request" && parsed.requestId) {
       console.log(`[Bridge] Received console-logs-request for "${parsed.projectName || ""}" (reqId: ${parsed.requestId.slice(0, 8)})`);
-      const logs = gatherConsoleLogs(parsed.projectName || "");
-      bridgeSend(JSON.stringify({ type: "console-logs-response", requestId: parsed.requestId, logs }));
-      console.log(`[Bridge] Sent console-logs-response (reqId: ${parsed.requestId.slice(0, 8)})`);
+      try {
+        const logs = gatherConsoleLogs(parsed.projectName || "");
+        bridgeSend(JSON.stringify({ type: "console-logs-response", requestId: parsed.requestId, logs }));
+        console.log(`[Bridge] Sent console-logs-response (reqId: ${parsed.requestId.slice(0, 8)})`);
+      } catch (err) {
+        console.error(`[Bridge] console-logs error: ${err.message}`);
+        bridgeSend(JSON.stringify({ type: "console-logs-response", requestId: parsed.requestId, logs: { error: `Error gathering console logs: ${err.message}` } }));
+      }
     } else if (parsed.type === "ping") {
       bridgeSend(JSON.stringify({ type: "pong" }));
     } else if (parsed.type === "pong") {
@@ -305,7 +315,9 @@ function processBridgeBuffer() {
       if (bridgeSocket) bridgeSocket.write(pong);
       continue;
     }
-    handleBridgeMessage(data);
+    handleBridgeMessage(data).catch((err) => {
+      console.error(`[Bridge] Unhandled bridge message error: ${err.message}`);
+    });
   }
 }
 
