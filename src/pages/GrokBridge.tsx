@@ -185,6 +185,48 @@ function extractBaseUrl(endpoint: string): string {
   }
 }
 
+async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: string; cmdUrl: string; online: boolean }> {
+  const isElectronEnv = typeof window !== 'undefined' && (window as any).process?.type === 'renderer';
+  try {
+    if (isElectronEnv) {
+      const [keyRes, statusRes] = await Promise.all([
+        fetch('http://localhost:4999/api/snapshot-key').catch(() => null),
+        fetch('http://localhost:4999/api/bridge-status').catch(() => null),
+      ]);
+      const keyData = keyRes?.ok ? await keyRes.json().catch(() => null) : null;
+      const statusData = statusRes?.ok ? await statusRes.json().catch(() => null) : null;
+      const relayUrl = statusData?.relayUrl || '';
+      const key = statusData?.bridgeKey || keyData?.key || '';
+      if (relayUrl && key) {
+        const relayBase = relayUrl.replace(/\/$/, '');
+        return {
+          snapUrl: `${relayBase}/api/snapshot/${project || 'PROJECT_NAME'}?key=${key}`,
+          cmdUrl: `${relayBase}/api/sandbox/execute?key=${key}`,
+          online: statusData?.status === 'connected',
+        };
+      }
+    } else {
+      const [keyRes, relayRes] = await Promise.all([
+        fetch('/api/snapshot-key').catch(() => null),
+        fetch('/api/bridge-relay-status').catch(() => null),
+      ]);
+      const keyData = keyRes?.ok ? await keyRes.json().catch(() => null) : null;
+      const relayData = relayRes?.ok ? await relayRes.json().catch(() => null) : null;
+      const relayUrl = relayData?.relayUrl || '';
+      const key = relayData?.snapshotKey || keyData?.key || '';
+      if (relayUrl && key) {
+        const relayBase = relayUrl.replace(/\/$/, '');
+        return {
+          snapUrl: `${relayBase}/api/snapshot/${project || 'PROJECT_NAME'}?key=${key}`,
+          cmdUrl: `${relayBase}/api/sandbox/execute?key=${key}`,
+          online: relayData?.status === 'connected',
+        };
+      }
+    }
+  } catch {}
+  return { snapUrl: '', cmdUrl: '', online: false };
+}
+
 function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, project: string, bridgeOnline = true): string {
   if (!snapshotUrl && !cmdEndpoint) return '';
   const proj = project || 'PROJECT_NAME';
@@ -3922,9 +3964,39 @@ const GrokBridge: React.FC = () => {
       const hasSourceFiles = sourceFiles.length > 0;
       const isEmptyProject = activeProject && !hasSourceFiles;
 
-      const ctxBridgeOnline = bridgeStatus === 'connected' || bridgeStatus === 'web-mode';
+      let ctxBridgeOnline = bridgeStatus === 'connected' || bridgeStatus === 'web-mode';
       let ctxSnapUrl = externalSnapshotUrl;
       let ctxCmdUrl = externalCommandEndpoint;
+      if (!ctxSnapUrl) {
+        try {
+          const freshEndpoints = isElectron
+            ? await (async () => {
+                const [keyRes, statusRes] = await Promise.all([
+                  fetch('http://localhost:4999/api/snapshot-key').catch(() => null),
+                  fetch('http://localhost:4999/api/bridge-status').catch(() => null),
+                ]);
+                const keyData = keyRes?.ok ? await keyRes.json() : null;
+                const statusData = statusRes?.ok ? await statusRes.json() : null;
+                return { key: keyData?.key || '', relayUrl: statusData?.relayUrl || '', bridgeKey: statusData?.bridgeKey || '', status: statusData?.status || '' };
+              })()
+            : await (async () => {
+                const [keyRes, relayRes] = await Promise.all([
+                  fetch('/api/snapshot-key').catch(() => null),
+                  fetch('/api/bridge-relay-status').catch(() => null),
+                ]);
+                const keyData = keyRes?.ok ? await keyRes.json() : null;
+                const relayData = relayRes?.ok ? await relayRes.json() : null;
+                return { key: relayData?.snapshotKey || keyData?.key || '', relayUrl: relayData?.relayUrl || '', bridgeKey: '', status: relayData?.status || '' };
+              })();
+          if (freshEndpoints.relayUrl) {
+            const relayBase = freshEndpoints.relayUrl.replace(/\/$/, '');
+            const fKey = freshEndpoints.bridgeKey || freshEndpoints.key;
+            ctxSnapUrl = `${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${fKey}`;
+            ctxCmdUrl = `${relayBase}/api/sandbox/execute?key=${fKey}`;
+            if (freshEndpoints.status === 'connected') ctxBridgeOnline = true;
+          }
+        } catch {}
+      }
       if (!ctxSnapUrl && bridgeRelayUrl) {
         const relayBase = bridgeRelayUrl.replace(/\/$/, '');
         const fallbackKey = bridgeKeyInput || snapshotUrl?.match(/key=([^&]+)/)?.[1] || '';
