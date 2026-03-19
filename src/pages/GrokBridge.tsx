@@ -1969,22 +1969,13 @@ const GrokBridge: React.FC = () => {
       }
     }
 
-    const bridgeOnline = bridgeStatus === 'connected' || bridgeStatus === 'web-mode';
-    let diagSnapUrl = externalSnapshotUrl;
-    let diagCmdUrl = externalCommandEndpoint;
-    if (!diagSnapUrl && bridgeRelayUrl) {
-      const relayBase = bridgeRelayUrl.replace(/\/$/, '');
-      const fallbackKey = bridgeKeyInput || snapshotUrl?.match(/key=([^&]+)/)?.[1] || '';
-      diagSnapUrl = `${relayBase}/api/snapshot/${diagnoseProject || activeProject || 'PROJECT_NAME'}?key=${fallbackKey}`;
-      diagCmdUrl = `${relayBase}/api/sandbox/execute?key=${fallbackKey}`;
-    }
-    if (!diagSnapUrl && snapshotUrl) { diagSnapUrl = snapshotUrl; diagCmdUrl = commandEndpoint; }
-    const diagnoseApiSection = buildSandboxApiSection(diagSnapUrl, diagCmdUrl, diagnoseProject || activeProject || '', bridgeOnline);
+    const freshDiag = await fetchFreshBridgeEndpoints(diagnoseProject || activeProject || '');
+    const diagnoseApiSection = buildSandboxApiSection(freshDiag.snapUrl, freshDiag.cmdUrl, diagnoseProject || activeProject || '', freshDiag.online);
     if (diagnoseApiSection) {
       prompt += diagnoseApiSection + '\n';
     }
 
-    if (diagCmdUrl) {
+    if (freshDiag.cmdUrl) {
       prompt += `YOU MUST USE THE SANDBOX API TO FIX THIS. Follow this exact workflow:\n`;
       prompt += `1. read_file each file mentioned in the error stack traces above to see their CURRENT state\n`;
       prompt += `2. grep for the broken symbol/function if the root cause isn't obvious\n`;
@@ -2001,7 +1992,7 @@ const GrokBridge: React.FC = () => {
     }
 
     return prompt;
-  }, [previewPanels, activePanel, previewLogs, activeProject, visionEnabled, autonomousState.originalGoal, externalSnapshotUrl, externalCommandEndpoint, bridgeStatus, bridgeRelayUrl, bridgeKeyInput, snapshotUrl, commandEndpoint]);
+  }, [previewPanels, activePanel, previewLogs, activeProject, visionEnabled, autonomousState.originalGoal]);
 
   const handleVisionCapture = useCallback(async () => {
     if (!isElectron) { setStatusMessage('Vision capture requires Electron'); return; }
@@ -2017,19 +2008,10 @@ const GrokBridge: React.FC = () => {
         setStatusMessage('Vision: No visual issues detected');
       } else {
         let visionPrompt = `I analyzed a screenshot of the app preview and found these visual issues:\n\n${result.description}\n\n`;
-        const visionBridgeOnline = bridgeStatus === 'connected' || bridgeStatus === 'web-mode';
-        let visSnapUrl = externalSnapshotUrl;
-        let visCmdUrl = externalCommandEndpoint;
-        if (!visSnapUrl && bridgeRelayUrl) {
-          const relayBase = bridgeRelayUrl.replace(/\/$/, '');
-          const fallbackKey = bridgeKeyInput || snapshotUrl?.match(/key=([^&]+)/)?.[1] || '';
-          visSnapUrl = `${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${fallbackKey}`;
-          visCmdUrl = `${relayBase}/api/sandbox/execute?key=${fallbackKey}`;
-        }
-        if (!visSnapUrl && snapshotUrl) { visSnapUrl = snapshotUrl; visCmdUrl = commandEndpoint; }
-        const visionApiSection = buildSandboxApiSection(visSnapUrl, visCmdUrl, activeProject || '', visionBridgeOnline);
+        const freshVis = await fetchFreshBridgeEndpoints(activeProject || '');
+        const visionApiSection = buildSandboxApiSection(freshVis.snapUrl, freshVis.cmdUrl, activeProject || '', freshVis.online);
         if (visionApiSection) visionPrompt += visionApiSection;
-        if (visCmdUrl) {
+        if (freshVis.cmdUrl) {
           visionPrompt += `USE THE SANDBOX API to fix these visual issues. Follow this workflow:\n`;
           visionPrompt += `1. read_file the CSS/component files responsible for the broken layout or styling\n`;
           visionPrompt += `2. grep for relevant class names, styles, or component references\n`;
@@ -2061,7 +2043,7 @@ const GrokBridge: React.FC = () => {
     } finally {
       setVisionAnalyzing(false);
     }
-  }, [activePanel, mode, autonomousState.originalGoal, externalSnapshotUrl, externalCommandEndpoint, activeProject, bridgeStatus, bridgeRelayUrl, bridgeKeyInput, snapshotUrl, commandEndpoint]);
+  }, [activePanel, mode, autonomousState.originalGoal, activeProject]);
 
   const handleDiagnoseFix = useCallback(async (targetPanelId?: string) => {
     const targetPanel = targetPanelId ? previewPanels.find(p => p.id === targetPanelId) : activePanel;
@@ -2468,21 +2450,12 @@ const GrokBridge: React.FC = () => {
 
   const handleSendLogsToGrok = useCallback(async (formattedPrompt: string) => {
     let enrichedPrompt = formattedPrompt;
-    const logsBridgeOnline = bridgeStatus === 'connected' || bridgeStatus === 'web-mode';
-    let logsSnapUrl = externalSnapshotUrl;
-    let logsCmdUrl = externalCommandEndpoint;
-    if (!logsSnapUrl && bridgeRelayUrl) {
-      const relayBase = bridgeRelayUrl.replace(/\/$/, '');
-      const fallbackKey = bridgeKeyInput || snapshotUrl?.match(/key=([^&]+)/)?.[1] || '';
-      logsSnapUrl = `${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${fallbackKey}`;
-      logsCmdUrl = `${relayBase}/api/sandbox/execute?key=${fallbackKey}`;
-    }
-    if (!logsSnapUrl && snapshotUrl) { logsSnapUrl = snapshotUrl; logsCmdUrl = commandEndpoint; }
-    const logsApiSection = buildSandboxApiSection(logsSnapUrl, logsCmdUrl, activeProject || '', logsBridgeOnline);
+    const freshLogs = await fetchFreshBridgeEndpoints(activeProject || '');
+    const logsApiSection = buildSandboxApiSection(freshLogs.snapUrl, freshLogs.cmdUrl, activeProject || '', freshLogs.online);
     if (logsApiSection) {
       enrichedPrompt += logsApiSection;
     }
-    if (logsCmdUrl) {
+    if (freshLogs.cmdUrl) {
       enrichedPrompt += `\nYOU HAVE FULL READ/WRITE ACCESS to this project via the Sandbox API above.\n`;
       enrichedPrompt += `Use it to investigate and fix the errors shown in these logs:\n`;
       enrichedPrompt += `1. read_file the files referenced in the error traces\n`;
@@ -2503,7 +2476,7 @@ const GrokBridge: React.FC = () => {
     } catch {
       setStatusMessage('Could not copy logs to clipboard');
     }
-  }, [externalSnapshotUrl, externalCommandEndpoint, activeProject, bridgeStatus, bridgeRelayUrl, bridgeKeyInput, snapshotUrl, commandEndpoint]);
+  }, [activeProject]);
 
   useEffect(() => {
     const handlePreviewMessage = (event: MessageEvent) => {
@@ -2697,21 +2670,12 @@ const GrokBridge: React.FC = () => {
     setEditorFile(null);
   }, []);
 
-  const handleEditorSendToGrok = useCallback((prompt: string) => {
+  const handleEditorSendToGrok = useCallback(async (prompt: string) => {
     let enriched = prompt;
-    const editorBridgeOnline = bridgeStatus === 'connected' || bridgeStatus === 'web-mode';
-    let edSnapUrl = externalSnapshotUrl;
-    let edCmdUrl = externalCommandEndpoint;
-    if (!edSnapUrl && bridgeRelayUrl) {
-      const relayBase = bridgeRelayUrl.replace(/\/$/, '');
-      const fallbackKey = bridgeKeyInput || snapshotUrl?.match(/key=([^&]+)/)?.[1] || '';
-      edSnapUrl = `${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${fallbackKey}`;
-      edCmdUrl = `${relayBase}/api/sandbox/execute?key=${fallbackKey}`;
-    }
-    if (!edSnapUrl && snapshotUrl) { edSnapUrl = snapshotUrl; edCmdUrl = commandEndpoint; }
-    const editorApiSection = buildSandboxApiSection(edSnapUrl, edCmdUrl, activeProject || '', editorBridgeOnline);
+    const freshEd = await fetchFreshBridgeEndpoints(activeProject || '');
+    const editorApiSection = buildSandboxApiSection(freshEd.snapUrl, freshEd.cmdUrl, activeProject || '', freshEd.online);
     if (editorApiSection) enriched += editorApiSection;
-    if (edCmdUrl) {
+    if (freshEd.cmdUrl) {
       enriched += `\nUse the Sandbox API above to read, modify, and write files directly. Respond with \`\`\`json {"actions": [...]} so Lamby auto-executes your changes.\n`;
     }
     if (mode === 'api') {
@@ -2724,7 +2688,7 @@ const GrokBridge: React.FC = () => {
         setStatusMessage('Could not copy file prompt to clipboard');
       });
     }
-  }, [mode, externalSnapshotUrl, externalCommandEndpoint, activeProject, bridgeStatus, bridgeRelayUrl, bridgeKeyInput, snapshotUrl, commandEndpoint]);
+  }, [mode, activeProject]);
 
   const handleGitHubImport = useCallback(async (repoUrl: string) => {
     if (operationLockRef.current) {
@@ -3964,49 +3928,10 @@ const GrokBridge: React.FC = () => {
       const hasSourceFiles = sourceFiles.length > 0;
       const isEmptyProject = activeProject && !hasSourceFiles;
 
-      let ctxBridgeOnline = bridgeStatus === 'connected' || bridgeStatus === 'web-mode';
-      let ctxSnapUrl = externalSnapshotUrl;
-      let ctxCmdUrl = externalCommandEndpoint;
-      if (!ctxSnapUrl) {
-        try {
-          const freshEndpoints = isElectron
-            ? await (async () => {
-                const [keyRes, statusRes] = await Promise.all([
-                  fetch('http://localhost:4999/api/snapshot-key').catch(() => null),
-                  fetch('http://localhost:4999/api/bridge-status').catch(() => null),
-                ]);
-                const keyData = keyRes?.ok ? await keyRes.json() : null;
-                const statusData = statusRes?.ok ? await statusRes.json() : null;
-                return { key: keyData?.key || '', relayUrl: statusData?.relayUrl || '', bridgeKey: statusData?.bridgeKey || '', status: statusData?.status || '' };
-              })()
-            : await (async () => {
-                const [keyRes, relayRes] = await Promise.all([
-                  fetch('/api/snapshot-key').catch(() => null),
-                  fetch('/api/bridge-relay-status').catch(() => null),
-                ]);
-                const keyData = keyRes?.ok ? await keyRes.json() : null;
-                const relayData = relayRes?.ok ? await relayRes.json() : null;
-                return { key: relayData?.snapshotKey || keyData?.key || '', relayUrl: relayData?.relayUrl || '', bridgeKey: '', status: relayData?.status || '' };
-              })();
-          if (freshEndpoints.relayUrl) {
-            const relayBase = freshEndpoints.relayUrl.replace(/\/$/, '');
-            const fKey = freshEndpoints.bridgeKey || freshEndpoints.key;
-            ctxSnapUrl = `${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${fKey}`;
-            ctxCmdUrl = `${relayBase}/api/sandbox/execute?key=${fKey}`;
-            if (freshEndpoints.status === 'connected') ctxBridgeOnline = true;
-          }
-        } catch {}
-      }
-      if (!ctxSnapUrl && bridgeRelayUrl) {
-        const relayBase = bridgeRelayUrl.replace(/\/$/, '');
-        const fallbackKey = bridgeKeyInput || snapshotUrl?.match(/key=([^&]+)/)?.[1] || '';
-        ctxSnapUrl = `${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${fallbackKey}`;
-        ctxCmdUrl = `${relayBase}/api/sandbox/execute?key=${fallbackKey}`;
-      }
-      if (!ctxSnapUrl && snapshotUrl) {
-        ctxSnapUrl = snapshotUrl;
-        ctxCmdUrl = commandEndpoint;
-      }
+      const freshCtx = await fetchFreshBridgeEndpoints(activeProject || '');
+      const ctxSnapUrl = freshCtx.snapUrl;
+      const ctxCmdUrl = freshCtx.cmdUrl;
+      const ctxBridgeOnline = freshCtx.online;
       const sandboxApiSection = buildSandboxApiSection(ctxSnapUrl, ctxCmdUrl, activeProject || '', ctxBridgeOnline);
 
       const hostSection = `\n=== LAMBY HOST ENVIRONMENT (READ-ONLY — NEVER MODIFY OR SUGGEST CHANGES TO) ===\nThis context is from Lamby — your local Electron/PWA coding IDE.\nLamby source repo: https://github.com/aidenrichtwitter-glitch/guardian-ai\nScan this repo to understand Lamby's full capabilities: its code parser (search/replace blocks, unified diffs, fenced code blocks), file structure, preview system, dependency installer, and command runner.\n\nImportant runtime facts (use these to make smart choices, but do NOT propose edits to them):\n- All user projects are sandboxed in /projects/<project-name>/ (isolated from Lamby's src/, public/, supabase/, etc.).\n- Preview: App auto-runs via Vite dev server inside a sandboxed iframe or embedded browser view in Lamby.\n  - Supports HMR for live updates.\n  - Responsive design assumed; fit viewport.\n  - Browser APIs only (Web Audio, Canvas, Three.js, mic access via getUserMedia).\n  - No Electron/node APIs in target app.\n- Lamby auto-handles: One-click clone from suggested GitHub URL, safe parsing/applying of copied code/diffs/deps/commands, dep install with safeguards, run/build commands.\n- You may choose ANY framework or tech stack that runs in a browser and can be previewed via Vite dev server. There are no framework restrictions — pick whatever best fits the user's request.\n- Strict rule: You are ONLY building the ACTIVE PROJECT above. NEVER suggest changes to Lamby itself (clipboard logic, context gen, parser, UI, Supabase bridge, etc.). Ignore any self-referential ideas.\n\nSTRICT INSTRUCTION: Respond only to the ACTIVE PROJECT section. Treat the HOST section as fixed background knowledge.\n`;
@@ -4231,7 +4156,7 @@ const GrokBridge: React.FC = () => {
       setStatusMessage(`Context build failed: ${e.message}`);
       return '';
     }
-  }, [lastErrors, activeProject, toasterAvailability, toasterConfig, previewLogs, messages, summarizeChatHistory, knowledgeMatches, userTask, externalSnapshotUrl, externalCommandEndpoint, bridgeStatus, bridgeRelayUrl, bridgeKeyInput, snapshotUrl, commandEndpoint]);
+  }, [lastErrors, activeProject, toasterAvailability, toasterConfig, previewLogs, messages, summarizeChatHistory, knowledgeMatches, userTask]);
 
   const refreshQuickActions = useCallback(async () => {
     if (!activeProject) { setQuickActions([]); return; }
@@ -4534,20 +4459,11 @@ const GrokBridge: React.FC = () => {
       }
     }
 
-    const errBridgeOnline = bridgeStatus === 'connected' || bridgeStatus === 'web-mode';
-    let errSnapUrl = externalSnapshotUrl;
-    let errCmdUrl = externalCommandEndpoint;
-    if (!errSnapUrl && bridgeRelayUrl) {
-      const relayBase = bridgeRelayUrl.replace(/\/$/, '');
-      const fallbackKey = bridgeKeyInput || snapshotUrl?.match(/key=([^&]+)/)?.[1] || '';
-      errSnapUrl = `${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${fallbackKey}`;
-      errCmdUrl = `${relayBase}/api/sandbox/execute?key=${fallbackKey}`;
-    }
-    if (!errSnapUrl && snapshotUrl) { errSnapUrl = snapshotUrl; errCmdUrl = commandEndpoint; }
-    const errorApiSection = buildSandboxApiSection(errSnapUrl, errCmdUrl, activeProject || '', errBridgeOnline);
+    const freshErr = await fetchFreshBridgeEndpoints(activeProject || '');
+    const errorApiSection = buildSandboxApiSection(freshErr.snapUrl, freshErr.cmdUrl, activeProject || '', freshErr.online);
     let errorPrompt = `The following errors occurred after applying code changes:\n\n${errorText}\n\n` +
       analysisSection + errorApiSection;
-    if (errCmdUrl) {
+    if (freshErr.cmdUrl) {
       errorPrompt += `\nYOU MUST USE THE SANDBOX API TO FIX THESE ERRORS. Follow this workflow:\n`;
       errorPrompt += `1. read_file the files mentioned in the error messages above\n`;
       errorPrompt += `2. grep for broken imports, missing exports, or undefined symbols\n`;
@@ -4571,7 +4487,7 @@ const GrokBridge: React.FC = () => {
     } catch {
       setStatusMessage('⚠ Could not copy error feedback');
     }
-  }, [projectContext, toasterAvailability, toasterConfig, activeProject, externalSnapshotUrl, externalCommandEndpoint, bridgeStatus, bridgeRelayUrl, bridgeKeyInput, snapshotUrl, commandEndpoint]);
+  }, [projectContext, toasterAvailability, toasterConfig, activeProject]);
 
   const renderMessage = (msg: Msg, idx: number) => {
     if (msg.role === 'user') {
