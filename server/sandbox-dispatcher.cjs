@@ -106,6 +106,15 @@ function validateProjectPath(projectName, filePath, projectsDir) {
   return { valid: true, resolved: projectDir };
 }
 
+function sanitizeGitArg(val) {
+  if (!val || typeof val !== "string") return "";
+  const clean = val.trim();
+  if (/[;&|`${}()\n\r\t\\]/.test(clean)) return "";
+  if (clean.startsWith("-") && !clean.startsWith("--")) return "";
+  if (clean.length > 200) return "";
+  return clean;
+}
+
 const ALLOWED_CMD_PREFIXES = [
   "npm ", "npx ", "yarn ", "pnpm ", "bun ",
   "node ", "deno ", "tsc", "tsx ",
@@ -526,7 +535,18 @@ function executeSandboxAction(action, projectsDir) {
         let errors = [];
         function flushFile() {
           if (!currentFile || hunks.length === 0) return;
-          const filePath = path.resolve(dir, currentFile);
+          if (/\.\.[\\/]/.test(currentFile) || currentFile.startsWith("/")) {
+            errors.push({ file: currentFile, error: "Path traversal blocked" });
+            hunks = [];
+            return;
+          }
+          const patchCheck = projectName ? validateProjectPath(projectName, currentFile, projectsDir) : { valid: true, resolved: path.resolve(projectsDir, currentFile) };
+          if (!patchCheck.valid) {
+            errors.push({ file: currentFile, error: patchCheck.error });
+            hunks = [];
+            return;
+          }
+          const filePath = patchCheck.resolved;
           try {
             let content = fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8") : "";
             let contentLines = content.split("\n");
@@ -600,7 +620,7 @@ function executeSandboxAction(action, projectsDir) {
       case "lint_and_fix": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-        const target = action.files || ".";
+        const target = sanitizeGitArg(action.files) || ".";
         let lintCmd;
         if (fs.existsSync(path.join(dir, "node_modules/.bin/eslint"))) {
           lintCmd = `${path.join(dir, "node_modules/.bin/eslint")} --fix ${target}`;
@@ -619,7 +639,7 @@ function executeSandboxAction(action, projectsDir) {
       case "format_files": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-        const target = action.files || ".";
+        const target = sanitizeGitArg(action.files) || ".";
         let fmtCmd;
         if (fs.existsSync(path.join(dir, "node_modules/.bin/prettier"))) {
           fmtCmd = `${path.join(dir, "node_modules/.bin/prettier")} --write "${target}"`;
@@ -636,13 +656,25 @@ function executeSandboxAction(action, projectsDir) {
       case "get_build_metrics": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
+        let buildOutput = null;
+        let buildError = null;
+        if (action.runBuild !== false) {
+          const pm = detectPmForDir(dir);
+          const buildCmd = buildPmCommand(pm, "build");
+          try {
+            buildOutput = childProcess.execSync(buildCmd, { cwd: dir, timeout: 120000, maxBuffer: 4 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            buildOutput = (buildOutput || "").slice(0, 5000);
+          } catch (e) {
+            buildError = (e.stderr || e.message || "").slice(0, 3000);
+          }
+        }
         const distDirs = ["dist", ".next", "build", "out"];
         let distDir = null;
         for (const d of distDirs) {
           const p = path.join(dir, d);
           if (fs.existsSync(p)) { distDir = p; break; }
         }
-        const metrics = { distDir: distDir ? path.basename(distDir) : null, files: [], totalSize: 0 };
+        const metrics = { distDir: distDir ? path.basename(distDir) : null, files: [], totalSize: 0, buildOutput, buildError };
         if (distDir) {
           function walkDist(d, rel) {
             try {
@@ -706,8 +738,9 @@ function executeSandboxAction(action, projectsDir) {
       case "git_push": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-        const remote = action.remote || "origin";
-        const branch = action.branch || "";
+        const remote = sanitizeGitArg(action.remote) || "origin";
+        const branch = sanitizeGitArg(action.branch);
+        if (!remote) return { status: "error", type: t, error: "Invalid remote name" };
         const gitCmd = branch ? `git push ${remote} ${branch}` : `git push ${remote}`;
         try {
           const output = childProcess.execSync(gitCmd, { cwd: dir, timeout: 30000, maxBuffer: 2 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
@@ -719,8 +752,9 @@ function executeSandboxAction(action, projectsDir) {
       case "git_pull": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-        const remote = action.remote || "origin";
-        const branch = action.branch || "";
+        const remote = sanitizeGitArg(action.remote) || "origin";
+        const branch = sanitizeGitArg(action.branch);
+        if (!remote) return { status: "error", type: t, error: "Invalid remote name" };
         const gitCmd = branch ? `git pull ${remote} ${branch}` : `git pull ${remote}`;
         try {
           const output = childProcess.execSync(gitCmd, { cwd: dir, timeout: 30000, maxBuffer: 2 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
@@ -732,8 +766,9 @@ function executeSandboxAction(action, projectsDir) {
       case "git_merge": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
-        if (!action.branch) return { status: "error", type: t, error: "branch required" };
-        const gitCmd = `git merge ${action.branch}`;
+        const branch = sanitizeGitArg(action.branch);
+        if (!branch) return { status: "error", type: t, error: "branch required (valid git branch name)" };
+        const gitCmd = `git merge ${branch}`;
         try {
           const output = childProcess.execSync(gitCmd, { cwd: dir, timeout: 30000, maxBuffer: 2 * 1024 * 1024, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
           return { status: "success", type: t, data: { command: gitCmd, output: (output || "").trim().slice(0, 10000) } };
@@ -781,7 +816,14 @@ function executeSandboxAction(action, projectsDir) {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!fs.existsSync(dir)) return { status: "error", type: t, error: "Directory not found" };
         if (action.files) {
-          const gitCmd = `git checkout -- ${action.files}`;
+          const filesList = Array.isArray(action.files) ? action.files : [action.files];
+          const sanitizedFiles = filesList.map(f => sanitizeGitArg(f)).filter(Boolean);
+          if (sanitizedFiles.length === 0) return { status: "error", type: t, error: "Invalid file paths" };
+          for (const f of sanitizedFiles) {
+            const check = projectName ? validateProjectPath(projectName, f, projectsDir) : { valid: true };
+            if (!check.valid) return { status: "error", type: t, error: `Invalid path: ${f}` };
+          }
+          const gitCmd = `git checkout -- ${sanitizedFiles.join(" ")}`;
           try {
             const output = childProcess.execSync(gitCmd, { cwd: dir, timeout: 10000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
             return { status: "success", type: t, data: { command: gitCmd, output: (output || "").trim() } };

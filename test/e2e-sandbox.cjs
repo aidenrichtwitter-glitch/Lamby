@@ -124,25 +124,46 @@ You have access to a sandbox API that accepts an array of actions. Each action h
 Available action types:
 - list_tree: {type: "list_tree", project: "NAME", depth: N}
 - read_file: {type: "read_file", project: "NAME", path: "file/path"}
+- read_multiple_files: {type: "read_multiple_files", project: "NAME", paths: ["file1","file2"]}
 - write_file: {type: "write_file", project: "NAME", path: "file/path", content: "..."}
 - create_file: {type: "create_file", project: "NAME", path: "file/path", content: "..."}
+- bulk_write: {type: "bulk_write", project: "NAME", files: [{path:"a",content:"..."}]}
 - delete_file: {type: "delete_file", project: "NAME", path: "file/path", recursive: true/false}
+- bulk_delete: {type: "bulk_delete", project: "NAME", paths: ["file1","file2"]}
 - move_file: {type: "move_file", project: "NAME", source: "old/path", dest: "new/path"}
 - copy_file: {type: "copy_file", project: "NAME", source: "src", dest: "dst"}
+- copy_folder: {type: "copy_folder", project: "NAME", source: "src-dir", dest: "dst-dir"}
+- rename_file: {type: "rename_file", project: "NAME", source: "old", dest: "new"}
 - grep: {type: "grep", project: "NAME", pattern: "regex", extensions: [".js",".html"]}
 - search_files: {type: "search_files", project: "NAME", pattern: "regex"}
+- search_replace: {type: "search_replace", project: "NAME", path: "file", search: "old", replace: "new", regex: false}
+- apply_patch: {type: "apply_patch", project: "NAME", patch: "unified diff string"}
 - run_command: {type: "run_command", project: "NAME", command: "cmd", timeout: 30000}
 - install_deps: {type: "install_deps", project: "NAME"}
+- add_dependency: {type: "add_dependency", project: "NAME", name: "pkg", version: "1.0", dev: false}
+- type_check: {type: "type_check", project: "NAME"}
+- lint_and_fix: {type: "lint_and_fix", project: "NAME", files: "."}
+- format_files: {type: "format_files", project: "NAME", files: "src/"}
+- get_build_metrics: {type: "get_build_metrics", project: "NAME", runBuild: true}
+- restart_dev_server: {type: "restart_dev_server", project: "NAME", command: "npm run dev"}
+- list_open_ports: {type: "list_open_ports", project: "NAME"}
 - git_init: {type: "git_init", project: "NAME"}
 - git_status: {type: "git_status", project: "NAME"}
 - git_add: {type: "git_add", project: "NAME", files: ["."]}
 - git_commit: {type: "git_commit", project: "NAME", message: "commit msg"}
 - git_diff: {type: "git_diff", project: "NAME"}
 - git_log: {type: "git_log", project: "NAME"}
+- git_push: {type: "git_push", project: "NAME", remote: "origin", branch: "main"}
+- git_pull: {type: "git_pull", project: "NAME", remote: "origin"}
+- git_merge: {type: "git_merge", project: "NAME", branch: "feature-x"}
 - detect_structure: {type: "detect_structure", project: "NAME"}
 - start_process: {type: "start_process", project: "NAME", command: "cmd", name: "proc-name"}
 - list_processes: {type: "list_processes"}
 - kill_process: {type: "kill_process", name: "proc-name"}
+- set_env_var: {type: "set_env_var", project: "NAME", key: "KEY", value: "val"}
+- get_env_vars: {type: "get_env_vars", project: "NAME"}
+- rollback_last_change: {type: "rollback_last_change", project: "NAME", files: "path"}
+- export_project: {type: "export_project", project: "NAME", format: "zip"}
 
 IMPORTANT: Respond with ONLY a valid JSON object containing an "actions" array. No markdown, no explanation, no code fences. Just raw JSON.
 Example: {"actions": [{"type": "list_tree", "project": "my-project", "depth": 2}]}`;
@@ -672,6 +693,94 @@ async function main() {
       await relaySandbox([{ type: "delete_file", project: PROJECT, path: "relay-ai-test.txt" }]).catch(() => {});
     } catch (e) { log("\u274c", `Relay xAI round-trip failed: ${e.message}`); }
   }
+
+  // ============================================================
+  // PHASE 7: New Sandbox Commands (Task #67)
+  // ============================================================
+  console.log("\n\u2550\u2550\u2550 PHASE 7: New Sandbox Commands \u2550\u2550\u2550\n");
+
+  log("\ud83d\udccb", "7.1 read_multiple_files...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "read_multiple_files", project: PROJECT, paths: ["index.html", "nonexistent.txt"] },
+    ]);
+    assert(res.data.success === true, "read_multiple_files succeeds");
+    const files = res.data.results[0].data.files;
+    assert(Array.isArray(files) && files.length === 2, "read_multiple_files returns 2 file entries");
+    assert(files[0].content && files[0].content.length > 0, "First file has content");
+    assert(files[1].error === "File not found", "Missing file returns error");
+  } catch (e) { log("\u274c", `read_multiple_files failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.2 bulk_write (atomic) + bulk_delete...");
+  try {
+    const writeRes = await sandboxExecute(key, [
+      { type: "bulk_write", project: PROJECT, files: [
+        { path: "test-bulk-1.txt", content: "bulk1" },
+        { path: "test-bulk-2.txt", content: "bulk2" },
+      ]},
+    ]);
+    assert(writeRes.data.success === true, "bulk_write succeeds");
+    assert(writeRes.data.results[0].data.count === 2, "bulk_write wrote 2 files");
+
+    const delRes = await sandboxExecute(key, [
+      { type: "bulk_delete", project: PROJECT, paths: ["test-bulk-1.txt", "test-bulk-2.txt", "nope.txt"] },
+    ]);
+    assert(delRes.data.success === true, "bulk_delete succeeds");
+    assert(delRes.data.results[0].data.deleted.length === 2, "bulk_delete deleted 2 files");
+    assert(delRes.data.results[0].data.errors.length === 1, "bulk_delete reports 1 not-found error");
+  } catch (e) { log("\u274c", `bulk_write/delete failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.3 search_replace...");
+  try {
+    await sandboxExecute(key, [{ type: "create_file", project: PROJECT, path: "sr-test.txt", content: "hello world hello" }]);
+    const res = await sandboxExecute(key, [
+      { type: "search_replace", project: PROJECT, path: "sr-test.txt", search: "hello", replace: "hi" },
+    ]);
+    assert(res.data.success === true, "search_replace succeeds");
+    assert(res.data.results[0].data.results[0].replacements === 2, "search_replace found 2 replacements");
+    await sandboxExecute(key, [{ type: "delete_file", project: PROJECT, path: "sr-test.txt" }]);
+  } catch (e) { log("\u274c", `search_replace failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.4 set_env_var + get_env_vars...");
+  try {
+    const setRes = await sandboxExecute(key, [
+      { type: "set_env_var", project: PROJECT, key: "TEST_VAR_E2E", value: "e2e_value" },
+    ]);
+    assert(setRes.data.success === true, "set_env_var succeeds");
+
+    const getRes = await sandboxExecute(key, [
+      { type: "get_env_vars", project: PROJECT },
+    ]);
+    assert(getRes.data.success === true, "get_env_vars succeeds");
+    const vars = getRes.data.results[0].data.vars;
+    assert(vars.TEST_VAR_E2E === "e2e_value", "get_env_vars returns set value");
+
+    await sandboxExecute(key, [{ type: "delete_file", project: PROJECT, path: ".env" }]).catch(() => {});
+  } catch (e) { log("\u274c", `env vars failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.5 list_open_ports...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "list_open_ports", project: PROJECT }]);
+    assert(res.data.success === true, "list_open_ports succeeds");
+    assert(Array.isArray(res.data.results[0].data.ports), "list_open_ports returns ports array");
+  } catch (e) { log("\u274c", `list_open_ports failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.6 get_build_metrics (runBuild: false)...");
+  try {
+    const res = await sandboxExecute(key, [{ type: "get_build_metrics", project: PROJECT, runBuild: false }]);
+    assert(res.data.success === true, "get_build_metrics succeeds");
+    assert(res.data.results[0].data.buildOutput === null, "get_build_metrics skips build when runBuild=false");
+  } catch (e) { log("\u274c", `get_build_metrics failed: ${e.message}`); }
+
+  log("\n\ud83d\udccb", "7.7 Security: apply_patch rejects path traversal...");
+  try {
+    const res = await sandboxExecute(key, [
+      { type: "apply_patch", project: PROJECT, patch: "--- a/../../../etc/passwd\n+++ b/../../../etc/passwd\n@@ -1,1 +1,1 @@\n-root\n+hacked" },
+    ]);
+    assert(res.data.success === true, "apply_patch returns (with errors)");
+    assert(res.data.results[0].data.errors.length > 0, "apply_patch blocks path traversal");
+    assert(res.data.results[0].data.errors[0].error.includes("traversal"), "Error mentions traversal");
+  } catch (e) { log("\u274c", `apply_patch security test failed: ${e.message}`); }
 
   // ============================================================
   // SUMMARY

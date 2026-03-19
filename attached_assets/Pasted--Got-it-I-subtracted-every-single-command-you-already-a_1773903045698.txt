@@ -1,0 +1,88 @@
+**✅ Got it — I subtracted every single command you already added (the entire list you just pasted).**
+
+Here is the **clean remaining list** — only the **new** commands from the original 100 that were **not** in your previous batch.
+
+These are the Phase 2 upgrades you can add right now.
+
+### New File & Folder Operations
+1. `create_folder` `{ path: string }`  
+2. `delete_folder` `{ path: string, recursive?: boolean }`  
+3. `move_folder` `{ from: string, to: string }`  
+4. `copy_folder` `{ from: string, to: string }`  
+5. `rename_folder` `{ path: string, newName: string }`  
+6. `list_tree_filtered` `{ filter: string }` (e.g. "tsx|css")
+
+### New Code Intelligence
+7. `dead_code_detection` `{}`  
+8. `dependency_graph` `{}`  
+9. `symbol_search` `{ query: string }`  
+10. `grep_advanced` `{ pattern: string, include?: string[], exclude?: string[] }`  
+11. `extract_imports` `{ file: string }`
+
+### New Build & Execution
+12. `run_command_advanced` `{ command: string, cwd?: string, timeout?: number }`  
+13. `build_with_flags` `{ flags: string[] }`  
+14. `clean_build_cache` `{}`
+
+### New Process Management
+15. `start_process_named` `{ command: string, name: string }`  
+16. `monitor_process` `{ pid: number }`  
+17. `get_process_logs` `{ pid: number }`  
+18. `stop_all_processes` `{}`  
+19. `switch_port` `{ port: number }`
+
+### New Git Commands
+20. `git_stash_pop` `{}`  
+21. `git_reset` `{ mode?: "hard" | "soft" }`  
+22. `git_revert` `{ commit: string }`  
+23. `git_tag` `{ name: string }`
+
+### New Visual & Preview (beyond capture_preview)
+24. `visual_diff` `{ beforeUrl: string, afterUrl: string }`  
+25. `capture_component` `{ componentName: string }`  
+26. `record_video` `{ duration?: number }`  
+27. `get_dom_snapshot` `{}`  
+28. `get_console_errors` `{}`
+
+### New AI Generation
+29. `generate_test` `{ file: string }`  
+30. `generate_storybook` `{ component: string }`  
+31. `migrate_framework` `{ target: "vite" | "react" | "next" }`  
+32. `optimize_code` `{ file: string }`  
+33. `add_feature` `{ featureSpec: string }`  
+34. `convert_to_typescript` `{ file: string }`
+
+### New Debugging & Profiling
+35. `react_profiler` `{}`  
+36. `memory_leak_detection` `{}`  
+37. `console_error_analysis` `{}`  
+38. `runtime_error_trace` `{}`  
+39. `bundle_analyzer` `{}`  
+40. `network_monitor` `{}`  
+41. `accessibility_audit` `{}`  
+42. `security_scan` `{}`
+
+### New Config & Meta
+43. `set_tailwind_config` `{ config: object }`  
+44. `set_next_config` `{ config: object }`  
+45. `update_package_json` `{ changes: object }`  
+46. `manage_scripts` `{ scriptName: string, command: string }`  
+47. `switch_package_manager` `{ manager: "pnpm" | "npm" | "yarn" }`
+
+### New Super / Meta Commands
+48. `deploy_preview` `{}`  
+49. `export_project_zip` `{}`  
+50. `import_project` `{ url: string }`  
+51. `super_command` `{ description: string }` (I describe what I want → you generate the full action list)
+
+---
+
+**Total new commands: 51**
+
+You can add these in any order — they’re all completely new compared to what you already implemented.
+
+Just say “added” + any range (e.g. “added 1-15 and 24-30”) and I’ll start using them immediately on the landing-page project.
+
+Want me to test any of these right now (even before you add them, using fallback if needed)? Or shall I pick the top 10 most useful ones to add first?  
+
+We’re now at full god-mode capability. 🔥
