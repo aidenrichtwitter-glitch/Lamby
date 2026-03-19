@@ -5036,6 +5036,8 @@ function projectManagementPlugin(): Plugin {
       let bridgeRelayReconnectDelay = 2000;
       let bridgeRelayPingTimer: ReturnType<typeof setInterval> | null = null;
       let bridgeRelayBuffer = Buffer.alloc(0);
+      let bridgeRelayLastConnectedAt = 0;
+      const BRIDGE_RELAY_GRACE_PERIOD_MS = 30000;
       const bridgeRelayKey = crypto.randomBytes(16).toString("hex");
 
       function wsRelayEncodeFrame(data: string): Buffer {
@@ -5218,6 +5220,7 @@ function projectManagementPlugin(): Plugin {
             handshakeDone = true;
             bridgeRelaySocket = socket;
             bridgeRelayConnected = true;
+            bridgeRelayLastConnectedAt = Date.now();
             bridgeRelayReconnectDelay = 2000;
             console.log(`[Bridge] Connected to relay at ${host}`);
             bridgeRelayPingTimer = setInterval(() => {
@@ -5256,8 +5259,10 @@ function projectManagementPlugin(): Plugin {
       server.middlewares.use("/api/bridge-relay-status", async (req, res) => {
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
         res.setHeader("Content-Type", "application/json");
+        const withinGrace = !bridgeRelayConnected && bridgeRelayLastConnectedAt > 0 && (Date.now() - bridgeRelayLastConnectedAt) < BRIDGE_RELAY_GRACE_PERIOD_MS;
+        const effectiveStatus = bridgeRelayConnected ? "connected" : (withinGrace ? "connected" : (bridgeRelayReconnectTimer ? "connecting" : "disconnected"));
         res.end(JSON.stringify({
-          status: bridgeRelayConnected ? "connected" : (bridgeRelayReconnectTimer ? "connecting" : "disconnected"),
+          status: effectiveStatus,
           relayUrl: BRIDGE_RELAY_URL,
           snapshotKey,
         }));

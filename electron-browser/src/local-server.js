@@ -64,6 +64,8 @@ let bridgePingTimer = null;
 let bridgeBuffer = Buffer.alloc(0);
 let bridgeFailCount = 0;
 let bridgeTriedFallback = false;
+let bridgeLastConnectedAt = 0;
+const BRIDGE_GRACE_PERIOD_MS = 30000;
 
 function wsClientEncodeFrame(data) {
   const payload = Buffer.from(data, "utf-8");
@@ -240,6 +242,7 @@ function connectToBridgeRelay() {
       handshakeDone = true;
       bridgeSocket = socket;
       bridgeConnected = true;
+      bridgeLastConnectedAt = Date.now();
       bridgeReconnectDelay = 2000;
       bridgeFailCount = 0;
       bridgeTriedFallback = false;
@@ -960,8 +963,10 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/bridge-status") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const withinGrace = !bridgeConnected && bridgeLastConnectedAt > 0 && (Date.now() - bridgeLastConnectedAt) < BRIDGE_GRACE_PERIOD_MS;
+    const effectiveStatus = bridgeConnected ? "connected" : (withinGrace ? "connected" : (bridgeReconnectTimer ? "connecting" : "disconnected"));
     sendJson(res, {
-      status: bridgeConnected ? "connected" : (bridgeReconnectTimer ? "connecting" : "disconnected"),
+      status: effectiveStatus,
       relayUrl: bridgeConfig.relayUrl || "",
       bridgeKey: bridgeConfig.bridgeKey || "",
       key: snapshotKey,
