@@ -526,7 +526,22 @@ const server = http.createServer(async (req, res) => {
             } catch {}
           }
           const stat = fs.statSync(projPath);
-          return { name: e.name, path: `projects/${e.name}`, createdAt: stat.birthtime.toISOString(), framework, description };
+          let bridgeKey = "";
+          const metaFilePath = path.join(projPath, ".lamby-meta.json");
+          try {
+            if (fs.existsSync(metaFilePath)) {
+              const meta = JSON.parse(fs.readFileSync(metaFilePath, "utf-8"));
+              bridgeKey = meta.bridgeKey || "";
+            }
+            if (!bridgeKey) {
+              bridgeKey = require("crypto").randomBytes(16).toString("hex");
+              const existingMeta = {};
+              try { if (fs.existsSync(metaFilePath)) Object.assign(existingMeta, JSON.parse(fs.readFileSync(metaFilePath, "utf-8"))); } catch {}
+              existingMeta.bridgeKey = bridgeKey;
+              fs.writeFileSync(metaFilePath, JSON.stringify(existingMeta, null, 2));
+            }
+          } catch {}
+          return { name: e.name, path: `projects/${e.name}`, createdAt: stat.birthtime.toISOString(), framework, description, bridgeKey };
         });
       sendJson(res, { success: true, projects });
     } catch (err) {
@@ -547,7 +562,9 @@ const server = http.createServer(async (req, res) => {
       fs.mkdirSync(check.resolved, { recursive: true });
       const pkgJson = JSON.stringify({ name, version: "0.0.1", private: true, description, _framework: framework }, null, 2);
       fs.writeFileSync(path.join(check.resolved, "package.json"), pkgJson, "utf-8");
-      sendJson(res, { success: true, name, framework, description, path: `projects/${name}` });
+      const projectBridgeKey = require("crypto").randomBytes(16).toString("hex");
+      try { fs.writeFileSync(path.join(check.resolved, ".lamby-meta.json"), JSON.stringify({ bridgeKey: projectBridgeKey, createdAt: new Date().toISOString() }, null, 2)); } catch {}
+      sendJson(res, { success: true, name, framework, description, path: `projects/${name}`, bridgeKey: projectBridgeKey });
     } catch (err) {
       sendJson(res, { success: false, error: err.message }, 500);
     }

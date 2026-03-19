@@ -1,0 +1,1120 @@
+=== ACTIVE PROJECT (BUILD THIS ONLY) ===
+Project name: landing-page
+Status: Active project with 81 source files.
+About this project: Mocking up web app with Vitesse(speed) > Note: This template is created during the early transition of Vue 3 and Vite. At this moment, if you are seeking for better Vue developer experience and more consistent maintenance, we recommend using Nuxt instead (it also works perfectly with SPA or SSG as n | Page title: Lamby AI | Framework: react
+Detected framework: react (based on package.json — for your awareness, not a restriction)
+
+Current file tree:
+- .github/workflows/ci.yml
+- .github/FUNDING.yml
+- .vscode/extensions.json
+- .vscode/settings.json
+- cypress/e2e/basic.spec.ts
+- cypress/tsconfig.json
+- locales/ar.yml
+- locales/de.yml
+- locales/en.yml
+- locales/es.yml
+- locales/fr.yml
+- locales/id.yml
+- locales/it.yml
+- locales/ja.yml
+- locales/ka.yml
+- locales/ko.yml
+- locales/pl.yml
+- locales/pt-BR.yml
+- locales/README.md
+- locales/ru.yml
+- locales/tr.yml
+- locales/uk.yml
+- locales/uz.yml
+- locales/vi.yml
+- locales/zh-CN.yml
+- public/assets/fonts/dmmono-53a90e28.woff2
+- public/assets/fonts/dmmono-cd6ed524.woff2
+- public/assets/fonts/dmsans-56778fc7.woff2
+- public/assets/fonts/dmsans-7c37c8a6.woff2
+- public/assets/fonts/dmserifdisplay-1f997542.woff2
+- public/assets/fonts/dmserifdisplay-b6206db2.woff2
+- public/_headers
+- public/favicon-dark.svg
+- public/favicon.svg
+- public/pwa-192x192.png
+- public/pwa-512x512.png
+- public/safari-pinned-tab.svg
+- src/components/README.md
+- src/components/TheCounter.vue
+- src/components/TheFooter.vue
+- src/components/TheInput.vue
+- src/composables/dark.ts
+- src/layouts/404.vue
+- src/layouts/default.vue
+- src/layouts/home.vue
+- src/layouts/README.md
+- src/modules/i18n.ts
+- src/modules/nprogress.ts
+- src/modules/pinia.ts
+- src/modules/pwa.ts
+- src/modules/README.md
+- src/pages/hi/[name].vue
+- src/pages/[...all].vue
+- src/pages/about.md
+- src/pages/index.vue
+- src/pages/README.md
+- src/stores/user.ts
+- src/styles/main.css
+- src/styles/markdown.css
+- src/App.vue
+- src/auto-imports.d.ts
+- src/components.d.ts
+- src/main.ts
+- src/route-map.d.ts
+- src/shims.d.ts
+- src/types.ts
+- test/__snapshots__/component.test.ts.snap
+- test/basic.test.ts
+- test/component.test.ts
+- .dockerignore
+- .editorconfig
+- .gitignore
+- .lamby-meta.json
+- .npmrc
+- cypress.config.ts
+- Dockerfile
+- eslint.config.js
+- index.html
+- LICENSE
+- netlify.toml
+... (89 total files)
+
+package.json:
+{
+  "type": "module",
+  "private": true,
+  "packageManager": "pnpm@10.30.2",
+  "scripts": {
+    "build": "vite-ssg build",
+    "dev": "vite --port 3333 --open",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "preview-https": "serve dist",
+    "test": "vitest",
+    "test:e2e": "cypress open",
+    "test:unit": "vitest",
+    "typecheck": "vue-tsc --noEmit",
+    "up": "taze major -I",
+    "postinstall": "npx simple-git-hooks",
+    "sizecheck": "npx vite-bundle-visualizer",
+    "start": "npx serve ."
+  },
+  "dependencies": {
+    "@unhead/vue": "catalog:frontend",
+    "@unocss/reset": "catalog:frontend",
+    "@vueuse/core": "catalog:frontend",
+    "nprogress": "catalog:frontend",
+    "pinia": "catalog:frontend",
+    "vue": "catalog:frontend",
+    "vue-i18n": "catalog:frontend",
+    "vue-router": "catalog:frontend"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "catalog:dev",
+    "@iconify-json/carbon": "catalog:dev",
+    "@intlify/unplugin-vue-i18n": "catalog:build",
+    "@shikijs/markdown-it": "catalog:build",
+    "@types/markdown-it-link-attributes": "catalog:types",
+    "@types/nprogress": "catalog:types",
+    "@unocss/eslint-config": "catalog:build",
+    "@vitejs/plugin-vue": "catalog:build",
+    "@vue-macros/volar": "catalog:dev",
+    "@vue/test-utils": "catalog:dev",
+    "beasties": "catalog:build",
+    "cypress": "catalog:dev",
+    "cypress-vite": "catalog:dev",
+    "eslint": "catalog:dev",
+    "eslint-plugin-cypress": "catalog:dev",
+    "eslint-plugin-format": "catalog:dev",
+    "https-localhost": "catalog:dev",
+    "lint-staged": "catalog:dev",
+    "markdown-it-link-attributes": "catalog:build",
+    "rollup": "catalog:build",
+    "shiki": "catalog:build",
+    "simple-git-hooks": "catalog:dev",
+    "taze": "catalog:dev",
+    "typescript": "catalog:dev",
+    "unocss": "catalog:build",
+    "unplugin-auto-import": "catalog:build",
+    "unplugin-vue-components": "catalog:build",
+    "unplugin-vue-macros": "catalog:build",
+    "unplugin-vue-markdown": "catalog:build",
+    "vite": "catalog:build",
+    "vite-bundle-visualizer": "catalog:build",
+    "vite-plugin-inspect": "catalog:build",
+    "vite-plugin-pwa": "catalog:build",
+    "vite-plugin-vue-devtools": "catalog:build",
+    "vite-plugin-vue-layouts": "catalog:build",
+    "vite-ssg": "catalog:build",
+    "vite-ssg-sitemap": "catalog:build",
+    "vitest": "catalog:dev",
+    "vue-tsc": "catalog:dev"
+  },
+  "resolutions": {
+    "unplugin": "catalog:build",
+    "vite": "catalog:build",
+    "vite-plugin-inspect": "catalog:build"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged"
+  },
+  "lint-staged": {
+    "*": "eslint --fix"
+  }
+}
+
+
+Primary task right now: Respond to the user's request below. Check current files, plan minimal changes, output code.
+
+=== OUTPUT RULES (FOLLOW EXACTLY — THESE ARE HOW GUARDIAN APPLIES YOUR CODE) ===
+PREFER STRUCTURED FORMAT: Always use the // file: headers, DEPENDENCIES block, and COMMANDS block whenever possible.
+If you need to explain, do it in normal text BEFORE the structured blocks. Never bury code inside paragraphs.
+
+FORMAT FOR CODE CHANGES — put a // file: header immediately before each fenced code block:
+// file: src/components/App.tsx
+```tsx
+[full file content here]
+```
+
+FORMAT FOR NEW DEPENDENCIES — use a structured block:
+=== DEPENDENCIES ===
+package-name
+dev: @types/whatever
+=== END_DEPENDENCIES ===
+
+FORMAT FOR SHELL COMMANDS — use a structured block:
+=== COMMANDS ===
+pnpm run build
+npx prisma generate
+=== END_COMMANDS ===
+
+ALTERNATIVE FORMAT FOR SMALL EDITS — search/replace blocks (use when changing only a few lines in a large file):
+// file: src/components/App.tsx
+<<<<<<< SEARCH
+[exact old code to find]
+=======
+[new replacement code]
+>>>>>>> REPLACE
+
+RULES:
+1. Every code block MUST have a // file: header. No exceptions. Lamby auto-applies blocks with headers.
+2. For FULL replacement: provide COMPLETE file content. Do NOT use "// ... rest unchanged" or partial snippets.
+3. For SEARCH/REPLACE: the SEARCH section must match existing code EXACTLY (including whitespace). The REPLACE section is the new code.
+4. Only cite real, published npm packages — never invent package names.
+5. Keep explanations brief BEFORE the code blocks. Focus on what changed and why.
+6. Do NOT wrap code in narrative like "here's what your file should look like". Just use the // file: header directly.
+7. If multiple files need changes, output multiple // file: blocks in sequence.
+8. You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.
+
+
+cypress/e2e/basic.spec.ts:
+context('Basic', () => {
+  beforeEach(() => {
+    cy.visit('/')
+  })
+
+  it('basic nav', () => {
+    cy.url()
+      .should('eq', 'http://localhost:3333/')
+
+    cy.contains('[Home Layout]')
+      .should('exist')
+
+    cy.get('#input')
+      .type('Vitesse{Enter}')
+      .url()
+      .should('eq', 'http://localhost:3333/hi/Vitesse')
+
+    cy.contains('[Default Layout]')
+      .should('exist')
+
+    cy.get('[btn]')
+      .click()
+      .url()
+      .should('eq', 'http://localhost:3333/')
+  })
+
+  it('markdown', () => {
+    cy.get('[data-test-id="about"]')
+      .click()
+      .url()
+      .should('eq', 'http://localhost:3333/about')
+
+    cy.get('.shiki')
+      .should('exist')
+  })
+})
+
+
+src/composables/dark.ts:
+// these APIs are auto-imported from @vueuse/core
+export const isDark = useDark()
+export const toggleDark = useToggle(isDark)
+export const preferredDark = usePreferredDark()
+
+
+src/modules/i18n.ts:
+import type { Locale } from 'vue-i18n'
+import type { UserModule } from '~/types'
+import { createI18n } from 'vue-i18n'
+
+// Import i18n resources
+// https://vitejs.dev/guide/features.html#glob-import
+//
+// Don't need this? Try vitesse-lite: https://github.com/antfu/vitesse-lite
+const i18n = createI18n({
+  legacy: false,
+  locale: '',
+  messages: {},
+})
+
+const localesMap = Object.fromEntries(
+  Object.entries(import.meta.glob('../../locales/*.yml'))
+    .map(([path, loadLocale]) => [path.match(/([\w-]*)\.yml$/)?.[1], loadLocale]),
+) as Record<Locale, () => Promise<{ default: Record<string, string> }>>
+
+export const availableLocales = Object.keys(localesMap)
+
+const loadedLanguages: string[] = []
+
+function setI18nLanguage(lang: Locale) {
+  i18n.global.locale.value = lang as any
+  if (typeof document !== 'undefined')
+    document.querySelector('html')?.setAttribute('lang', lang)
+  return lang
+}
+
+export async function loadLanguageAsync(lang: string): Promise<Locale> {
+  // If the same language
+  if (i18n.global.locale.value === lang)
+    return setI18nLanguage(lang)
+
+  // If the language was already loaded
+  if (loadedLanguages.includes(lang))
+    return setI18nLanguage(lang)
+
+  // If the language hasn't been loaded yet
+  const messages = await localesMap[lang]()
+  i18n.global.setLocaleMessage(lang, messages.default)
+  loadedLanguages.push(lang)
+  return setI18nLanguage(lang)
+}
+
+export const install: UserModule = ({ app }) => {
+  app.use(i18n)
+  loadLanguageAsync('en')
+}
+
+
+src/modules/nprogress.ts:
+import type { UserModule } from '~/types'
+import NProgress from 'nprogress'
+
+export const install: UserModule = ({ isClient, router }) => {
+  if (isClient) {
+    router.beforeEach((to, from) => {
+      if (to.path !== from.path)
+        NProgress.start()
+    })
+    router.afterEach(() => {
+      NProgress.done()
+    })
+  }
+}
+
+
+src/modules/pinia.ts:
+import type { UserModule } from '~/types'
+import { createPinia } from 'pinia'
+
+// Setup Pinia
+// https://pinia.vuejs.org/
+export const install: UserModule = ({ isClient, initialState, app }) => {
+  const pinia = createPinia()
+  app.use(pinia)
+  // Refer to
+  // https://github.com/antfu/vite-ssg/blob/main/README.md#state-serialization
+  // for other serialization strategies.
+  if (isClient)
+    pinia.state.value = (initialState.pinia) || {}
+
+  else
+    initialState.pinia = pinia.state.value
+}
+
+
+src/modules/pwa.ts:
+import type { UserModule } from '~/types'
+
+// https://github.com/antfu/vite-plugin-pwa#automatic-reload-when-new-content-available
+export const install: UserModule = ({ isClient, router }) => {
+  if (!isClient)
+    return
+
+  router.isReady()
+    .then(async () => {
+      const { registerSW } = await import('virtual:pwa-register')
+      registerSW({ immediate: true })
+    })
+    .catch(() => {})
+}
+
+
+src/stores/user.ts:
+import { acceptHMRUpdate, defineStore } from 'pinia'
+
+export const useUserStore = defineStore('user', () => {
+  /**
+   * Current name of the user.
+   */
+  const savedName = ref('')
+  const previousNames = ref(new Set<string>())
+
+  const usedNames = computed(() => Array.from(previousNames.value))
+  const otherNames = computed(() => usedNames.value.filter(name => name !== savedName.value))
+
+  /**
+   * Changes the current name of the user and saves the one that was used
+   * before.
+   *
+   * @param name - new name to set
+   */
+  function setNewName(name: string) {
+    if (savedName.value)
+      previousNames.value.add(savedName.value)
+
+    savedName.value = name
+  }
+
+  return {
+    setNewName,
+    otherNames,
+    savedName,
+  }
+})
+
+if (import.meta.hot)
+  import.meta.hot.accept(acceptHMRUpdate(useUserStore as any, import.meta.hot))
+
+
+src/styles/main.css:
+@import './markdown.css';
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html.dark {
+  background: #121212;
+  color-scheme: dark;
+}
+
+#nprogress {
+  pointer-events: none;
+}
+
+#nprogress .bar {
+  background: rgb(13, 148, 136);
+  opacity: 0.75;
+  position: fixed;
+  z-index: 1031;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+}
+
+
+src/styles/markdown.css:
+.prose pre:not(.shiki) {
+  padding: 0;
+}
+
+.prose .shiki {
+  font-family: 'DM Mono', monospace;
+  font-size: 1.2em;
+  line-height: 1.4;
+}
+
+.prose img {
+  width: 100%;
+}
+
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+  background: var(--shiki-light-bg);
+}
+
+html.dark .shiki,
+html.dark .shiki span {
+  color: var(--shiki-dark);
+  background: var(--shiki-dark-bg);
+}
+
+
+src/components.d.ts:
+/* eslint-disable */
+// @ts-nocheck
+// biome-ignore lint: disable
+// oxlint-disable
+// ------
+// Generated by unplugin-vue-components
+// Read more: https://github.com/vuejs/core/pull/3399
+
+export {}
+
+/* prettier-ignore */
+declare module 'vue' {
+  export interface GlobalComponents {
+    README: typeof import('./components/README.md')['default']
+    RouterLink: typeof import('vue-router')['RouterLink']
+    RouterView: typeof import('vue-router')['RouterView']
+    TheCounter: typeof import('./components/TheCounter.vue')['default']
+    TheFooter: typeof import('./components/TheFooter.vue')['default']
+    TheInput: typeof import('./components/TheInput.vue')['default']
+  }
+}
+
+
+src/main.ts:
+import type { UserModule } from './types'
+
+import { setupLayouts } from 'virtual:generated-layouts'
+import { ViteSSG } from 'vite-ssg'
+import { routes } from 'vue-router/auto-routes'
+import App from './App.vue'
+
+import '@unocss/reset/tailwind.css'
+import './styles/main.css'
+import 'uno.css'
+
+// https://github.com/antfu/vite-ssg
+export const createApp = ViteSSG(
+  App,
+  {
+    routes: setupLayouts([...routes]),
+    base: import.meta.env.BASE_URL,
+  },
+  (ctx) => {
+    // install all modules under `modules/`
+    Object.values(import.meta.glob<{ install: UserModule }>('./modules/*.ts', { eager: true }))
+      .forEach(i => i.install?.(ctx))
+    // ctx.app.use(Previewer)
+  },
+)
+
+
+src/route-map.d.ts:
+/* eslint-disable */
+/* prettier-ignore */
+// oxfmt-ignore
+// @ts-nocheck
+// noinspection ES6UnusedImports
+// Generated by vue-router. !! DO NOT MODIFY THIS FILE !!
+// It's recommended to commit this file.
+// Make sure to add this file to your tsconfig.json file as an "includes" or "files" entry.
+
+import type {
+  RouteRecordInfo,
+  ParamValue,
+  ParamValueOneOrMore,
+  ParamValueZeroOrMore,
+  ParamValueZeroOrOne,
+} from 'vue-router'
+
+declare module 'vue-router' {
+  interface TypesConfig {
+    ParamParsers: never
+  }
+}
+
+declare module 'vue-router/auto-routes' {
+  /**
+   * Route name map generated by vue-router
+   */
+  export interface RouteNamedMap {
+    '/': RouteRecordInfo<
+      '/',
+      '/',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/[...all]': RouteRecordInfo<
+      '/[...all]',
+      '/:all(.*)',
+      { all: ParamValue<true> },
+      { all: ParamValue<false> },
+      | never
+    >,
+    '/about': RouteRecordInfo<
+      '/about',
+      '/about',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/hi/[name]': RouteRecordInfo<
+      '/hi/[name]',
+      '/hi/:name',
+      { name: ParamValue<true> },
+      { name: ParamValue<false> },
+      | never
+    >,
+    '/README': RouteRecordInfo<
+      '/README',
+      '/README',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+  }
+
+  /**
+   * Route file to route info map by vue-router.
+   * Used by the \`sfc-typed-router\` Volar plugin to automatically type \`useRoute()\`.
+   *
+   * Each key is a file path relative to the project root with 2 properties:
+   * - routes: union of route names of the possible routes when in this page (passed to useRoute<...>())
+   * - views: names of nested views (can be passed to <RouterView name="...">)
+   *
+   * @internal
+   */
+  export interface _RouteFileInfoMap {
+    'src/pages/index.vue': {
+      routes:
+        | '/'
+      views:
+        | never
+    }
+    'src/pages/[...all].vue': {
+      routes:
+        | '/[...all]'
+      views:
+        | never
+    }
+    'src/pages/about.md': {
+      routes:
+        | '/about'
+      views:
+        | never
+    }
+    'src/pages/hi/[name].vue': {
+      routes:
+        | '/hi/[name]'
+      views:
+        | never
+    }
+    'src/pages/README.md': {
+      routes:
+        | '/README'
+      views:
+        | never
+    }
+  }
+
+  /**
+   * Get a union of possible route names in a certain route component file.
+   * Used by the \`sfc-typed-router\` Volar plugin to automatically type \`useRoute()\`.
+   *
+   * @internal
+   */
+  export type _RouteNamesForFilePath<FilePath extends string> =
+    _RouteFileInfoMap extends Record<FilePath, infer Info>
+      ? Info['routes']
+      : keyof RouteNamedMap
+}
+
+export {}
+
+
+src/shims.d.ts:
+declare interface Window {
+  // extend the window
+}
+
+// with unplugin-vue-markdown, markdown files can be treated as Vue components
+declare module '*.md' {
+  import type { DefineComponent } from 'vue'
+
+  const component: DefineComponent<object, object, any>
+  export default component
+}
+
+declare module '*.vue' {
+  import type { DefineComponent } from 'vue'
+
+  const component: DefineComponent<object, object, any>
+  export default component
+}
+
+
+src/types.ts:
+import type { ViteSSGContext } from 'vite-ssg'
+
+export type UserModule = (ctx: ViteSSGContext) => void
+
+
+test/basic.test.ts:
+import { describe, expect, it } from 'vitest'
+
+describe('tests', () => {
+  it('should works', () => {
+    expect(1 + 1).toEqual(2)
+  })
+})
+
+
+test/component.test.ts:
+import { mount } from '@vue/test-utils'
+import { describe, expect, it } from 'vitest'
+import TheCounter from '../src/components/TheCounter.vue'
+
+describe('component TheCounter.vue', () => {
+  it('should render', () => {
+    const wrapper = mount(TheCounter, { props: { initial: 10 } })
+    expect(wrapper.text()).toContain('10')
+    expect(wrapper.html()).toMatchSnapshot()
+  })
+
+  it('should be interactive', async () => {
+    const wrapper = mount(TheCounter, { props: { initial: 0 } })
+    expect(wrapper.text()).toContain('0')
+
+    expect(wrapper.find('.inc').exists()).toBe(true)
+
+    expect(wrapper.find('.dec').exists()).toBe(true)
+
+    await wrapper.get('.inc').trigger('click')
+
+    expect(wrapper.text()).toContain('1')
+
+    await wrapper.get('.dec').trigger('click')
+
+    expect(wrapper.text()).toContain('0')
+  })
+})
+
+
+cypress.config.ts:
+import { defineConfig } from 'cypress'
+import vitePreprocessor from 'cypress-vite'
+
+export default defineConfig({
+  e2e: {
+    baseUrl: 'http://localhost:3333',
+    chromeWebSecurity: false,
+    specPattern: 'cypress/e2e/**/*.spec.*',
+    supportFile: false,
+    setupNodeEvents(on) {
+      on('file:preprocessor', vitePreprocessor())
+    },
+  },
+})
+
+
+index.html:
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lamby AI</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        background-color: #f4f4f4;
+      }
+      .hero {
+        background: linear-gradient(to right, #333, #666);
+        color: white;
+        text-align: center;
+        padding: 100px 20px;
+        animation: fadeIn 1s ease-in;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      h1 {
+        font-size: 3em;
+        margin: 0;
+      }
+      p {
+        font-size: 1.5em;
+      }
+      .features {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        padding: 20px;
+      }
+      .feature {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        margin: 10px;
+        padding: 20px;
+        width: 250px;
+        text-align: center;
+        animation: slideUp 0.5s ease-out;
+      }
+      @keyframes slideUp {
+        from {
+          transform: translateY(20px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+      button {
+        background: #4caf50;
+        color: white;
+        padding: 15px 25px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 1.2em;
+        margin: 20px auto;
+        display: block;
+      }
+      button:hover {
+        background: #45a049;
+      }
+      footer {
+        text-align: center;
+        padding: 10px;
+        background: #333;
+        color: white;
+        position: absolute;
+        bottom: 0;
+        width: 100%;
+      }
+      @media (max-width: 768px) {
+        .features {
+          flex-direction: column;
+          align-items: center;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <section class="hero">
+      <h1>Lamby AI</h1>
+      <p>Your AI-Powered Development Partner</p>
+    </section>
+    <section class="features">
+      <div class="feature">Autonomous Coding</div>
+      <div class="feature">Smart Debugging</div>
+      <div class="feature">Instant Deploy</div>
+    </section>
+    <button>Get Started</button>
+    <footer>&copy; 2023 Lamby AI</footer>
+    <script>
+      // Small JavaScript for button click alert
+      document.querySelector('button').addEventListener('click', () => {
+        alert('Starting your journey with Lamby AI!')
+      })
+    </script>
+  </body>
+</html>
+
+
+tsconfig.json:
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "jsx": "preserve",
+    "lib": ["DOM", "ESNext"],
+    "baseUrl": ".",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "~/*": ["src/*"]
+    },
+    "resolveJsonModule": true,
+    "types": [
+      "vitest",
+      "vite/client",
+      "vite-plugin-vue-layouts/client",
+      "vite-plugin-pwa/client",
+      "unplugin-vue-macros/macros-global"
+    ],
+    "allowJs": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "noUnusedLocals": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "vueCompilerOptions": {
+    "plugins": [
+      "@vue-macros/volar/define-models",
+      "@vue-macros/volar/define-slots"
+    ]
+  },
+  "exclude": ["dist", "node_modules", "cypress"]
+}
+
+
+uno.config.ts:
+import {
+  createLocalFontProcessor,
+} from '@unocss/preset-web-fonts/local'
+import {
+  defineConfig,
+  presetAttributify,
+  presetIcons,
+  presetTypography,
+  presetUno,
+  presetWebFonts,
+  transformerDirectives,
+  transformerVariantGroup,
+} from 'unocss'
+
+export default defineConfig({
+  shortcuts: [
+    ['btn', 'px-4 py-1 rounded inline-block bg-teal-700 text-white cursor-pointer !outline-none hover:bg-teal-800 disabled:cursor-default disabled:bg-gray-600 disabled:opacity-50'],
+    ['icon-btn', 'inline-block cursor-pointer select-none opacity-75 transition duration-200 ease-in-out hover:opacity-100 hover:text-teal-600'],
+  ],
+  presets: [
+    presetUno(),
+    presetAttributify(),
+    presetIcons({
+      scale: 1.2,
+    }),
+    presetTypography(),
+    presetWebFonts({
+      fonts: {
+        sans: 'DM Sans',
+        serif: 'DM Serif Display',
+        mono: 'DM Mono',
+      },
+      processors: createLocalFontProcessor(),
+    }),
+  ],
+  transformers: [
+    transformerDirectives(),
+    transformerVariantGroup(),
+  ],
+  safelist: 'prose prose-sm m-auto text-left'.split(' '),
+})
+
+
+vite.config.ts:
+import path from 'node:path'
+import VueI18n from '@intlify/unplugin-vue-i18n/vite'
+import Shiki from '@shikijs/markdown-it'
+import { unheadVueComposablesImports } from '@unhead/vue'
+import Vue from '@vitejs/plugin-vue'
+import LinkAttributes from 'markdown-it-link-attributes'
+import Unocss from 'unocss/vite'
+import AutoImport from 'unplugin-auto-import/vite'
+import Components from 'unplugin-vue-components/vite'
+import VueMacros from 'unplugin-vue-macros/vite'
+import Markdown from 'unplugin-vue-markdown/vite'
+import { defineConfig } from 'vite'
+import { VitePWA } from 'vite-plugin-pwa'
+import VueDevTools from 'vite-plugin-vue-devtools'
+import Layouts from 'vite-plugin-vue-layouts'
+import generateSitemap from 'vite-ssg-sitemap'
+import { VueRouterAutoImports } from 'vue-router/unplugin'
+import VueRouter from 'vue-router/vite'
+import 'vitest/config'
+
+export default defineConfig({
+  server: {
+    hmr: { overlay: true },
+    watch: {
+      usePolling: true,
+      interval: 500,
+    },
+  },
+  resolve: {
+    alias: {
+      '~/': `${path.resolve(__dirname, 'src')}/`,
+    },
+  },
+
+  plugins: [
+    // https://github.com/vuejs/router
+    VueRouter({
+      extensions: ['.vue', '.md'],
+      dts: 'src/route-map.d.ts',
+    }),
+
+    VueMacros({
+      plugins: {
+        vue: Vue({
+          include: [/\.vue$/, /\.md$/],
+        }),
+      },
+    }),
+
+    // https://github.com/JohnCampionJr/vite-plugin-vue-layouts
+    Layouts(),
+
+    // https://github.com/antfu/unplugin-auto-import
+    AutoImport({
+      include: [/\.[jt]sx?$/, /\.vue$/, /\.vue\?vue/, /\.md$/],
+      imports: [
+        'vue',
+        'vue-i18n',
+        '@vueuse/core',
+        unheadVueComposablesImports,
+        VueRouterAutoImports,
+        {
+          // add any other imports you were relying on
+          'vue-router/auto': ['useLink'],
+        },
+      ],
+      dts: 'src/auto-imports.d.ts',
+      dirs: [
+        'src/composables',
+        'src/stores',
+      ],
+      vueTemplate: true,
+    }),
+
+    // https://github.com/antfu/unplugin-vue-components
+    Components({
+      // allow auto load markdown components under `./src/components/`
+      extensions: ['vue', 'md'],
+      // allow auto import and register components used in markdown
+      include: [/\.vue$/, /\.vue\?vue/, /\.md$/],
+      dts: 'src/components.d.ts',
+    }),
+
+    // https://github.com/antfu/unocss
+    // see uno.config.ts for config
+    Unocss(),
+
+    // https://github.com/unplugin/unplugin-vue-markdown
+    // Don't need this? Try vitesse-lite: https://github.com/antfu/vitesse-lite
+    Markdown({
+      wrapperClasses: 'prose prose-sm m-auto text-left',
+      headEnabled: true,
+      async markdownItSetup(md) {
+        md.use(LinkAttributes, {
+          matcher: (link: string) => /^https?:\/\//.test(link),
+          attrs: {
+            target: '_blank',
+            rel: 'noopener',
+          },
+        })
+        md.use(await Shiki({
+          defaultColor: false,
+          themes: {
+            light: 'vitesse-light',
+            dark: 'vitesse-dark',
+          },
+        }))
+      },
+    }),
+
+    // https://github.com/antfu/vite-plugin-pwa
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg', 'safari-pinned-tab.svg'],
+      manifest: {
+        name: 'Vitesse',
+        short_name: 'Vitesse',
+        theme_color: '#ffffff',
+        icons: [
+          {
+            src: '/pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+          },
+          {
+            src: '/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+          },
+          {
+            src: '/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+        ],
+      },
+    }),
+
+    // https://github.com/intlify/bundle-tools/tree/main/packages/unplugin-vue-i18n
+    VueI18n({
+      runtimeOnly: true,
+      compositionOnly: true,
+      fullInstall: true,
+      include: [path.resolve(__dirname, 'locales/**')],
+    }),
+
+    // https://github.com/webfansplz/vite-plugin-vue-devtools
+    VueDevTools(),
+  ],
+
+  // https://github.com/vitest-dev/vitest
+  test: {
+    include: ['test/**/*.test.ts'],
+    environment: 'jsdom',
+  },
+
+  // https://github.com/antfu/vite-ssg
+  ssgOptions: {
+    script: 'async',
+    formatting: 'minify',
+    beastiesOptions: {
+      reduceInlineStyles: false,
+    },
+    onFinished() {
+      generateSitemap()
+    },
+  },
+
+  ssr: {
+    // TODO: workaround until they support native ESM
+    noExternal: ['workbox-window', /vue-i18n/],
+  },
+})
+
+
+=== LAMBY HOST ENVIRONMENT (READ-ONLY — NEVER MODIFY OR SUGGEST CHANGES TO) ===
+This context is from Lamby — your local Electron/PWA coding IDE.
+Lamby source repo: https://github.com/aidenrichtwitter-glitch/guardian-ai
+Scan this repo to understand Lamby's full capabilities: its code parser (search/replace blocks, unified diffs, fenced code blocks), file structure, preview system, dependency installer, and command runner.
+
+Important runtime facts (use these to make smart choices, but do NOT propose edits to them):
+- All user projects are sandboxed in /projects/<project-name>/ (isolated from Lamby's src/, public/, supabase/, etc.).
+- Preview: App auto-runs via Vite dev server inside a sandboxed iframe or embedded browser view in Lamby.
+  - Supports HMR for live updates.
+  - Responsive design assumed; fit viewport.
+  - Browser APIs only (Web Audio, Canvas, Three.js, mic access via getUserMedia).
+  - No Electron/node APIs in target app.
+- Lamby auto-handles: One-click clone from suggested GitHub URL, safe parsing/applying of copied code/diffs/deps/commands, dep install with safeguards, run/build commands.
+- You may choose ANY framework or tech stack that runs in a browser and can be previewed via Vite dev server. There are no framework restrictions — pick whatever best fits the user's request.
+- Strict rule: You are ONLY building the ACTIVE PROJECT above. NEVER suggest changes to Lamby itself (clipboard logic, context gen, parser, UI, Supabase bridge, etc.). Ignore any self-referential ideas.
+
+STRICT INSTRUCTION: Respond only to the ACTIVE PROJECT section. Treat the HOST section as fixed background knowledge.

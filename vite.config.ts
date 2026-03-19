@@ -387,18 +387,6 @@ function projectManagementPlugin(): Plugin {
       const bridgeClients = new Map<string, { ws: any; snapshotKey: string; lastPing: number }>();
       const pendingRelayRequests = new Map<string, { resolve: (s: string) => void; timer: ReturnType<typeof setTimeout> }>();
 
-      server.middlewares.use("/api/bridge-status", async (req, res) => {
-        if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
-        res.setHeader("Content-Type", "application/json");
-        const clients = Array.from(bridgeClients.entries()).map(([key, c]) => ({
-          key: key.substring(0, 8) + "...",
-          snapshotKey: c.snapshotKey.substring(0, 8) + "...",
-          connected: c.ws.readyState === 1,
-          lastPing: c.lastPing,
-        }));
-        res.end(JSON.stringify({ connectedClients: clients.length, clients }));
-      });
-
       server.middlewares.use("/api/snapshot/", async (req, res) => {
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
         try {
@@ -507,12 +495,28 @@ function projectManagementPlugin(): Plugin {
                 } catch {}
               }
               const stat = fs.statSync(projPath);
+              let bridgeKey = "";
+              const metaFilePath = path.join(projPath, ".lamby-meta.json");
+              try {
+                if (fs.existsSync(metaFilePath)) {
+                  const meta = JSON.parse(fs.readFileSync(metaFilePath, "utf-8"));
+                  bridgeKey = meta.bridgeKey || "";
+                }
+                if (!bridgeKey) {
+                  bridgeKey = crypto.randomBytes(16).toString("hex");
+                  const existingMeta: any = {};
+                  try { if (fs.existsSync(metaFilePath)) Object.assign(existingMeta, JSON.parse(fs.readFileSync(metaFilePath, "utf-8"))); } catch {}
+                  existingMeta.bridgeKey = bridgeKey;
+                  fs.writeFileSync(metaFilePath, JSON.stringify(existingMeta, null, 2));
+                }
+              } catch {}
               return {
                 name: e.name,
                 path: `projects/${e.name}`,
                 createdAt: stat.birthtime.toISOString(),
                 framework,
                 description,
+                bridgeKey,
               };
             });
           res.setHeader("Content-Type", "application/json");
@@ -547,8 +551,12 @@ function projectManagementPlugin(): Plugin {
           }, null, 2);
           fs.writeFileSync(path.join(projectDir, "package.json"), pkgJson, "utf-8");
 
+          const projectBridgeKey = crypto.randomBytes(16).toString("hex");
+          const metaObj = { bridgeKey: projectBridgeKey, createdAt: new Date().toISOString() };
+          try { fs.writeFileSync(path.join(projectDir, ".lamby-meta.json"), JSON.stringify(metaObj, null, 2)); } catch {}
+
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ success: true, name, framework, description, path: `projects/${name}` }));
+          res.end(JSON.stringify({ success: true, name, framework, description, path: `projects/${name}`, bridgeKey: projectBridgeKey }));
         } catch (err: any) {
           res.statusCode = 500;
           res.end(JSON.stringify({ success: false, error: err.message }));
@@ -4915,7 +4923,11 @@ function projectManagementPlugin(): Plugin {
 
           const metaPath = path.join(projectDir, ".lamby-meta.json");
           try {
-            fs.writeFileSync(metaPath, JSON.stringify({ owner, repo, sourceUrl: `https://github.com/${owner}/${repo}`, clonedAt: new Date().toISOString(), projectName }, null, 2));
+            const existingMeta: any = {};
+            try { if (fs.existsSync(metaPath)) Object.assign(existingMeta, JSON.parse(fs.readFileSync(metaPath, "utf-8"))); } catch {}
+            if (!existingMeta.bridgeKey) existingMeta.bridgeKey = crypto.randomBytes(16).toString("hex");
+            Object.assign(existingMeta, { owner, repo, sourceUrl: `https://github.com/${owner}/${repo}`, clonedAt: new Date().toISOString(), projectName });
+            fs.writeFileSync(metaPath, JSON.stringify(existingMeta, null, 2));
             console.log(`[Import] Saved source metadata to .lamby-meta.json`);
           } catch {}
 
@@ -5265,6 +5277,19 @@ function projectManagementPlugin(): Plugin {
           status: effectiveStatus,
           relayUrl: BRIDGE_RELAY_URL,
           snapshotKey,
+        }));
+      });
+
+      server.middlewares.use("/api/bridge-status", async (req, res) => {
+        if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
+        res.setHeader("Content-Type", "application/json");
+        const withinGrace = !bridgeRelayConnected && bridgeRelayLastConnectedAt > 0 && (Date.now() - bridgeRelayLastConnectedAt) < BRIDGE_RELAY_GRACE_PERIOD_MS;
+        const effectiveStatus = bridgeRelayConnected ? "connected" : (withinGrace ? "connected" : (bridgeRelayReconnectTimer ? "connecting" : "disconnected"));
+        res.end(JSON.stringify({
+          status: effectiveStatus,
+          relayUrl: BRIDGE_RELAY_URL,
+          bridgeKey: bridgeRelayKey,
+          key: snapshotKey,
         }));
       });
 
