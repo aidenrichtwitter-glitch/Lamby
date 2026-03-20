@@ -1708,6 +1708,9 @@ const GrokBridge: React.FC = () => {
   const [showBridgeSettings, setShowBridgeSettings] = useState(false);
   const [bridgeRelayInput, setBridgeRelayInput] = useState('');
   const [bridgeKeyInput, setBridgeKeyInput] = useState('');
+  const [bridgeMode, setBridgeMode] = useState<'dev' | 'production'>(() => {
+    try { return (localStorage.getItem('lamby-bridge-mode') as 'dev' | 'production') || 'production'; } catch { return 'production'; }
+  });
   const [browserUrl, setBrowserUrl] = useState('https://grok.com');
   const [customUrl, setCustomUrl] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -4061,6 +4064,9 @@ const GrokBridge: React.FC = () => {
             if (relayRes && relayRes.ok) {
               try { relayData = await relayRes.json(); } catch {}
             }
+            if (relayData?.mode) {
+              setBridgeMode(relayData.mode === 'production' ? 'production' : 'dev');
+            }
             if (relayData && relayData.status === 'connected' && relayData.relayUrl) {
               const relayBase = relayData.relayUrl.replace(/\/$/, '');
               const key = data.key || relayData.snapshotKey;
@@ -5515,6 +5521,60 @@ const GrokBridge: React.FC = () => {
                       </div>
                     </div>
                   )}
+                  <div className="border-t border-border pt-2 mt-2">
+                    <div className="text-muted-foreground font-medium mb-1.5">Relay Mode</div>
+                    <div className="flex items-center gap-1" data-testid="bridge-mode-toggle">
+                      <button
+                        data-testid="button-mode-dev"
+                        onClick={async () => {
+                          const devUrl = `wss://${window.location.host}`;
+                          setBridgeMode('dev');
+                          try { localStorage.setItem('lamby-bridge-mode', 'dev'); } catch {}
+                          try {
+                            await fetch('/api/bridge-connector-switch', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ relayUrl: devUrl }),
+                            });
+                            setStatusMessage('Switched to Dev relay');
+                          } catch (e: any) { setStatusMessage(`Switch failed: ${e.message}`); }
+                        }}
+                        className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
+                          bridgeMode === 'dev'
+                            ? 'bg-blue-500/15 text-blue-500 border-blue-500/30'
+                            : 'bg-muted/50 text-muted-foreground border-border/30 hover:bg-muted'
+                        }`}
+                      >
+                        Dev
+                      </button>
+                      <button
+                        data-testid="button-mode-production"
+                        onClick={async () => {
+                          const prodUrl = 'wss://bridge-relay.replit.app';
+                          setBridgeMode('production');
+                          try { localStorage.setItem('lamby-bridge-mode', 'production'); } catch {}
+                          try {
+                            await fetch('/api/bridge-connector-switch', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ relayUrl: prodUrl }),
+                            });
+                            setStatusMessage('Switched to Production relay');
+                          } catch (e: any) { setStatusMessage(`Switch failed: ${e.message}`); }
+                        }}
+                        className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
+                          bridgeMode === 'production'
+                            ? 'bg-green-500/15 text-green-500 border-green-500/30'
+                            : 'bg-muted/50 text-muted-foreground border-border/30 hover:bg-muted'
+                        }`}
+                      >
+                        Production
+                      </button>
+                    </div>
+                    <p className="text-muted-foreground/60 mt-1">
+                      {bridgeMode === 'dev' ? `Dev: wss://${window.location.host}` : 'Prod: wss://bridge-relay.replit.app'}
+                    </p>
+                  </div>
                   {isElectron && (
                     <div className="border-t border-border pt-2 mt-2 space-y-1.5">
                       <div className="text-muted-foreground font-medium">Relay Settings</div>

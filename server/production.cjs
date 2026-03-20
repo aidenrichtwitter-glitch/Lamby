@@ -17,6 +17,29 @@ const pendingSandboxRelayRequests = new Map();
 const pendingConsoleLogRequests = new Map();
 const sandboxAuditLog = [];
 
+const { createConnector } = require("./bridge-connector.cjs");
+const lambyConfigPath = path.resolve(__dirname, "..", ".lamby-keys.json");
+let prodBridgeKey;
+try {
+  if (fs.existsSync(lambyConfigPath)) {
+    const saved = JSON.parse(fs.readFileSync(lambyConfigPath, "utf-8"));
+    prodBridgeKey = saved.bridgeRelayKey && saved.bridgeRelayKey.length >= 16 ? saved.bridgeRelayKey : crypto.randomBytes(16).toString("hex");
+  } else {
+    prodBridgeKey = crypto.randomBytes(16).toString("hex");
+  }
+} catch {
+  prodBridgeKey = crypto.randomBytes(16).toString("hex");
+}
+const prodConnector = createConnector({
+  relayUrl: process.env.BRIDGE_RELAY_URL || "wss://bridge-relay.replit.app",
+  bridgeKey: prodBridgeKey,
+  snapshotKey,
+  projectName: "",
+  projectDir: path.resolve(__dirname, ".."),
+  previewPort: String(PORT),
+});
+setTimeout(() => prodConnector.connect(), 3000);
+
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
@@ -272,7 +295,45 @@ const server = http.createServer(async (req, res) => {
       connected: c.alive,
       lastPing: c.lastPing,
     }));
-    sendJson(res, { connectedClients: clients.length, clients });
+    const connectorStatus = prodConnector ? prodConnector.getStatus() : null;
+    sendJson(res, {
+      connectedClients: clients.length,
+      clients,
+      connector: connectorStatus ? { status: connectorStatus.status, relayUrl: connectorStatus.relayUrl, mode: connectorStatus.mode } : null,
+      bridgeKey: connectorStatus ? connectorStatus.bridgeKey : undefined,
+      key: snapshotKey,
+      mode: connectorStatus ? connectorStatus.mode : undefined,
+    });
+    return;
+  }
+
+  if (pathname === "/api/bridge-relay-status") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const connectorStatus = prodConnector ? prodConnector.getStatus() : { status: "disconnected", relayUrl: "", snapshotKey, mode: "production" };
+    sendJson(res, {
+      status: connectorStatus.status,
+      relayUrl: connectorStatus.relayUrl,
+      snapshotKey: connectorStatus.snapshotKey || snapshotKey,
+      mode: connectorStatus.mode,
+    });
+    return;
+  }
+
+  if (pathname === "/api/bridge-connector-switch") {
+    if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
+    try {
+      const body = JSON.parse(await readBody(req));
+      const relayUrl = body.relayUrl;
+      if (!relayUrl) { sendJson(res, { error: "relayUrl required" }, 400); return; }
+      if (prodConnector) {
+        prodConnector.reconnect(relayUrl);
+        sendJson(res, { success: true, relayUrl });
+      } else {
+        sendJson(res, { error: "Connector not initialized" }, 500);
+      }
+    } catch (err) {
+      sendJson(res, { error: err.message }, 400);
+    }
     return;
   }
 

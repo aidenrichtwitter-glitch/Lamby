@@ -5263,17 +5263,8 @@ function projectManagementPlugin(): Plugin {
 
       const pendingSandboxRelayRequests = new Map<string, { resolve: (s: string) => void; timer: ReturnType<typeof setTimeout> }>();
 
-      const BRIDGE_RELAY_URL = process.env.BRIDGE_RELAY_URL || "https://bridge-relay.replit.app";
-      let bridgeRelaySocket: any = null;
-      let bridgeRelayConnected = false;
-      let bridgeRelayReconnectTimer: ReturnType<typeof setTimeout> | null = null;
-      let bridgeRelayReconnectDelay = 2000;
-      let bridgeRelayPingTimer: ReturnType<typeof setInterval> | null = null;
-      let bridgeRelayBuffer = Buffer.alloc(0);
-      let bridgeRelayLastConnectedAt = 0;
-      const BRIDGE_RELAY_GRACE_PERIOD_MS = 30000;
       const lambyConfigPath = path.resolve(process.cwd(), ".lamby-keys.json");
-      let bridgeRelayKey: string; // WebSocket connection identity key (separate from the universal snapshot/API key)
+      let bridgeRelayKey: string;
       try {
         const fs3 = await import("fs");
         if (fs3.existsSync(lambyConfigPath)) {
@@ -5290,67 +5281,25 @@ function projectManagementPlugin(): Plugin {
         bridgeRelayKey = crypto.randomBytes(16).toString("hex");
       }
 
-      function wsRelayEncodeFrame(data: string): Buffer {
-        const payload = Buffer.from(data, "utf-8");
-        const len = payload.length;
-        const mask = crypto.randomBytes(4);
-        let header: Buffer;
-        if (len < 126) {
-          header = Buffer.alloc(6);
-          header[0] = 0x81;
-          header[1] = 0x80 | len;
-          mask.copy(header, 2);
-        } else if (len < 65536) {
-          header = Buffer.alloc(8);
-          header[0] = 0x81;
-          header[1] = 0x80 | 126;
-          header.writeUInt16BE(len, 2);
-          mask.copy(header, 4);
-        } else {
-          header = Buffer.alloc(14);
-          header[0] = 0x81;
-          header[1] = 0x80 | 127;
-          header.writeBigUInt64BE(BigInt(len), 2);
-          mask.copy(header, 10);
-        }
-        const masked = Buffer.alloc(len);
-        for (let i = 0; i < len; i++) masked[i] = payload[i] ^ mask[i % 4];
-        return Buffer.concat([header, masked]);
-      }
+      const { createConnector } = _require("./server/bridge-connector.cjs");
+      const BRIDGE_RELAY_URL = process.env.BRIDGE_RELAY_URL || "wss://bridge-relay.replit.app";
+      const bridgeConnector = createConnector({
+        relayUrl: BRIDGE_RELAY_URL,
+        bridgeKey: bridgeRelayKey,
+        snapshotKey,
+        projectName: "",
+        projectDir: process.cwd(),
+        previewPort: "5000",
+      });
 
-      function wsRelayDecodeFrame(buf: Buffer): { data: string | null; opcode?: number; bytesConsumed: number } {
-        if (buf.length < 2) return { data: null, bytesConsumed: 0 };
-        const opcode = buf[0] & 0x0f;
-        const isMasked = (buf[1] & 0x80) !== 0;
-        let payloadLen = buf[1] & 0x7f;
-        let offset = 2;
-        if (payloadLen === 126) {
-          if (buf.length < 4) return { data: null, bytesConsumed: 0 };
-          payloadLen = buf.readUInt16BE(2);
-          offset = 4;
-        } else if (payloadLen === 127) {
-          if (buf.length < 10) return { data: null, bytesConsumed: 0 };
-          payloadLen = Number(buf.readBigUInt64BE(2));
-          offset = 10;
+      bridgeConnector.onRelayLog = (logEntry: any) => {
+        if (typeof sandboxWss !== "undefined") {
+          const fwd = JSON.stringify({ type: "relay-log", level: logEntry.level, message: logEntry.message, ts: logEntry.ts || Date.now() });
+          sandboxWss.clients.forEach((c: any) => { try { if (c.readyState === 1) c.send(fwd); } catch {} });
         }
-        if (isMasked) {
-          if (buf.length < offset + 4 + payloadLen) return { data: null, bytesConsumed: 0 };
-          const maskKey = buf.slice(offset, offset + 4);
-          offset += 4;
-          const pl = Buffer.alloc(payloadLen);
-          for (let i = 0; i < payloadLen; i++) pl[i] = buf[offset + i] ^ maskKey[i % 4];
-          return { data: pl.toString("utf-8"), opcode, bytesConsumed: offset + payloadLen };
-        }
-        if (buf.length < offset + payloadLen) return { data: null, bytesConsumed: 0 };
-        return { data: buf.slice(offset, offset + payloadLen).toString("utf-8"), opcode, bytesConsumed: offset + payloadLen };
-      }
+      };
 
-      function bridgeRelaySend(data: string) {
-        if (!bridgeRelaySocket || !bridgeRelayConnected) return;
-        try { bridgeRelaySocket.write(wsRelayEncodeFrame(data)); } catch (err: any) {
-          console.error(`[Bridge] Send failed: ${err.message}`);
-        }
-      }
+      setTimeout(() => bridgeConnector.connect(), 2000);
 
       function gatherConsoleLogs(projectName: string) {
         const result: { previews: any[]; message?: string } = { previews: [] };
@@ -5372,238 +5321,46 @@ function projectManagementPlugin(): Plugin {
         return result;
       }
 
-      async function handleBridgeRelayMessage(msg: string) {
-        try {
-          const parsed = JSON.parse(msg);
-          if (parsed.type === "snapshot-request" && parsed.requestId) {
-            console.log(`[Bridge] Received snapshot-request for "${parsed.projectName || ""}" (reqId: ${parsed.requestId.slice(0, 8)})`);
-            try {
-              const snapshot = await gatherProjectSnapshot(parsed.projectName || "");
-              bridgeRelaySend(JSON.stringify({ type: "snapshot-response", requestId: parsed.requestId, snapshot }));
-              console.log(`[Bridge] Sent snapshot-response (reqId: ${parsed.requestId.slice(0, 8)}, len: ${typeof snapshot === 'string' ? snapshot.length : JSON.stringify(snapshot).length})`);
-            } catch (err: any) {
-              console.error(`[Bridge] snapshot error: ${err.message}`);
-              bridgeRelaySend(JSON.stringify({ type: "snapshot-response", requestId: parsed.requestId, snapshot: `Error gathering snapshot: ${err.message}` }));
-            }
-          } else if (parsed.type === "sandbox-execute-request" && parsed.requestId) {
-            console.log(`[Bridge] Received sandbox-execute-request (reqId: ${parsed.requestId.slice(0, 8)}, actions: ${(parsed.actions || []).length})`);
-            try {
-              const projectsDir = path.resolve(process.cwd(), "projects");
-              const result = await executeSandboxActions(parsed.actions || [], projectsDir, { auditLog: sandboxAuditLog, previewProcesses });
-              bridgeRelaySend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result }));
-              console.log(`[Bridge] Sent sandbox-execute-response (reqId: ${parsed.requestId.slice(0, 8)})`);
-              const fileWriteActions = new Set(["write_file", "create_file", "search_replace", "delete_file", "move_file", "rename_file", "copy_file"]);
-              const hadFileWrite = (parsed.actions || []).some((a: any) => fileWriteActions.has(a.type));
-              if (hadFileWrite && result && result.success) {
-                try { server.hot.send({ type: "custom", event: "lamby:files-changed", data: { ts: Date.now() } }); } catch {}
-              }
-            } catch (err: any) {
-              console.error(`[Bridge] sandbox-execute error: ${err.message}`);
-              bridgeRelaySend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result: { error: err.message } }));
-            }
-          } else if (parsed.type === "browser-interact-request" && parsed.requestId) {
-            console.log(`[Bridge] Received browser-interact-request (reqId: ${parsed.requestId.slice(0, 8)}, action: ${parsed.action || "?"})`);
-            try {
-              const projectsDir = path.resolve(process.cwd(), "projects");
-              const interactAction = {
-                type: "browser_interact",
-                project: parsed.project || parsed.projectName || "",
-                action: parsed.action,
-                selector: parsed.selector,
-                functionName: parsed.functionName,
-                script: parsed.script || parsed.functionName,
-                args: parsed.args,
-                value: parsed.value,
-                screenshot: parsed.screenshot === true,
-                fullPage: parsed.fullPage,
-                timeout: parsed.timeout,
-                waitAfter: parsed.waitAfter,
-                extractText: parsed.extractText,
-                extractSelector: parsed.extractSelector,
-                width: parsed.width,
-                height: parsed.height,
-                waitMs: parsed.waitMs,
-                url: parsed.url,
-              };
-              const result = await executeSandboxActions([interactAction], projectsDir, { auditLog: sandboxAuditLog, previewProcesses });
-              bridgeRelaySend(JSON.stringify({ type: "browser-interact-response", requestId: parsed.requestId, result }));
-              console.log(`[Bridge] Sent browser-interact-response (reqId: ${parsed.requestId.slice(0, 8)})`);
-            } catch (err: any) {
-              console.error(`[Bridge] browser-interact error: ${err.message}`);
-              bridgeRelaySend(JSON.stringify({ type: "browser-interact-response", requestId: parsed.requestId, result: { error: err.message } }));
-            }
-          } else if (parsed.type === "console-logs-request" && parsed.requestId) {
-            console.log(`[Bridge] Received console-logs-request for "${parsed.projectName || ""}" (reqId: ${parsed.requestId.slice(0, 8)})`);
-            try {
-              const logs = gatherConsoleLogs(parsed.projectName || "");
-              bridgeRelaySend(JSON.stringify({ type: "console-logs-response", requestId: parsed.requestId, logs }));
-              console.log(`[Bridge] Sent console-logs-response (reqId: ${parsed.requestId.slice(0, 8)})`);
-            } catch (err: any) {
-              console.error(`[Bridge] console-logs error: ${err.message}`);
-              bridgeRelaySend(JSON.stringify({ type: "console-logs-response", requestId: parsed.requestId, logs: { error: `Error gathering console logs: ${err.message}` } }));
-            }
-          } else if (parsed.type === "ping") {
-            bridgeRelaySend(JSON.stringify({ type: "pong" }));
-          } else if (parsed.type === "pong") {
-          } else if (parsed.type === "relay-log") {
-            const lvl = (parsed.level || "info").toUpperCase();
-            const logMsg = parsed.message || "";
-            const prefix = `[Relay ${lvl}]`;
-            if (lvl === "ERROR") console.error(`${prefix} ${logMsg}`);
-            else if (lvl === "WARN") console.warn(`${prefix} ${logMsg}`);
-            else console.log(`${prefix} ${logMsg}`);
-            if (typeof sandboxWss !== "undefined") {
-              const fwd = JSON.stringify({ type: "relay-log", level: parsed.level, message: logMsg, ts: parsed.ts || Date.now() });
-              sandboxWss.clients.forEach((c: any) => { try { if (c.readyState === 1) c.send(fwd); } catch {} });
-            }
+      server.middlewares.use("/api/bridge-connector-switch", async (req, res) => {
+        if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
+        let body = "";
+        req.on("data", (chunk: any) => { body += chunk; });
+        req.on("end", () => {
+          try {
+            const { relayUrl } = JSON.parse(body);
+            if (!relayUrl) { res.statusCode = 400; res.end(JSON.stringify({ error: "relayUrl required" })); return; }
+            bridgeConnector.reconnect(relayUrl);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ success: true, relayUrl }));
+          } catch (err: any) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: err.message }));
           }
-        } catch (err: any) {
-          console.error(`[Bridge] handleBridgeRelayMessage error: ${err.message}`);
-        }
-      }
-
-      function processRelayBuffer() {
-        while (bridgeRelayBuffer.length > 0) {
-          const { data, opcode, bytesConsumed } = wsRelayDecodeFrame(bridgeRelayBuffer);
-          if (data === null) break;
-          bridgeRelayBuffer = bridgeRelayBuffer.slice(bytesConsumed);
-          if (opcode === 0x8) { if (bridgeRelaySocket) bridgeRelaySocket.destroy(); return; }
-          if (opcode === 0x9) {
-            const pong = Buffer.alloc(2); pong[0] = 0x8a; pong[1] = 0;
-            if (bridgeRelaySocket) bridgeRelaySocket.write(pong);
-            continue;
-          }
-          handleBridgeRelayMessage(data).catch((err: any) => {
-            console.error(`[Bridge] Unhandled relay message error: ${err.message}`);
-          });
-        }
-      }
-
-      function scheduleRelayReconnect() {
-        if (bridgeRelayReconnectTimer) return;
-        const delay = Math.min(bridgeRelayReconnectDelay, 60000);
-        console.log(`[Bridge] Reconnecting in ${delay / 1000}s...`);
-        bridgeRelayReconnectTimer = setTimeout(() => {
-          bridgeRelayReconnectTimer = null;
-          bridgeRelayReconnectDelay = Math.min(bridgeRelayReconnectDelay * 1.5, 60000);
-          connectToRelay();
-        }, delay);
-      }
-
-      function connectToRelay() {
-        if (bridgeRelaySocket) { try { bridgeRelaySocket.destroy(); } catch {} bridgeRelaySocket = null; }
-        bridgeRelayConnected = false;
-        if (bridgeRelayPingTimer) { clearInterval(bridgeRelayPingTimer); bridgeRelayPingTimer = null; }
-
-        if (!BRIDGE_RELAY_URL) { console.log("[Bridge] No relay URL — skipping"); return; }
-        let parsed: URL;
-        try { parsed = new URL(BRIDGE_RELAY_URL); } catch { console.error("[Bridge] Invalid relay URL:", BRIDGE_RELAY_URL); return; }
-
-        const host = parsed.hostname;
-        const port = parsed.port ? parseInt(parsed.port) : (parsed.protocol === "https:" ? 443 : 80);
-        const useTls = parsed.protocol === "https:";
-        const wsPath = `/bridge-ws?key=${encodeURIComponent(bridgeRelayKey)}&snapshotKey=${encodeURIComponent(snapshotKey)}`;
-        const wsKeyRaw = crypto.randomBytes(16).toString("base64");
-
-        console.log(`[Bridge] Connecting to ${host}...`);
-
-        const tlsMod = _require("tls");
-        const netMod = _require("net");
-        const connectOpts = { host, port, servername: host };
-        const socket = useTls ? tlsMod.connect(connectOpts) : netMod.connect(connectOpts);
-
-        let handshakeDone = false;
-        let httpBuffer = "";
-        bridgeRelayBuffer = Buffer.alloc(0);
-
-        socket.on("connect", () => {
-          socket.write(
-            `GET ${wsPath} HTTP/1.1\r\n` +
-            `Host: ${host}\r\n` +
-            `Upgrade: websocket\r\n` +
-            `Connection: Upgrade\r\n` +
-            `Sec-WebSocket-Key: ${wsKeyRaw}\r\n` +
-            `Sec-WebSocket-Version: 13\r\n` +
-            `\r\n`
-          );
         });
-
-        socket.on("data", (chunk: Buffer) => {
-          if (!handshakeDone) {
-            httpBuffer += chunk.toString("utf-8");
-            const headerEnd = httpBuffer.indexOf("\r\n\r\n");
-            if (headerEnd === -1) return;
-            const statusLine = httpBuffer.split("\r\n")[0];
-            if (!statusLine.includes("101")) {
-              console.error(`[Bridge] Handshake failed: ${statusLine}`);
-              socket.destroy();
-              scheduleRelayReconnect();
-              return;
-            }
-            handshakeDone = true;
-            bridgeRelaySocket = socket;
-            bridgeRelayConnected = true;
-            bridgeRelayLastConnectedAt = Date.now();
-            bridgeRelayReconnectDelay = 2000;
-            console.log(`[Bridge] Connected to relay at ${host}`);
-            bridgeRelaySend(JSON.stringify({ type: "ping" }));
-            bridgeRelayPingTimer = setInterval(() => {
-              bridgeRelaySend(JSON.stringify({ type: "ping" }));
-            }, 15000);
-            const headerBytes = Buffer.byteLength(httpBuffer.slice(0, headerEnd + 4), "utf-8");
-            const remaining = chunk.slice(headerBytes);
-            if (remaining.length > 0) {
-              bridgeRelayBuffer = Buffer.concat([bridgeRelayBuffer, remaining]);
-              processRelayBuffer();
-            }
-            return;
-          }
-          bridgeRelayBuffer = Buffer.concat([bridgeRelayBuffer, chunk]);
-          processRelayBuffer();
-        });
-
-        socket.on("close", (hadError: boolean) => {
-          const uptime = bridgeRelayLastConnectedAt ? Math.round((Date.now() - bridgeRelayLastConnectedAt) / 1000) : 0;
-          if (bridgeRelayConnected) console.log(`[Bridge] Disconnected from relay (hadError: ${hadError}, uptime: ${uptime}s)`);
-          bridgeRelayConnected = false;
-          bridgeRelaySocket = null;
-          if (bridgeRelayPingTimer) { clearInterval(bridgeRelayPingTimer); bridgeRelayPingTimer = null; }
-          scheduleRelayReconnect();
-        });
-
-        socket.on("error", (err: any) => {
-          console.error(`[Bridge] Connection error: ${err.code || err.message}`);
-          bridgeRelayConnected = false;
-          bridgeRelaySocket = null;
-          if (bridgeRelayPingTimer) { clearInterval(bridgeRelayPingTimer); bridgeRelayPingTimer = null; }
-          scheduleRelayReconnect();
-        });
-      }
-
-      setTimeout(() => connectToRelay(), 2000);
+      });
 
       server.middlewares.use("/api/bridge-relay-status", async (req, res) => {
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
         res.setHeader("Content-Type", "application/json");
-        const withinGrace = !bridgeRelayConnected && bridgeRelayLastConnectedAt > 0 && (Date.now() - bridgeRelayLastConnectedAt) < BRIDGE_RELAY_GRACE_PERIOD_MS;
-        const effectiveStatus = bridgeRelayConnected ? "connected" : (withinGrace ? "connected" : (bridgeRelayReconnectTimer ? "connecting" : "disconnected"));
+        const status = bridgeConnector.getStatus();
         res.end(JSON.stringify({
-          status: effectiveStatus,
-          relayUrl: BRIDGE_RELAY_URL,
-          snapshotKey,
+          status: status.status,
+          relayUrl: status.relayUrl,
+          snapshotKey: status.snapshotKey,
+          mode: status.mode,
         }));
       });
 
       server.middlewares.use("/api/bridge-status", async (req, res) => {
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
         res.setHeader("Content-Type", "application/json");
-        const withinGrace = !bridgeRelayConnected && bridgeRelayLastConnectedAt > 0 && (Date.now() - bridgeRelayLastConnectedAt) < BRIDGE_RELAY_GRACE_PERIOD_MS;
-        const effectiveStatus = bridgeRelayConnected ? "connected" : (withinGrace ? "connected" : (bridgeRelayReconnectTimer ? "connecting" : "disconnected"));
+        const status = bridgeConnector.getStatus();
         res.end(JSON.stringify({
-          status: effectiveStatus,
-          relayUrl: BRIDGE_RELAY_URL,
-          bridgeKey: bridgeRelayKey,
-          key: snapshotKey,
+          status: status.status,
+          relayUrl: status.relayUrl,
+          bridgeKey: status.bridgeKey,
+          key: status.snapshotKey,
+          mode: status.mode,
         }));
       });
 
