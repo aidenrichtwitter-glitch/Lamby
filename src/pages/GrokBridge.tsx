@@ -5534,7 +5534,7 @@ const GrokBridge: React.FC = () => {
                             await fetch('/api/bridge-connector-switch', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ relayUrl: devUrl }),
+                              body: JSON.stringify({ relayUrl: devUrl, key: snapshotUrl?.match(/key=([^&]+)/)?.[1] || '' }),
                             });
                             setStatusMessage('Switched to Dev relay');
                           } catch (e: any) { setStatusMessage(`Switch failed: ${e.message}`); }
@@ -5557,7 +5557,7 @@ const GrokBridge: React.FC = () => {
                             await fetch('/api/bridge-connector-switch', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ relayUrl: prodUrl }),
+                              body: JSON.stringify({ relayUrl: prodUrl, key: snapshotUrl?.match(/key=([^&]+)/)?.[1] || '' }),
                             });
                             setStatusMessage('Switched to Production relay');
                           } catch (e: any) { setStatusMessage(`Switch failed: ${e.message}`); }

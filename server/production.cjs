@@ -324,7 +324,14 @@ const server = http.createServer(async (req, res) => {
     try {
       const body = JSON.parse(await readBody(req));
       const relayUrl = body.relayUrl;
+      const providedKey = body.key;
       if (!relayUrl) { sendJson(res, { error: "relayUrl required" }, 400); return; }
+      if (!isValidKey(providedKey)) { sendJson(res, { error: "Invalid key" }, 403); return; }
+      const allowedUrls = new Set([
+        "wss://bridge-relay.replit.app",
+        `wss://${process.env.REPLIT_DEV_DOMAIN || "localhost:" + PORT}`,
+      ]);
+      if (!allowedUrls.has(relayUrl)) { sendJson(res, { error: "Relay URL not in allowlist" }, 403); return; }
       if (prodConnector) {
         prodConnector.reconnect(relayUrl);
         sendJson(res, { success: true, relayUrl });

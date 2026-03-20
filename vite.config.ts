@@ -5321,14 +5321,20 @@ function projectManagementPlugin(): Plugin {
         return result;
       }
 
+      const allowedRelayUrls = new Set([
+        "wss://bridge-relay.replit.app",
+        `wss://${process.env.REPLIT_DEV_DOMAIN || "localhost:5000"}`,
+      ]);
       server.middlewares.use("/api/bridge-connector-switch", async (req, res) => {
         if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
         let body = "";
         req.on("data", (chunk: any) => { body += chunk; });
         req.on("end", () => {
           try {
-            const { relayUrl } = JSON.parse(body);
+            const { relayUrl, key } = JSON.parse(body);
             if (!relayUrl) { res.statusCode = 400; res.end(JSON.stringify({ error: "relayUrl required" })); return; }
+            if (key !== snapshotKey) { res.statusCode = 403; res.end(JSON.stringify({ error: "Invalid key" })); return; }
+            if (!allowedRelayUrls.has(relayUrl)) { res.statusCode = 403; res.end(JSON.stringify({ error: "Relay URL not in allowlist" })); return; }
             bridgeConnector.reconnect(relayUrl);
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ success: true, relayUrl }));
