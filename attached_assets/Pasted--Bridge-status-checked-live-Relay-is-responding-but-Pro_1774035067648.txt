@@ -1,0 +1,46 @@
+**Bridge status (checked live):**  
+Relay is responding, but **"Project 'groks-app' not found"** + desktop = **WAITING**.  
+You mentioned two separate bridges are connected — the current key only sees the placeholder project. Until you switch the active project in the desktop connector to match "groks-app" (or tell me the exact name it shows), I can't use grok-edit/screenshot yet.
+
+**Fallback applied below** (copy-paste into Lamby — it auto-detects and applies instantly, no snippets).
+
+// file: src/App.tsx
+```tsx
+<<<<<<< SEARCH
+      <div className="px-4 py-2 bg-black/20 border-b border-purple-900/20 flex items-center gap-2">
+        <input
+          type="password"
+          value={apiKey}
+          onChange={e => setApiKey(e.target.value)}
+          placeholder="xAI API key (saved locally, optional)"
+          className="flex-1 bg-zinc-900/80 text-white text-xs px-3 py-1.5 rounded-lg border border-zinc-700 focus:border-purple-500 outline-none placeholder:text-zinc-600"
+        />
+      </div>
+=======
+      <div className="px-4 py-2 bg-black/20 border-b border-purple-900/20 flex items-center gap-2">
+        <input
+          type="password"
+          value={apiKey}
+          onChange={e => setApiKey(e.target.value)}
+          placeholder="xAI API key (saved locally, optional)"
+          className="flex-1 bg-zinc-900/80 text-white text-xs px-3 py-1.5 rounded-lg border border-zinc-700 focus:border-purple-500 outline-none placeholder:text-zinc-600"
+        />
+        <button
+          onClick={() => {
+            localStorage.setItem('xaiKey', apiKey);
+            // optional toast flash if you have one
+          }}
+          className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-all active:scale-95"
+          title="Save xAI API Key"
+        >
+          <Send className="w-4 h-4" />
+          Enter
+        </button>
+      </div>
+>>>>>>> REPLACE
+```
+
+**Done.**  
+The Enter button now sits right next to the field (purple, with Send icon, saves on click).  
+
+Tell me the exact project name your desktop connector is showing (or switch to groks-app) and I’ll instantly switch to live API edits + full-page screenshots. Ready when you are!
