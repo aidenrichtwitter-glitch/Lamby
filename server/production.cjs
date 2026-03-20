@@ -448,6 +448,163 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  const screenshotMatch = pathname.match(/^\/api\/screenshot\/([^/]+)\/([^/]+)$/);
+  if (screenshotMatch) {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const providedKey = screenshotMatch[1];
+    const project = decodeURIComponent(screenshotMatch[2]);
+    const matchedClient = findBridgeClient(providedKey);
+    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
+    const selector = url.searchParams.get("selector") || undefined;
+    const fullPage = url.searchParams.get("fullPage") === "true";
+    const waitMs = parseInt(url.searchParams.get("waitMs") || "2000");
+    const action = { type: "screenshot_preview", project, selector, fullPage, waitMs };
+    const requestId = crypto.randomUUID();
+    const relayPromise = new Promise((resolve) => {
+      const timer = setTimeout(() => { pendingSandboxRelayRequests.delete(requestId); resolve(JSON.stringify({ error: "Relay timeout — desktop app did not respond within 60 seconds." })); }, 60000);
+      pendingSandboxRelayRequests.set(requestId, { resolve, timer });
+    });
+    try { matchedClient.send(JSON.stringify({ type: "sandbox-execute-request", requestId, actions: [action] })); } catch { sendJson(res, { error: "Could not reach desktop app through relay bridge." }, 502); return; }
+    sandboxAuditLog.push({ ts: Date.now(), action: "screenshot_preview", project, status: "relayed-screenshot" });
+    if (sandboxAuditLog.length > 1000) sandboxAuditLog.splice(0, sandboxAuditLog.length - 500);
+    const result = await relayPromise;
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(result);
+    return;
+  }
+
+  if (pathname === "/api/grok-proxy") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const providedKey = getKey(req, url);
+    const matchedClient = findBridgeClient(providedKey);
+    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
+
+    const payloadB64 = url.searchParams.get("payload") || "";
+    if (!payloadB64) { sendJson(res, { error: "payload parameter required (base64 JSON)" }, 400); return; }
+    let actions;
+    try {
+      let decoded;
+      try { const buf = Buffer.from(payloadB64, "base64"); const zlib = require("zlib"); decoded = zlib.gunzipSync(buf).toString("utf-8"); } catch { decoded = Buffer.from(payloadB64, "base64").toString("utf-8"); }
+      const parsed = JSON.parse(decoded);
+      actions = parsed.actions || parsed;
+      if (!Array.isArray(actions)) throw new Error("actions must be array");
+    } catch (e) { sendJson(res, { error: "Invalid payload: " + e.message }, 400); return; }
+    if (actions.length > 50) { sendJson(res, { error: "Max 50 actions per request" }, 400); return; }
+
+    const project = url.searchParams.get("project") || "";
+    if (project) actions = actions.map(a => ({ ...a, project: a.project || project }));
+
+    const requestId = crypto.randomUUID();
+    const relayPromise = new Promise((resolve) => {
+      const timer = setTimeout(() => { pendingSandboxRelayRequests.delete(requestId); resolve(JSON.stringify({ error: "Relay timeout — desktop app did not respond within 60 seconds." })); }, 60000);
+      pendingSandboxRelayRequests.set(requestId, { resolve, timer });
+    });
+    try { matchedClient.send(JSON.stringify({ type: "sandbox-execute-request", requestId, actions })); } catch { sendJson(res, { error: "Could not reach desktop app through relay bridge." }, 502); return; }
+    for (const action of actions) { sandboxAuditLog.push({ ts: Date.now(), action: action.type, project: action.project || "", status: "relayed-proxy" }); }
+    if (sandboxAuditLog.length > 1000) sandboxAuditLog.splice(0, sandboxAuditLog.length - 500);
+    const result = await relayPromise;
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(result);
+    return;
+  }
+
+  if (pathname === "/api/grok-edit") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const providedKey = getKey(req, url);
+    const matchedClient = findBridgeClient(providedKey);
+    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
+
+    const project = url.searchParams.get("project") || "";
+    const filePath = url.searchParams.get("path") || "";
+    const searchB64 = url.searchParams.get("searchB64") || "";
+    const replaceB64 = url.searchParams.get("replaceB64") || "";
+    const search = searchB64 ? Buffer.from(searchB64, "base64").toString("utf-8") : (url.searchParams.get("search") || "");
+    const replace = replaceB64 ? Buffer.from(replaceB64, "base64").toString("utf-8") : (url.searchParams.get("replace") || "");
+    const replaceAll = url.searchParams.get("replaceAll") === "true";
+
+    if (!filePath) { sendJson(res, { error: "path parameter required" }, 400); return; }
+    if (!search) { sendJson(res, { error: "search parameter required" }, 400); return; }
+
+    const actions = [{ type: "search_replace", project, path: filePath, search, replace, replaceAll }];
+    const requestId = crypto.randomUUID();
+    const relayPromise = new Promise((resolve) => {
+      const timer = setTimeout(() => { pendingSandboxRelayRequests.delete(requestId); resolve(JSON.stringify({ error: "Relay timeout — desktop app did not respond within 30 seconds." })); }, 30000);
+      pendingSandboxRelayRequests.set(requestId, { resolve, timer });
+    });
+    try { matchedClient.send(JSON.stringify({ type: "sandbox-execute-request", requestId, actions })); } catch { sendJson(res, { error: "Could not reach desktop app through relay bridge." }, 502); return; }
+    sandboxAuditLog.push({ ts: Date.now(), action: "search_replace", project, status: "relayed-edit" });
+    if (sandboxAuditLog.length > 1000) sandboxAuditLog.splice(0, sandboxAuditLog.length - 500);
+    const result = await relayPromise;
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(result);
+    return;
+  }
+
+  if (pathname === "/api/grok-interact") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const providedKey = getKey(req, url);
+    const matchedClient = findBridgeClient(providedKey);
+    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
+
+    const project = url.searchParams.get("project") || "";
+    const action = url.searchParams.get("action") || "";
+    if (!project || !action) { sendJson(res, { error: "Required params: project, action" }, 400); return; }
+
+    const interactAction = { type: "browser_interact", project, action };
+    if (url.searchParams.get("selector")) interactAction.selector = url.searchParams.get("selector");
+    if (url.searchParams.get("text")) interactAction.value = url.searchParams.get("text");
+    if (url.searchParams.get("value")) interactAction.value = url.searchParams.get("value");
+    if (url.searchParams.get("x")) interactAction.x = parseInt(url.searchParams.get("x"));
+    if (url.searchParams.get("y")) interactAction.y = parseInt(url.searchParams.get("y"));
+    if (url.searchParams.get("code")) interactAction.script = url.searchParams.get("code");
+    if (url.searchParams.get("script")) interactAction.script = url.searchParams.get("script");
+    if (url.searchParams.get("functionName")) interactAction.functionName = url.searchParams.get("functionName");
+    if (url.searchParams.get("args")) try { interactAction.args = JSON.parse(url.searchParams.get("args")); } catch {}
+    if (url.searchParams.get("screenshot") === "true") interactAction.screenshot = true;
+    if (url.searchParams.get("waitAfter")) interactAction.waitAfter = parseInt(url.searchParams.get("waitAfter"));
+    if (url.searchParams.get("timeout")) interactAction.timeout = parseInt(url.searchParams.get("timeout"));
+
+    const requestId = crypto.randomUUID();
+    const relayPromise = new Promise((resolve) => {
+      const timer = setTimeout(() => { pendingSandboxRelayRequests.delete(requestId); resolve(JSON.stringify({ error: "Relay timeout — desktop app did not respond within 30 seconds." })); }, 30000);
+      pendingSandboxRelayRequests.set(requestId, { resolve, timer });
+    });
+    try { matchedClient.send(JSON.stringify({ type: "sandbox-execute-request", requestId, actions: [interactAction] })); } catch { sendJson(res, { error: "Could not reach desktop app through relay bridge." }, 502); return; }
+    sandboxAuditLog.push({ ts: Date.now(), action: "browser_interact", project, status: "relayed-interact" });
+    if (sandboxAuditLog.length > 1000) sandboxAuditLog.splice(0, sandboxAuditLog.length - 500);
+    const result = await relayPromise;
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(result);
+    return;
+  }
+
+  if (pathname === "/api/commands") {
+    const COMMANDS = ["list_tree","read_file","read_multiple_files","write_file","write_file_chunk","create_file","delete_file","bulk_delete","move_file","copy_file","copy_folder","rename_file","grep","search_files","search_replace","apply_patch","bulk_write","run_command","install_deps","git_status","git_add","git_commit","git_diff","git_log","start_process","kill_process","list_processes","screenshot_preview","browser_interact"];
+    sendJson(res, { total: COMMANDS.length, commands: COMMANDS });
+    return;
+  }
+
+  if (pathname === "/api/grok") {
+    sendJson(res, {
+      service: "Lamby Bridge Relay — Grok Integration (Production)",
+      endpoints: {
+        snapshot: "/api/snapshot/:project?key=KEY",
+        consoleLogs: "/api/console-logs?key=KEY&project=NAME",
+        execute: "POST /api/sandbox/execute?key=KEY",
+        grokProxy: "/api/grok-proxy?key=KEY&project=NAME&payload=BASE64_ACTIONS",
+        grokEdit: "/api/grok-edit?key=KEY&project=NAME&path=FILE&search=OLD&replace=NEW&replaceAll=true",
+        grokInteract: "/api/grok-interact?key=KEY&project=NAME&action=ACTION&selector=CSS",
+        screenshot: "/api/screenshot/:key/:project?fullPage=true&waitMs=8000",
+        commands: "/api/commands",
+      },
+    });
+    return;
+  }
+
   if (pathname === "/health" || pathname === "/healthz") {
     sendJson(res, { status: "ok", bridge: bridgeClients.size > 0 ? "connected" : "no-desktop", uptime: process.uptime() });
     return;

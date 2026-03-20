@@ -352,10 +352,27 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `PRIMARY EDIT METHOD — grok-edit (simple GET, no base64):\n`;
     section += `  ${editBaseUrl}&project=${proj}&path=FILE_PATH&search=OLD_TEXT&replace=NEW_TEXT&replaceAll=true\n\n`;
     section += `  This is the fastest way to edit files. URL-encode the search and replace values.\n`;
+    section += `  For HTML content with special characters, use base64 params instead:\n`;
+    section += `  ${editBaseUrl}&project=${proj}&path=FILE_PATH&searchB64=BASE64_OLD&replaceB64=BASE64_NEW\n`;
     section += `  Returns: { "success": true, "results": [{ "data": { "replacements": N } }] }\n\n`;
     section += `  EXAMPLE:\n`;
     section += `  ${editBaseUrl}&project=${proj}&path=index.html&search=text-white&replace=text-purple-300&replaceAll=true\n\n`;
   }
+
+  const interactBaseUrl = editBaseUrl ? editBaseUrl.replace('/api/grok-edit', '/api/grok-interact') : '';
+  if (interactBaseUrl) {
+    section += `BROWSER INTERACTION — grok-interact (simple GET, interact with live preview):\n`;
+    section += `  ${interactBaseUrl}&project=${proj}&action=ACTION&selector=CSS_SELECTOR\n`;
+    section += `  Actions: click, type, select, evaluate, runFunction, waitFor\n`;
+    section += `  Params: selector, text (mapped to value), value, x, y, code (mapped to script), script, functionName, args (JSON array), screenshot=true, waitAfter (ms), timeout (ms)\n`;
+    section += `  EXAMPLE (click a button):\n`;
+    section += `  ${interactBaseUrl}&project=${proj}&action=click&selector=%23submit-btn\n`;
+    section += `  EXAMPLE (type text):\n`;
+    section += `  ${interactBaseUrl}&project=${proj}&action=type&selector=%23input&text=hello+world\n`;
+    section += `  EXAMPLE (evaluate JS):\n`;
+    section += `  ${interactBaseUrl}&project=${proj}&action=evaluate&code=return+document.title\n\n`;
+  }
+
 
   section += `RETRY & ERROR HANDLING (follow strictly):\n`;
   section += `  1. Before any grok-edit call, wait at least 6 seconds.\n`;
@@ -385,7 +402,9 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `  FILE OPERATIONS:\n`;
     section += `    { type: "list_tree", project: "${proj}" }  → full file tree\n`;
     section += `    { type: "read_file", project: "${proj}", path: "src/App.tsx" }  → file content\n`;
-    section += `    { type: "write_file", project: "${proj}", path: "src/App.tsx", content: "..." }  → overwrite file (FULL content required)\n`;
+    section += `    { type: "write_file", project: "${proj}", path: "src/App.tsx", content: "..." }  → overwrite file (FULL content required, keep under 2KB)\n`;
+    section += `    { type: "write_file_chunk", project: "${proj}", path: "src/App.tsx", content: "...", chunk_index: 0, total_chunks: 3 }  → chunked write for files > 2KB\n`;
+    section += `      LARGE FILE RULE: For content > 2KB, split into ~1500-char chunks. chunk_index=0 creates/overwrites, 1+ appends. Send each chunk as a separate action.\n`;
     section += `    { type: "create_file", project: "${proj}", path: "src/new.ts", content: "..." }  → create new file\n`;
     section += `    { type: "delete_file", project: "${proj}", path: "src/old.ts" }\n`;
     section += `    { type: "search_replace", project: "${proj}", path: "src/App.tsx", search: "oldText", replace: "newText" }  → find & replace\n`;

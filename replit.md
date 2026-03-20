@@ -107,7 +107,9 @@ supabase/
 - **Client integration**: `streamGrokFC()` in GrokBridge.tsx — used when bridge is online + active project + API mode. Falls back to `streamGrok()` (Supabase proxy, no tools) otherwise
 - **SSE events**: `status`, `function_call`, `function_result`, `text`, `done`, `error` — streamed to client for live progress updates
 - **API key resolution**: `process.env.XAI_API` → `process.env.XAI_API_KEY` → `~/.guardian-ai/settings.json` `grokApiKey`
-- **Bridge relay endpoints** (`server/bridge-relay.cjs`): `/api/grok-proxy` (GET, base64 payload), `/api/grok-edit` (GET, query params), `/api/grok` (discovery)
+- **Bridge relay endpoints** (`server/bridge-relay.cjs`): `/api/grok-proxy` (GET, base64 payload), `/api/grok-edit` (GET, query params, supports `searchB64`/`replaceB64` for HTML content), `/api/grok-interact` (GET, browser interaction wrapper), `/api/commands` (command discovery), `/api/screenshot/:key/:project` (direct screenshot), `/api/grok` (discovery)
+- **`write_file_chunk`** (`server/sandbox-dispatcher.cjs`): Chunked file writes for files > 2KB. `chunk_index=0` creates/overwrites, subsequent chunks append. Required for large files that exceed URL length limits in grok-proxy.
+- **production.cjs mirrors bridge-relay.cjs**: All relay endpoints (grok-proxy, grok-edit, grok-interact, screenshot, commands, grok discovery) are mirrored in `server/production.cjs` for deployed environments.
 - **Why not browse_page**: Grok's built-in `browse_page` tool HTML-encodes `&` as `&amp;` in URLs (breaking query params) and has ~20s internal timeout (screenshots take 15-25s). Function calling bypasses both issues.
 
 ## Auto-Error-Recovery System

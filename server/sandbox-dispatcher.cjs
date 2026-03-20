@@ -337,6 +337,22 @@ function executeSandboxAction(action, projectsDir, options) {
         else { fs.writeFileSync(c.resolved, action.content); }
         return { status: "success", type: t, data: { path: action.path, created: !existed, previousLength: prev?.length ?? 0 } };
       }
+      case "write_file_chunk": {
+        if (!action.path || action.content === undefined) return { status: "error", type: t, error: "path and content required" };
+        if (action.chunk_index === undefined || action.total_chunks === undefined) return { status: "error", type: t, error: "chunk_index and total_chunks required" };
+        const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : validateBoundedPath(action.path, projectsDir);
+        if (!c.valid) return { status: "error", type: t, error: c.error };
+        const dir = path.dirname(c.resolved);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        if (action.chunk_index === 0) {
+          fs.writeFileSync(c.resolved, action.content);
+        } else {
+          fs.appendFileSync(c.resolved, action.content);
+        }
+        const isComplete = action.chunk_index >= action.total_chunks - 1;
+        const currentSize = fs.existsSync(c.resolved) ? fs.statSync(c.resolved).size : 0;
+        return { status: "success", type: t, data: { path: action.path, chunk_index: action.chunk_index, total_chunks: action.total_chunks, complete: isComplete, currentSize } };
+      }
       case "delete_file": {
         if (!action.path) return { status: "error", type: t, error: "path required" };
         const c = projectName ? validateProjectPath(projectName, action.path, projectsDir) : validateBoundedPath(action.path, projectsDir);

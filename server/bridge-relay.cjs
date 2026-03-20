@@ -407,7 +407,8 @@ const server = http.createServer(async (req, res) => {
     if (!payloadB64) { sendJson(res, { error: "payload parameter required (base64-encoded JSON)" }, 400); return; }
     let actions;
     try {
-      const decoded = Buffer.from(payloadB64, "base64").toString("utf-8");
+      let decoded;
+      try { const buf = Buffer.from(payloadB64, "base64"); const zlib = require("zlib"); decoded = zlib.gunzipSync(buf).toString("utf-8"); } catch { decoded = Buffer.from(payloadB64, "base64").toString("utf-8"); }
       const parsed = JSON.parse(decoded);
       actions = parsed.actions || [parsed];
       if (!Array.isArray(actions)) actions = [actions];
@@ -454,12 +455,14 @@ const server = http.createServer(async (req, res) => {
 
     const project = url.searchParams.get("project") || "";
     const filePath = url.searchParams.get("path") || "";
-    const search = url.searchParams.get("search") || "";
-    const replace = url.searchParams.get("replace") || "";
+    const searchB64 = url.searchParams.get("searchB64") || "";
+    const replaceB64 = url.searchParams.get("replaceB64") || "";
+    const search = searchB64 ? Buffer.from(searchB64, "base64").toString("utf-8") : (url.searchParams.get("search") || "");
+    const replace = replaceB64 ? Buffer.from(replaceB64, "base64").toString("utf-8") : (url.searchParams.get("replace") || "");
     const replaceAll = url.searchParams.get("replaceAll") === "true";
 
     if (!filePath) { sendJson(res, { error: "path parameter required" }, 400); return; }
-    if (!search) { sendJson(res, { error: "search parameter required" }, 400); return; }
+    if (!search) { sendJson(res, { error: "search parameter required (use search= or searchB64= for HTML content)" }, 400); return; }
 
     const actions = [{ type: "search_replace", project, path: filePath, search, replace, replaceAll }];
     const requestId = crypto.randomUUID();
@@ -484,6 +487,72 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pathname === "/api/grok-interact") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const providedKey = getKey(req, url);
+    const matchedClient = findBridgeClient(providedKey);
+    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
+
+    const project = url.searchParams.get("project") || "";
+    const action = url.searchParams.get("action") || "";
+    if (!project || !action) {
+      sendJson(res, { error: "Required params: project, action", actions: ["click", "type", "select", "evaluate", "runFunction", "waitFor"], example: `https://${req.headers.host || "bridge-relay.replit.app"}/api/grok-interact?key=KEY&project=my-app&action=click&selector=%23screenshot-btn`, params: { selector: "CSS selector", text: "text to type (mapped to value)", value: "value for type/select", code: "JS code for evaluate (mapped to script)", script: "JS code for evaluate", functionName: "for runFunction", args: "JSON array for runFunction", screenshot: "true to capture after", waitAfter: "ms to wait after action", timeout: "ms for waitFor" } });
+      return;
+    }
+
+    const interactAction = { type: "browser_interact", project, action };
+    if (url.searchParams.get("selector")) interactAction.selector = url.searchParams.get("selector");
+    if (url.searchParams.get("text")) interactAction.value = url.searchParams.get("text");
+    if (url.searchParams.get("value")) interactAction.value = url.searchParams.get("value");
+    if (url.searchParams.get("x")) interactAction.x = parseInt(url.searchParams.get("x"));
+    if (url.searchParams.get("y")) interactAction.y = parseInt(url.searchParams.get("y"));
+    if (url.searchParams.get("code")) interactAction.script = url.searchParams.get("code");
+    if (url.searchParams.get("script")) interactAction.script = url.searchParams.get("script");
+    if (url.searchParams.get("functionName")) interactAction.functionName = url.searchParams.get("functionName");
+    if (url.searchParams.get("args")) try { interactAction.args = JSON.parse(url.searchParams.get("args")); } catch {}
+    if (url.searchParams.get("screenshot") === "true") interactAction.screenshot = true;
+    if (url.searchParams.get("waitAfter")) interactAction.waitAfter = parseInt(url.searchParams.get("waitAfter"));
+    if (url.searchParams.get("timeout")) interactAction.timeout = parseInt(url.searchParams.get("timeout"));
+
+    const requestId = crypto.randomUUID();
+    const relayPromise = new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pendingSandboxRelayRequests.delete(requestId);
+        resolve(JSON.stringify({ error: "Relay timeout — desktop app did not respond within 30 seconds." }));
+      }, 30000);
+      pendingSandboxRelayRequests.set(requestId, { resolve, timer });
+    });
+    try {
+      matchedClient.send(JSON.stringify({ type: "sandbox-execute-request", requestId, actions: [interactAction] }));
+    } catch {
+      sendJson(res, { error: "Could not reach desktop app through relay bridge." }, 502);
+      return;
+    }
+    sandboxAuditLog.push({ ts: Date.now(), action: "browser_interact", project, status: "relayed-interact" });
+    if (sandboxAuditLog.length > 1000) sandboxAuditLog.splice(0, sandboxAuditLog.length - 500);
+    const result = await relayPromise;
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(result);
+    return;
+  }
+
+  if (pathname === "/api/commands") {
+    const COMMANDS = ["list_tree","read_file","read_multiple_files","write_file","write_file_chunk","create_file","delete_file","bulk_delete","move_file","copy_file","copy_folder","rename_file","grep","search_files","search_replace","apply_patch","bulk_write","run_command","install_deps","add_dependency","remove_dependency","type_check","lint_and_fix","format_files","get_build_metrics","restart_dev_server","list_open_ports","git_status","git_add","git_commit","git_diff","git_log","git_branch","git_checkout","git_stash","git_init","git_push","git_pull","git_merge","git_stash_pop","git_reset","git_revert","git_tag","detect_structure","start_process","kill_process","list_processes","build_project","run_tests","archive_project","export_project","set_env_var","get_env_vars","rollback_last_change","project_analyze","tailwind_audit","find_usages","component_tree","extract_theme","extract_colors","capture_preview","get_preview_url","generate_component","generate_page","refactor_file","validate_change","profile_performance","create_folder","delete_folder","move_folder","rename_folder","list_tree_filtered","dead_code_detection","dependency_graph","symbol_search","grep_advanced","extract_imports","run_command_advanced","build_with_flags","clean_build_cache","start_process_named","monitor_process","get_process_logs","stop_all_processes","switch_port","visual_diff","capture_component","record_video","get_dom_snapshot","get_console_errors","generate_test","generate_storybook","optimize_code","convert_to_typescript","add_feature","migrate_framework","react_profiler","memory_leak_detection","console_error_analysis","runtime_error_trace","bundle_analyzer","network_monitor","accessibility_audit","security_scan","set_tailwind_config","set_next_config","update_package_json","manage_scripts","switch_package_manager","deploy_preview","export_project_zip","import_project","super_command","screenshot_preview","browser_interact"];
+    sendJson(res, {
+      total: COMMANDS.length,
+      commands: COMMANDS,
+      usage: "POST /api/sandbox/execute with {actions: [{type: '<command>', project: 'name', ...params}]}",
+      grokProxy: {
+        endpoint: "GET /api/grok-proxy",
+        params: { key: "your-key", payload: "base64(JSON) or base64(gzip(JSON))" },
+        encodingPlain: "btoa(JSON.stringify({actions:[...]}))",
+        largeFileRule: "For file content > 2 KB use write_file_chunk (split into ~1500-char pieces, chunk_index 0..N-1, total_chunks=N) — do NOT use write_file for large content, the URL will be truncated",
+      },
+    });
+    return;
+  }
+
   if (pathname === "/api/grok") {
     sendJson(res, {
       service: "Lamby Bridge Relay — Grok Integration",
@@ -493,14 +562,17 @@ const server = http.createServer(async (req, res) => {
         execute: "POST /api/sandbox/execute?key=KEY",
         grokProxy: "/api/grok-proxy?key=KEY&project=NAME&payload=BASE64_ACTIONS",
         grokEdit: "/api/grok-edit?key=KEY&project=NAME&path=FILE&search=OLD&replace=NEW&replaceAll=true",
+        grokInteract: "/api/grok-interact?key=KEY&project=NAME&action=ACTION&selector=CSS",
+        screenshot: "/api/screenshot/:key/:project?fullPage=true&waitMs=8000",
+        commands: "/api/commands",
       },
-      notes: "All grok-proxy and grok-edit endpoints are GET-based for use with browse_page. The payload for grok-proxy is base64-encoded JSON: {actions:[{type,project,...}]}.",
+      notes: "All grok-proxy, grok-edit, and grok-interact endpoints are GET-based for use with browse_page. The payload for grok-proxy is base64-encoded JSON: {actions:[{type,project,...}]}. For HTML content in grok-edit, use searchB64 and replaceB64 (base64-encoded) instead of search/replace.",
     });
     return;
   }
 
   res.writeHead(404, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ error: "Not found", endpoints: ["/", "/api/snapshot-key", "/api/bridge-status", "/api/snapshot/:project", "/api/console-logs", "/api/sandbox/execute", "/api/sandbox/audit-log", "/api/grok-proxy", "/api/grok-edit", "/api/grok"] }));
+  res.end(JSON.stringify({ error: "Not found", endpoints: ["/", "/api/grok", "/api/screenshot/:key/:project", "/api/grok-edit", "/api/grok-interact", "/api/grok-proxy", "/api/snapshot-key", "/api/bridge-status", "/api/snapshot/:project", "/api/console-logs", "/api/sandbox/execute", "/api/sandbox/audit-log", "/api/commands"] }));
 });
 
 server.on("upgrade", (req, socket, head) => {
