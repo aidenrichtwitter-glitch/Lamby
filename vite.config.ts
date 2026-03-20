@@ -397,16 +397,7 @@ function projectManagementPlugin(): Plugin {
           const projectName = pathParts[0] || "";
           const providedKey = url.searchParams.get("key") || (req.headers.authorization || "").replace("Bearer ", "");
 
-          let matchedClient: { ws: any; snapshotKey: string } | null = null;
-          for (const [, client] of bridgeClients) {
-            if (client.snapshotKey === providedKey && client.ws.readyState === 1) {
-              matchedClient = client;
-              break;
-            }
-          }
-
-          const isLocalKey = providedKey === snapshotKey;
-          if (!isLocalKey && !matchedClient) {
+          if (providedKey !== snapshotKey) {
             res.statusCode = 403;
             res.setHeader("Content-Type", "text/plain");
             res.end("Lamby Snapshot API\n\nAccess denied — invalid or missing key.\nProvide ?key=YOUR_KEY or Authorization: Bearer YOUR_KEY");
@@ -426,7 +417,14 @@ function projectManagementPlugin(): Plugin {
           recentHits.push(now);
           snapshotRateLimit.set(clientIp, recentHits);
 
-          if (matchedClient && !isLocalKey) {
+          let relayClient: { ws: any; snapshotKey: string } | null = null;
+          for (const [, client] of bridgeClients) {
+            if (client.ws.readyState === 1) {
+              relayClient = client;
+              break;
+            }
+          }
+          if (relayClient) {
             const requestId = crypto.randomUUID();
             const snapshotPromise = new Promise<string>((resolve) => {
               const timer = setTimeout(() => {
@@ -436,7 +434,7 @@ function projectManagementPlugin(): Plugin {
               pendingRelayRequests.set(requestId, { resolve, timer });
             });
             try {
-              matchedClient.ws.send(JSON.stringify({ type: "snapshot-request", requestId, projectName }));
+              relayClient.ws.send(JSON.stringify({ type: "snapshot-request", requestId, projectName }));
             } catch {
               res.statusCode = 502;
               res.setHeader("Content-Type", "text/plain");

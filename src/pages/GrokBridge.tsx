@@ -247,6 +247,8 @@ function extractBaseUrl(endpoint: string): string {
   }
 }
 
+const LAMBY_UNIVERSAL_KEY = '92781fb690e47d110da1458cbe03ac9a';
+
 async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: string; cmdUrl: string; proxyUrl: string; editUrl: string; online: boolean }> {
   const isElectronEnv = typeof window !== 'undefined' && (window as any).process?.type === 'renderer';
   try {
@@ -275,7 +277,7 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
         } catch {}
       }
       const relayUrl = statusData?.relayUrl || '';
-      const key = keyData?.key || statusData?.key || '';
+      const key = keyData?.key || statusData?.key || LAMBY_UNIVERSAL_KEY;
       if (relayUrl && key) {
         const relayBase = relayUrl.replace(/\/$/, '');
         return {
@@ -295,7 +297,7 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
       const keyData = keyRes?.ok ? await keyRes.json().catch(() => null) : null;
       const relayData = relayRes?.ok ? await relayRes.json().catch(() => null) : null;
       const relayUrl = relayData?.relayUrl || '';
-      const key = keyData?.key || relayData?.snapshotKey || '';
+      const key = keyData?.key || relayData?.snapshotKey || LAMBY_UNIVERSAL_KEY;
       if (relayUrl && key) {
         const relayBase = relayUrl.replace(/\/$/, '');
         return {
@@ -386,8 +388,9 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `     - Current page status from snapshot\n`;
   section += `  Never claim a change happened unless you saw {"success":true}.\n\n`;
 
+  const UNIVERSAL_KEY = '92781fb690e47d110da1458cbe03ac9a';
   const keyMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/key=([^&]+)/);
-  const screenshotKey = keyMatch ? keyMatch[1] : 'KEY';
+  const screenshotKey = keyMatch ? keyMatch[1] : UNIVERSAL_KEY;
   const relayBaseMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/^(https?:\/\/[^/]+)/);
   const screenshotRelayBase = relayBaseMatch ? relayBaseMatch[1] : 'https://bridge-relay.replit.app';
 
