@@ -1657,8 +1657,13 @@ function createConnector(config) {
     let parsedUrl;
     try { parsedUrl = new URL(_currentRelayUrl); } catch { log("error", `Invalid relay URL: ${_currentRelayUrl}`); return; }
 
-    const isSecure = parsedUrl.protocol === "wss:" || parsedUrl.protocol === "https:";
     const host     = parsedUrl.hostname;
+    const isLocalhost = host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
+    let isSecure = parsedUrl.protocol === "wss:" || parsedUrl.protocol === "https:";
+    if (isSecure && isLocalhost) {
+      log("warn", `Downgrading wss:// to ws:// for localhost connection (${_currentRelayUrl})`);
+      isSecure = false;
+    }
     const port     = parsedUrl.port ? parseInt(parsedUrl.port) : (isSecure ? 443 : 80);
     const wsKey    = crypto.randomBytes(16).toString("base64");
     const wsPath   = `/bridge-ws?key=${encodeURIComponent(bridgeKey)}&snapshotKey=${encodeURIComponent(snapshotKey)}` +

@@ -1915,8 +1915,13 @@ async function onMessage(rawData) {
 function connect() {
   let relayUrl;
   try { relayUrl = new URL(RELAY_URL); } catch { log("error", `Invalid RELAY_URL: ${RELAY_URL}`); process.exit(1); }
-  const isSecure = relayUrl.protocol === "wss:";
   const host     = relayUrl.hostname;
+  const isLocalhost = host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0";
+  let isSecure = relayUrl.protocol === "wss:";
+  if (isSecure && isLocalhost) {
+    log("warn", `Downgrading wss:// to ws:// for localhost connection (${RELAY_URL})`);
+    isSecure = false;
+  }
   const port     = relayUrl.port ? parseInt(relayUrl.port) : (isSecure ? 443 : 80);
   const wsKey    = crypto.randomBytes(16).toString("base64");
   const wsPath   = `/bridge-ws?key=${encodeURIComponent(BRIDGE_KEY)}&snapshotKey=${encodeURIComponent(SNAPSHOT_KEY)}` +
