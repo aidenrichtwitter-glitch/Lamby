@@ -65,6 +65,8 @@ let bridgeBuffer = Buffer.alloc(0);
 let bridgeFailCount = 0;
 let bridgeTriedFallback = false;
 let bridgeLastConnectedAt = 0;
+let bridgeLastPongAt = 0;
+let bridgePongCheckTimer = null;
 const BRIDGE_GRACE_PERIOD_MS = 30000;
 
 function wsClientEncodeFrame(data) {
@@ -185,6 +187,7 @@ async function handleBridgeMessage(msg) {
     } else if (parsed.type === "ping") {
       bridgeSend(JSON.stringify({ type: "pong" }));
     } else if (parsed.type === "pong") {
+      bridgeLastPongAt = Date.now();
     }
   } catch (err) {
     console.error(`[Bridge] handleBridgeMessage error: ${err.message}`);
@@ -198,6 +201,7 @@ function connectToBridgeRelay() {
   }
   bridgeConnected = false;
   if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
+  if (bridgePongCheckTimer) { clearInterval(bridgePongCheckTimer); bridgePongCheckTimer = null; }
 
   let relayUrl = bridgeConfig.relayUrl || CANONICAL_RELAY_URL;
   if (bridgeFailCount >= 3 && !bridgeTriedFallback && relayUrl !== CANONICAL_RELAY_URL) {
@@ -270,10 +274,23 @@ function connectToBridgeRelay() {
       bridgeFailCount = 0;
       bridgeTriedFallback = false;
       console.log(`[Bridge] Connected to relay at ${host}`);
+      bridgeLastPongAt = Date.now();
       bridgeSend(JSON.stringify({ type: "ping" }));
       bridgePingTimer = setInterval(() => {
         bridgeSend(JSON.stringify({ type: "ping" }));
       }, 15000);
+      bridgePongCheckTimer = setInterval(() => {
+        const sincePong = Date.now() - bridgeLastPongAt;
+        if (sincePong > 45000 && bridgeConnected) {
+          console.log(`[Bridge] No pong received in ${Math.round(sincePong / 1000)}s — connection stale, forcing reconnect`);
+          try { socket.destroy(); } catch {}
+          bridgeConnected = false;
+          bridgeSocket = null;
+          if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
+          if (bridgePongCheckTimer) { clearInterval(bridgePongCheckTimer); bridgePongCheckTimer = null; }
+          scheduleBridgeReconnect();
+        }
+      }, 20000);
       const headerBytes = Buffer.byteLength(httpBuffer.slice(0, headerEnd + 4), "utf-8");
       const remaining = chunk.slice(headerBytes);
       if (remaining.length > 0) {
@@ -292,6 +309,7 @@ function connectToBridgeRelay() {
     bridgeConnected = false;
     bridgeSocket = null;
     if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
+    if (bridgePongCheckTimer) { clearInterval(bridgePongCheckTimer); bridgePongCheckTimer = null; }
     scheduleBridgeReconnect();
   });
 
@@ -300,6 +318,7 @@ function connectToBridgeRelay() {
     bridgeConnected = false;
     bridgeSocket = null;
     if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
+    if (bridgePongCheckTimer) { clearInterval(bridgePongCheckTimer); bridgePongCheckTimer = null; }
     scheduleBridgeReconnect();
   });
 }
