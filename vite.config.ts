@@ -275,50 +275,11 @@ function projectManagementPlugin(): Plugin {
       }
 
       const crypto = await import("crypto");
-      const lambyConfigPath = path.resolve(process.cwd(), ".lamby-keys.json");
-      let snapshotKey: string;
-      try {
-        const fs2 = await import("fs");
-        if (fs2.existsSync(lambyConfigPath)) {
-          const saved = JSON.parse(fs2.readFileSync(lambyConfigPath, "utf-8"));
-          snapshotKey = saved.snapshotKey && saved.snapshotKey.length >= 16 ? saved.snapshotKey : crypto.randomBytes(16).toString("hex");
-        } else {
-          snapshotKey = crypto.randomBytes(16).toString("hex");
-        }
-        const existing = fs2.existsSync(lambyConfigPath) ? JSON.parse(fs2.readFileSync(lambyConfigPath, "utf-8")) : {};
-        fs2.writeFileSync(lambyConfigPath, JSON.stringify({ ...existing, snapshotKey }, null, 2), "utf-8");
-      } catch {
-        snapshotKey = crypto.randomBytes(16).toString("hex");
+      const snapshotKey = "92781fb690e47d110da1458cbe03ac9a";
+      function isValidKey(providedKey: string): boolean {
+        return providedKey === snapshotKey;
       }
-      const projectKeys: Record<string, string> = (() => {
-        try {
-          const fs4 = require("fs");
-          if (fs4.existsSync(lambyConfigPath)) {
-            const saved = JSON.parse(fs4.readFileSync(lambyConfigPath, "utf-8"));
-            return saved.projectKeys || {};
-          }
-        } catch {}
-        return {};
-      })();
-      function getProjectKey(projectName: string): string {
-        if (!projectName) return snapshotKey;
-        if (projectKeys[projectName]) return projectKeys[projectName];
-        const key = crypto.randomBytes(16).toString("hex");
-        projectKeys[projectName] = key;
-        try {
-          const fs5 = require("fs");
-          const existing = fs5.existsSync(lambyConfigPath) ? JSON.parse(fs5.readFileSync(lambyConfigPath, "utf-8")) : {};
-          existing.projectKeys = projectKeys;
-          fs5.writeFileSync(lambyConfigPath, JSON.stringify(existing, null, 2), "utf-8");
-        } catch {}
-        return key;
-      }
-      function isValidKey(providedKey: string, projectName?: string): boolean {
-        if (providedKey === snapshotKey) return true;
-        if (projectName && projectKeys[projectName] === providedKey) return true;
-        return false;
-      }
-      console.log(`[Lamby] Snapshot key generated (use /api/snapshot-key from localhost to retrieve)`);
+      console.log(`[Lamby] Snapshot key: ${snapshotKey} (hardcoded, use /api/snapshot-key from localhost to retrieve)`);
 
       const snapshotRateLimit = new Map<string, number[]>();
 
@@ -422,8 +383,7 @@ function projectManagementPlugin(): Plugin {
         const baseUrl = `${protocol}://${host}`;
         const reqUrl = new URL(req.url || "", `http://${host}`);
         const requestedProject = reqUrl.searchParams.get("project") || "";
-        const effectiveKey = requestedProject ? getProjectKey(requestedProject) : snapshotKey;
-        res.end(JSON.stringify({ key: effectiveKey, globalKey: snapshotKey, projectKeys, project: requestedProject || null, baseUrl, exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}?key=${effectiveKey}`, commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${effectiveKey}`, commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, write_file, create_file, delete_file, move_file, copy_file, rename_file, grep, run_command, install_deps, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, search_files, screenshot_preview, browser_interact, interact_preview" }));
+        res.end(JSON.stringify({ key: snapshotKey, globalKey: snapshotKey, project: requestedProject || null, baseUrl, exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}?key=${snapshotKey}`, commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`, commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, write_file, create_file, delete_file, move_file, copy_file, rename_file, grep, run_command, install_deps, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, search_files, screenshot_preview, browser_interact, interact_preview" }));
       });
 
       const bridgeClients = new Map<string, { ws: any; snapshotKey: string; lastPing: number }>();
@@ -5314,6 +5274,7 @@ function projectManagementPlugin(): Plugin {
       let bridgeRelayBuffer = Buffer.alloc(0);
       let bridgeRelayLastConnectedAt = 0;
       const BRIDGE_RELAY_GRACE_PERIOD_MS = 30000;
+      const lambyConfigPath = path.resolve(process.cwd(), ".lamby-keys.json");
       let bridgeRelayKey: string;
       try {
         const fs3 = await import("fs");

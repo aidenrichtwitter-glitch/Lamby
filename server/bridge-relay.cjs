@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
-const snapshotKey = process.env.SNAPSHOT_KEY || crypto.randomBytes(16).toString("hex");
+const snapshotKey = "92781fb690e47d110da1458cbe03ac9a";
 
 const bridgeClients = new Map();
 const pendingRelayRequests = new Map();
@@ -40,9 +40,6 @@ function findBridgeClient(key) {
     for (const [, client] of bridgeClients) {
       if (client.alive) return client;
     }
-  }
-  for (const [, client] of bridgeClients) {
-    if (client.snapshotKey === key && client.alive) return client;
   }
   return null;
 }
