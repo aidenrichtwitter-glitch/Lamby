@@ -5273,7 +5273,7 @@ function projectManagementPlugin(): Plugin {
       let bridgeRelayLastConnectedAt = 0;
       const BRIDGE_RELAY_GRACE_PERIOD_MS = 30000;
       const lambyConfigPath = path.resolve(process.cwd(), ".lamby-keys.json");
-      let bridgeRelayKey: string;
+      let bridgeRelayKey: string; // WebSocket connection identity key (separate from the universal snapshot/API key)
       try {
         const fs3 = await import("fs");
         if (fs3.existsSync(lambyConfigPath)) {
