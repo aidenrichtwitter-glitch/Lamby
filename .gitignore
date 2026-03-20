@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 .guardian-backup
+.lamby-keys.json
 
 # Evolution/duplicate project artifacts (user data, not source)
 projects/*/postcss.config.mjs

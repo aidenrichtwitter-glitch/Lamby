@@ -25,7 +25,6 @@ const PORT = parseInt(process.env.LAMBY_PORT || "4999", 10);
 if (!fs.existsSync(USER_DATA_DIR)) fs.mkdirSync(USER_DATA_DIR, { recursive: true });
 if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
-const snapshotKey = crypto.randomBytes(16).toString("hex");
 const CANONICAL_RELAY_URL = "https://bridge-relay.replit.app";
 
 function loadBridgeConfig() {
@@ -35,11 +34,12 @@ function loadBridgeConfig() {
       let changed = false;
       if (!cfg.relayUrl) { cfg.relayUrl = CANONICAL_RELAY_URL; changed = true; }
       if (!cfg.bridgeKey || cfg.bridgeKey.length < 8) { cfg.bridgeKey = crypto.randomBytes(16).toString("hex"); changed = true; }
+      if (!cfg.snapshotKey || cfg.snapshotKey.length < 16) { cfg.snapshotKey = crypto.randomBytes(16).toString("hex"); changed = true; }
       if (changed) { try { fs.writeFileSync(BRIDGE_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8"); } catch {} }
       return cfg;
     }
   } catch {}
-  const cfg = { relayUrl: CANONICAL_RELAY_URL, bridgeKey: crypto.randomBytes(16).toString("hex") };
+  const cfg = { relayUrl: CANONICAL_RELAY_URL, bridgeKey: crypto.randomBytes(16).toString("hex"), snapshotKey: crypto.randomBytes(16).toString("hex") };
   try {
     fs.mkdirSync(path.dirname(BRIDGE_CONFIG_PATH), { recursive: true });
     fs.writeFileSync(BRIDGE_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8");
@@ -56,6 +56,7 @@ function saveBridgeConfig(config) {
 }
 
 let bridgeConfig = loadBridgeConfig();
+const snapshotKey = bridgeConfig.snapshotKey;
 let bridgeSocket = null;
 let bridgeConnected = false;
 let bridgeReconnectTimer = null;

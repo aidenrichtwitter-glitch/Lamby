@@ -275,7 +275,20 @@ function projectManagementPlugin(): Plugin {
       }
 
       const crypto = await import("crypto");
-      const snapshotKey = crypto.randomBytes(16).toString("hex");
+      const lambyConfigPath = path.resolve(process.cwd(), ".lamby-keys.json");
+      let snapshotKey: string;
+      try {
+        const fs2 = await import("fs");
+        if (fs2.existsSync(lambyConfigPath)) {
+          const saved = JSON.parse(fs2.readFileSync(lambyConfigPath, "utf-8"));
+          snapshotKey = saved.snapshotKey && saved.snapshotKey.length >= 16 ? saved.snapshotKey : crypto.randomBytes(16).toString("hex");
+        } else {
+          snapshotKey = crypto.randomBytes(16).toString("hex");
+        }
+        fs2.writeFileSync(lambyConfigPath, JSON.stringify({ snapshotKey }, null, 2), "utf-8");
+      } catch {
+        snapshotKey = crypto.randomBytes(16).toString("hex");
+      }
       console.log(`[Lamby] Snapshot key generated (use /api/snapshot-key from localhost to retrieve)`);
 
       const snapshotRateLimit = new Map<string, number[]>();
@@ -5269,7 +5282,22 @@ function projectManagementPlugin(): Plugin {
       let bridgeRelayBuffer = Buffer.alloc(0);
       let bridgeRelayLastConnectedAt = 0;
       const BRIDGE_RELAY_GRACE_PERIOD_MS = 30000;
-      const bridgeRelayKey = crypto.randomBytes(16).toString("hex");
+      let bridgeRelayKey: string;
+      try {
+        const fs3 = await import("fs");
+        if (fs3.existsSync(lambyConfigPath)) {
+          const saved2 = JSON.parse(fs3.readFileSync(lambyConfigPath, "utf-8"));
+          bridgeRelayKey = saved2.bridgeRelayKey && saved2.bridgeRelayKey.length >= 16 ? saved2.bridgeRelayKey : crypto.randomBytes(16).toString("hex");
+          if (!saved2.bridgeRelayKey) {
+            saved2.bridgeRelayKey = bridgeRelayKey;
+            fs3.writeFileSync(lambyConfigPath, JSON.stringify(saved2, null, 2), "utf-8");
+          }
+        } else {
+          bridgeRelayKey = crypto.randomBytes(16).toString("hex");
+        }
+      } catch {
+        bridgeRelayKey = crypto.randomBytes(16).toString("hex");
+      }
 
       function wsRelayEncodeFrame(data: string): Buffer {
         const payload = Buffer.from(data, "utf-8");

@@ -5,7 +5,19 @@ const crypto = require("crypto");
 
 const PORT = parseInt(process.env.PORT || "5000", 10);
 const DIST_DIR = path.resolve(__dirname, "..", "dist");
-const snapshotKey = crypto.randomBytes(16).toString("hex");
+const lambyKeysPath = path.resolve(__dirname, "..", ".lamby-keys.json");
+let snapshotKey;
+try {
+  if (fs.existsSync(lambyKeysPath)) {
+    const saved = JSON.parse(fs.readFileSync(lambyKeysPath, "utf-8"));
+    snapshotKey = saved.snapshotKey && saved.snapshotKey.length >= 16 ? saved.snapshotKey : crypto.randomBytes(16).toString("hex");
+  } else {
+    snapshotKey = crypto.randomBytes(16).toString("hex");
+  }
+  fs.writeFileSync(lambyKeysPath, JSON.stringify({ snapshotKey }, null, 2), "utf-8");
+} catch {
+  snapshotKey = crypto.randomBytes(16).toString("hex");
+}
 
 const bridgeClients = new Map();
 const pendingRelayRequests = new Map();
