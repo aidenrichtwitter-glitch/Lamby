@@ -5623,12 +5623,8 @@ function projectManagementPlugin(): Plugin {
           const url = new URL(req.url || "", `http://${req.headers.host}`);
           const providedKey = url.searchParams.get("key") || (req.headers.authorization || "").replace("Bearer ", "");
 
-          let matchedBridgeClient: { ws: any; snapshotKey: string } | null = null;
           if (providedKey !== snapshotKey) {
-            for (const [, client] of bridgeClients) {
-              if (client.snapshotKey === providedKey && client.ws.readyState === 1) { matchedBridgeClient = client; break; }
-            }
-            if (!matchedBridgeClient) { res.statusCode = 403; res.end(JSON.stringify({ error: "Invalid key" })); return; }
+            res.statusCode = 403; res.end(JSON.stringify({ error: "Invalid key" })); return;
           }
 
           const body = JSON.parse(await readBody(req));
@@ -5640,7 +5636,11 @@ function projectManagementPlugin(): Plugin {
             res.statusCode = 400; res.end(JSON.stringify({ error: "Max 50 actions per request" })); return;
           }
 
-          if (matchedBridgeClient) {
+          let sandboxRelayClient: { ws: any; snapshotKey: string } | null = null;
+          for (const [, client] of bridgeClients) {
+            if (client.ws.readyState === 1) { sandboxRelayClient = client; break; }
+          }
+          if (sandboxRelayClient) {
             const requestId = crypto.randomUUID();
             const relayPromise = new Promise<string>((resolve) => {
               const timer = setTimeout(() => {
@@ -5650,7 +5650,7 @@ function projectManagementPlugin(): Plugin {
               pendingSandboxRelayRequests.set(requestId, { resolve, timer });
             });
             try {
-              matchedBridgeClient.ws.send(JSON.stringify({ type: "sandbox-execute-request", requestId, actions }));
+              sandboxRelayClient.ws.send(JSON.stringify({ type: "sandbox-execute-request", requestId, actions }));
             } catch {
               res.statusCode = 502;
               res.end(JSON.stringify({ error: "Could not reach desktop app through relay bridge." }));
@@ -5677,11 +5677,7 @@ function projectManagementPlugin(): Plugin {
         const url = new URL(req.url || "", `http://${req.headers.host}`);
         const providedKey = url.searchParams.get("key") || (req.headers.authorization || "").replace("Bearer ", "");
         if (providedKey !== snapshotKey) {
-          let bridgeMatch = false;
-          for (const [, client] of bridgeClients) {
-            if (client.snapshotKey === providedKey && client.ws.readyState === 1) { bridgeMatch = true; break; }
-          }
-          if (!bridgeMatch) { res.statusCode = 403; res.end(JSON.stringify({ error: "Invalid key" })); return; }
+          res.statusCode = 403; res.end(JSON.stringify({ error: "Invalid key" })); return;
         }
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify({ entries: sandboxAuditLog.slice(-100) }));
@@ -5816,11 +5812,7 @@ function projectManagementPlugin(): Plugin {
             const reqUrl = new URL(req.url, "http://localhost");
             const providedKey = reqUrl.searchParams.get("key") || "";
             if (providedKey !== snapshotKey) {
-              let bridgeMatch = false;
-              for (const [, client] of bridgeClients) {
-                if (client.snapshotKey === providedKey && client.ws.readyState === 1) { bridgeMatch = true; break; }
-              }
-              if (!bridgeMatch) { socket.destroy(); return; }
+              socket.destroy(); return;
             }
             sandboxWss.handleUpgrade(req, socket, head, (ws: any) => {
               sandboxWss.emit("connection", ws);
