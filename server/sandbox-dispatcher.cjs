@@ -6,6 +6,23 @@ const https = require("https");
 let _chromiumPath = null;
 function getChromiumPath() {
   if (_chromiumPath) return _chromiumPath;
+  const isWin = process.platform === "win32";
+  if (isWin) {
+    const winPaths = [
+      path.join(process.env.PROGRAMFILES || "", "Google/Chrome/Application/chrome.exe"),
+      path.join(process.env["PROGRAMFILES(X86)"] || "", "Google/Chrome/Application/chrome.exe"),
+      path.join(process.env.LOCALAPPDATA || "", "Google/Chrome/Application/chrome.exe"),
+    ];
+    for (const wp of winPaths) {
+      if (wp && fs.existsSync(wp)) { _chromiumPath = wp; return _chromiumPath; }
+    }
+    try {
+      const found = childProcess.execSync("where chrome.exe 2>nul", { encoding: "utf-8", timeout: 3000 }).trim().split(/\r?\n/)[0];
+      if (found && fs.existsSync(found)) { _chromiumPath = found; return _chromiumPath; }
+    } catch {}
+    _chromiumPath = null;
+    return null;
+  }
   try {
     _chromiumPath = childProcess.execSync("which chromium", { encoding: "utf-8", timeout: 3000 }).trim();
     if (_chromiumPath && fs.existsSync(_chromiumPath)) return _chromiumPath;
@@ -20,14 +37,6 @@ function getChromiumPath() {
   ];
   for (const mp of macPaths) {
     if (fs.existsSync(mp)) { _chromiumPath = mp; return _chromiumPath; }
-  }
-  const winPaths = [
-    path.join(process.env.PROGRAMFILES || "", "Google/Chrome/Application/chrome.exe"),
-    path.join(process.env["PROGRAMFILES(X86)"] || "", "Google/Chrome/Application/chrome.exe"),
-    path.join(process.env.LOCALAPPDATA || "", "Google/Chrome/Application/chrome.exe"),
-  ];
-  for (const wp of winPaths) {
-    if (wp && fs.existsSync(wp)) { _chromiumPath = wp; return _chromiumPath; }
   }
   _chromiumPath = null;
   return null;
