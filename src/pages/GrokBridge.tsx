@@ -1711,6 +1711,7 @@ const GrokBridge: React.FC = () => {
   const [bridgeMode, setBridgeMode] = useState<'dev' | 'production'>(() => {
     try { return (localStorage.getItem('lamby-bridge-mode') as 'dev' | 'production') || 'production'; } catch { return 'production'; }
   });
+  const [serverDevRelayUrl, setServerDevRelayUrl] = useState<string>('');
   const [browserUrl, setBrowserUrl] = useState('https://grok.com');
   const [customUrl, setCustomUrl] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -4067,6 +4068,8 @@ const GrokBridge: React.FC = () => {
             if (relayData?.mode) {
               setBridgeMode(relayData.mode === 'production' ? 'production' : 'dev');
             }
+            if (relayData?.devRelayUrl) setServerDevRelayUrl(relayData.devRelayUrl);
+            if (data?.devRelayUrl && !relayData?.devRelayUrl) setServerDevRelayUrl(data.devRelayUrl);
             if (relayData && relayData.status === 'connected' && relayData.relayUrl) {
               const relayBase = relayData.relayUrl.replace(/\/$/, '');
               const key = data.key || relayData.snapshotKey;
@@ -5527,7 +5530,7 @@ const GrokBridge: React.FC = () => {
                       <button
                         data-testid="button-mode-dev"
                         onClick={async () => {
-                          const devUrl = `wss://${window.location.host}`;
+                          const devUrl = serverDevRelayUrl || `wss://${window.location.host}`;
                           setBridgeMode('dev');
                           try { localStorage.setItem('lamby-bridge-mode', 'dev'); } catch {}
                           try {
@@ -5572,7 +5575,7 @@ const GrokBridge: React.FC = () => {
                       </button>
                     </div>
                     <p className="text-muted-foreground/60 mt-1">
-                      {bridgeMode === 'dev' ? `Dev: wss://${window.location.host}` : 'Prod: wss://bridge-relay.replit.app'}
+                      {bridgeMode === 'dev' ? `Dev: ${serverDevRelayUrl || `wss://${window.location.host}`}` : 'Prod: wss://bridge-relay.replit.app'}
                     </p>
                   </div>
                   {isElectron && (

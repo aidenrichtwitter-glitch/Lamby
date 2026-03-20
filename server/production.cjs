@@ -273,11 +273,13 @@ const server = http.createServer(async (req, res) => {
     const protocol = req.headers["x-forwarded-proto"] || "https";
     const baseUrl = `${protocol}://${host}`;
     const requestedProject = url.searchParams.get("project") || "";
+    const REPLIT_DEV_DOMAIN = process.env.REPLIT_DEV_DOMAIN || "";
     sendJson(res, {
       key: snapshotKey,
       globalKey: snapshotKey,
       project: requestedProject || null,
       baseUrl,
+      devRelayUrl: REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "",
       exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}?key=${snapshotKey}`,
       commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`,
       commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Relay-only in production — requests forwarded to connected desktop client via bridge.",
@@ -312,11 +314,13 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/bridge-relay-status") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     const connectorStatus = prodConnector ? prodConnector.getStatus() : { status: "disconnected", relayUrl: "", snapshotKey, mode: "production" };
+    const REPLIT_DEV_DOMAIN = process.env.REPLIT_DEV_DOMAIN || "";
     sendJson(res, {
       status: connectorStatus.status,
       relayUrl: connectorStatus.relayUrl,
       snapshotKey: connectorStatus.snapshotKey || snapshotKey,
       mode: connectorStatus.mode,
+      devRelayUrl: REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "",
     });
     return;
   }

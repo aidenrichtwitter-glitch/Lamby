@@ -375,6 +375,7 @@ function projectManagementPlugin(): Plugin {
         return output;
       }
 
+      const REPLIT_DEV_DOMAIN = process.env.REPLIT_DEV_DOMAIN || "";
       server.middlewares.use("/api/snapshot-key", async (req, res) => {
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
         res.setHeader("Content-Type", "application/json");
@@ -383,7 +384,7 @@ function projectManagementPlugin(): Plugin {
         const baseUrl = `${protocol}://${host}`;
         const reqUrl = new URL(req.url || "", `http://${host}`);
         const requestedProject = reqUrl.searchParams.get("project") || "";
-        res.end(JSON.stringify({ key: snapshotKey, globalKey: snapshotKey, project: requestedProject || null, baseUrl, exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}?key=${snapshotKey}`, commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`, commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, write_file, create_file, delete_file, move_file, copy_file, rename_file, grep, run_command, install_deps, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, search_files, screenshot_preview, browser_interact, interact_preview" }));
+        res.end(JSON.stringify({ key: snapshotKey, globalKey: snapshotKey, project: requestedProject || null, baseUrl, devRelayUrl: REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "", exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}?key=${snapshotKey}`, commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`, commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, write_file, create_file, delete_file, move_file, copy_file, rename_file, grep, run_command, install_deps, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, search_files, screenshot_preview, browser_interact, interact_preview" }));
       });
 
       const bridgeClients = new Map<string, { ws: any; snapshotKey: string; lastPing: number }>();
@@ -5358,6 +5359,7 @@ function projectManagementPlugin(): Plugin {
           relayUrl: status.relayUrl,
           snapshotKey: status.snapshotKey,
           mode: status.mode,
+          devRelayUrl: REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "",
         }));
       });
 
