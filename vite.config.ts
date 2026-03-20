@@ -5300,7 +5300,10 @@ function projectManagementPlugin(): Plugin {
         }
       };
 
-      setTimeout(() => bridgeConnector.connect(), 2000);
+      // Do NOT auto-connect: the server already IS the relay via bridge-relay.cjs.
+      // Connecting outbound as a "desktop" client to bridge-relay.replit.app
+      // fights with the user's real desktop connector. Only connect if
+      // explicitly toggled via /api/bridge-connector-switch.
 
       function gatherConsoleLogs(projectName: string) {
         const result: { previews: any[]; message?: string } = { previews: [] };

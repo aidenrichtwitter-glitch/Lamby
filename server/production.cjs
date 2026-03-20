@@ -38,7 +38,9 @@ const prodConnector = createConnector({
   projectDir: path.resolve(__dirname, ".."),
   previewPort: String(PORT),
 });
-setTimeout(() => prodConnector.connect(), 3000);
+// Do NOT auto-connect: the server already IS the relay via bridge-relay.cjs.
+// Auto-connecting as a "desktop" client fights with the user's real desktop connector.
+// Only connect if explicitly toggled via /api/bridge-connector-switch.
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
