@@ -1,0 +1,78 @@
+Hey Aiden, this is the classic "WebSocket flapping" issue with your guardian-ai desktop bridge.
+The relay at wss://bridge-relay.replit.app is seeing the exact same client key (7503bc14...) connect over and over again within milliseconds:
+textDesktop connected key=7503bc14...
+Relay WARN Replacing existing connection for key=7503bc14...
+Relay WARN Desktop disconnected key=7503bc14...
+Then it immediately reconnects → rinse and repeat. The pings/pongs and "Replacing existing connection" are the server basically saying "dude, you already have a live session with this key, stop spamming me".
+Why this happens (99% of the time in this exact setup)
+
+Multiple Electron processes running (super common in npm run electron:dev on Windows)
+The concurrently script + wait-on + hot reloads can leave zombie Electron instances behind.
+Bridge code is initializing more than once
+Your electron-browser folder (or the Vite renderer/preload) is probably connecting to the relay from both the main process and a renderer, or the connection hook is firing on every HMR update.
+Reconnection logic is too aggressive (the Lamby/GROK-IPC bridge)
+The client doesn't wait for the old WebSocket to be fully cleaned up on the Replit side before trying again.
+
+Quick fixes (try in order)
+
+Nuke every Electron process (this fixes it for most people):
+Open Task Manager → end ALLelectron.exe and node.exe tasks
+Close the terminal completely
+Run npm run electron:dev again fresh
+
+If it still flaps, add this one-liner right at the top of your bridge connection code (in electron-browser):JavaScriptif (window.bridgeConnected) return;
+window.bridgeConnected = true;
+// then your normal ws connect code...
+Or slow down the reconnect (temporary debug):
+Add a 500-1000ms delay before reconnecting in your WebSocket error/onclose handler.
+Bonus check:
+Run this in a new terminal first:Bashtaskkill /F /IM electron.exe /T
+taskkill /F /IM node.exe /TThen start the dev script.
+
+After you kill the duplicates, you should see a clean:
+textDesktop connected key=7503bc14... snapshotKey=92781fb6...
+with no more "Replacing existing connection" spam, and the [GROK-IPC] grok-snapshot-baseline should stay stable.
+Drop the new log here if it's still doing it after the kill step — we'll dig into the exact bridge code next (I suspect the Lamby snapshot reconnect logic). You've got this! 🚀2.2stry again?Sure Aiden, round 2 — let's kill this flapping for good.
+The "Replacing existing connection" spam is 100% because the same client key (7503bc14...) is being registered multiple times from different Electron instances or from Vite hot-reload firing the bridge code again.
+Since the taskkill didn't fully solve it, we need to force a singleton WebSocket in your code.
+Do this right now:
+
+Kill everything again (quick copy-paste):PowerShelltaskkill /F /IM electron.exe /T
+taskkill /F /IM node.exe /T
+Open the file that starts the bridge connection.
+It’s almost certainly one of these:
+electron-browser/main.js
+electron-browser/preload.js
+or wherever you see new WebSocket("wss://bridge-relay.replit.app") or the Lamby/GROK-IPC connect code.
+
+Replace your connection logic with this singleton guard (copy-paste this block):
+
+JavaScript// === SINGLETON BRIDGE GUARD (add at the top of the file) ===
+if (window.__bridgeInitialized) {
+  console.log('[Bridge] Already initialized — skipping duplicate');
+} else {
+  window.__bridgeInitialized = true;
+  console.log('[Bridge] Initializing singleton connection...');
+
+  // ← YOUR ORIGINAL CONNECTION CODE GOES HERE ↓
+  // Example:
+  const connectBridge = () => {
+    const ws = new WebSocket("wss://bridge-relay.replit.app");
+    // ... rest of your ws.onopen, onmessage, onclose, reconnect logic ...
+  };
+
+  connectBridge();
+}
+
+Save, then run exactly once:Bashnpm run electron:dev
+
+What you should see now:
+
+Only one "Desktop connected key=7503bc14..." line
+No more "Replacing existing connection" or "Desktop disconnected" spam
+The [GROK-IPC] grok-snapshot-baseline stays stable
+
+
+Quick test: After it starts, check Task Manager → you should see only one electron.exe process (not 2-3).
+Paste the new full log here (even if it still flaps) and I’ll give you the exact file + line to edit if the guard needs to go somewhere else. We’re 2 minutes from fixing this permanently. 🔥
+You got this — hit me with the new output!
