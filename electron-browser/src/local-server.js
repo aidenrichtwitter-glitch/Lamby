@@ -952,6 +952,7 @@ const server = http.createServer(async (req, res) => {
         HOST: "0.0.0.0",
         BROWSER: "none",
         FORCE_COLOR: "1",
+        VITE_CJS_IGNORE_WARNING: "true",
       };
 
       console.log(`[Preview] Starting ${name} on port ${port}: ${devCmd.cmd} ${devCmd.args.join(" ")}`);
@@ -964,10 +965,23 @@ const server = http.createServer(async (req, res) => {
       });
 
       const logBuf = { stdout: "", stderr: "" };
-      proc.stdout?.on("data", (d) => { logBuf.stdout += d.toString(); if (logBuf.stdout.length > 20000) logBuf.stdout = logBuf.stdout.slice(-10000); });
+      const entry = { process: proc, port, logs: logBuf };
+      proc.stdout?.on("data", (d) => {
+        const chunk = d.toString();
+        logBuf.stdout += chunk;
+        if (logBuf.stdout.length > 20000) logBuf.stdout = logBuf.stdout.slice(-10000);
+        const portMatch = chunk.match(/Local:\s+https?:\/\/localhost:(\d+)/);
+        if (portMatch) {
+          const actualPort = parseInt(portMatch[1], 10);
+          if (actualPort !== entry.port) {
+            console.log(`[Preview] ${name} actual port changed: ${entry.port} → ${actualPort}`);
+            entry.port = actualPort;
+          }
+        }
+      });
       proc.stderr?.on("data", (d) => { logBuf.stderr += d.toString(); if (logBuf.stderr.length > 20000) logBuf.stderr = logBuf.stderr.slice(-10000); });
 
-      previewProcesses.set(name, { process: proc, port, logs: logBuf });
+      previewProcesses.set(name, entry);
 
       proc.on("exit", (code) => {
         console.log(`[Preview] ${name} exited with code ${code}`);

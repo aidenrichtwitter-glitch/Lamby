@@ -319,7 +319,11 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
 
   let section = '\n=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS — USE IT) ===\n';
   section += `You are Grok-4 working inside Lamby with full bridge-relay access. Your ONLY web tool is browse_page (GET-only).\n\n`;
-  section += `CRITICAL: Desktop connections can take 5–20 seconds to become ready. You MUST be patient.\n\n`;
+  section += `CRITICAL PATIENCE PROTOCOL (MANDATORY — APPLY EVERY TIME):\n`;
+  section += `- Desktop connections and Vite dev server reloads take 5–20 seconds. You MUST wait a full 15 seconds after ANY edit (grok-edit or grok-proxy) before taking a screenshot or performing the next action.\n`;
+  section += `- Never perform an edit and a screenshot in the same logical step or rapid succession. Always do: edit → wait 15s → screenshot.\n`;
+  section += `- For the screenshot tool: ALWAYS use the full URL with ?fullPage=true&waitMs=8000 (minimum 8000ms, use 10000ms for safety on complex pages). Never use the default 3000ms or no wait param — this is required to let the preview fully render after changes.\n`;
+  section += `- If you rush or ignore the 15-second wait, the preview may still be loading and changes will appear broken. Slow down every time.\n\n`;
 
   if (!bridgeOnline) {
     section += `⚠ WARNING: The desktop app may be temporarily offline — API calls might fail until it reconnects. If calls fail, fall back to // file: blocks.\n\n`;
@@ -398,10 +402,10 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    { type: "git_diff", project: "${proj}" }\n`;
     section += `    { type: "git_log", project: "${proj}", count: 10 }\n`;
     section += `  SCREENSHOT — SIMPLE URL (NO encoding needed, just browse this URL):\n`;
-    section += `    GET ${screenshotRelayBase}/api/screenshot/${screenshotKey}/${proj}\n`;
+    section += `    GET ${screenshotRelayBase}/api/screenshot/${screenshotKey}/${proj}?fullPage=true&waitMs=8000\n`;
+    section += `    ALWAYS append ?fullPage=true&waitMs=8000 (or 10000ms for safety). This is the correct, patient way to use the screenshot tool.\n`;
     section += `    Returns: { "success": true, "results": [{ "data": { "captured": true, "screenshotUrl": "https://files.catbox.moe/abc123.png" } }] }\n`;
-    section += `    The screenshotUrl is a public direct link — browse it to view or share with the user.\n`;
-    section += `    Optional query params: ?selector=#hero&fullPage=true&waitMs=3000\n\n`;
+    section += `    The screenshotUrl is a public direct link — browse it to view or share with the user.\n\n`;
     section += `  SCREENSHOT via grok-proxy (alternative, for multi-action chains):\n`;
     section += `    { type: "screenshot_preview", project: "${proj}" }  → screenshot the running app\n`;
     section += `    { type: "screenshot_preview", project: "${proj}", selector: "#hero", fullPage: true, waitMs: 3000 }\n`;
@@ -417,20 +421,22 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    Options: screenshot: true (capture + upload after action), waitAfter: 2000 (ms), extractText: true + extractSelector: "#result"\n\n`;
   }
 
-  section += `YOUR WORKFLOW:\n`;
+  section += `YOUR WORKFLOW (UPDATED WITH PATIENCE):\n`;
   section += `  1. BROWSE the snapshot URL to see all project files\n`;
   section += `  2. ANALYZE what needs to change\n`;
   section += `  3. USE grok-edit for surgical text replacements (primary) or grok-proxy for complex multi-action chains\n`;
-  section += `  4. BROWSE the screenshot URL to capture the result: ${screenshotRelayBase}/api/screenshot/${screenshotKey}/${proj}\n`;
+  section += `  3.5. After any edit: WAIT FULL 15 SECONDS for Vite dev server and preview to stabilize\n`;
+  section += `  4. BROWSE the screenshot URL to capture the result: ${screenshotRelayBase}/api/screenshot/${screenshotKey}/${proj}?fullPage=true&waitMs=8000\n`;
   section += `  5. VERIFY by browsing the snapshot URL again or checking console logs\n`;
   section += `  6. TELL the user what you did, show the screenshot link\n\n`;
 
-  section += `IMPORTANT RULES:\n`;
+  section += `IMPORTANT RULES (UPDATED):\n`;
   section += `  - ALWAYS use browse_page on these URLs to make changes. Do NOT just show code in your response.\n`;
   section += `  - ALL endpoints are GET-based. Do NOT attempt POST requests.\n`;
   section += `  - Browse the snapshot FIRST to understand the current state before making changes.\n`;
   section += `  - Prefer grok-edit for single-file edits (simpler, faster). Use grok-proxy for multi-step operations.\n`;
   section += `  - After making visual changes, take a screenshot_preview and share the screenshotUrl with the user.\n`;
+  section += `  - ENFORCE PATIENCE: Wait 15 seconds after every edit before screenshot or next action. Never work faster than the computer can respond.\n`;
   section += `  - Never claim a change happened unless you saw {"success":true}.\n`;
   section += `  - If an API call fails 3 times, report honestly and fall back to // file: blocks.\n`;
 
