@@ -77,6 +77,7 @@ function isValidKey(providedKey, projectName) {
 
 let bridgeSocket = null;
 let bridgeConnected = false;
+let bridgeConnecting = false;
 let bridgeReconnectTimer = null;
 let bridgeReconnectDelay = 2000;
 let bridgePingTimer = null;
@@ -86,6 +87,7 @@ let bridgeTriedFallback = false;
 let bridgeLastConnectedAt = 0;
 let bridgeLastPongAt = 0;
 let bridgePongCheckTimer = null;
+let bridgeCurrentConnId = null;
 const BRIDGE_GRACE_PERIOD_MS = 30000;
 
 function wsClientEncodeFrame(data) {
@@ -213,14 +215,24 @@ async function handleBridgeMessage(msg) {
   }
 }
 
+function cleanupBridgeTimers() {
+  if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
+  if (bridgePongCheckTimer) { clearInterval(bridgePongCheckTimer); bridgePongCheckTimer = null; }
+}
+
 function connectToBridgeRelay() {
+  if (bridgeConnecting) {
+    console.log("[Bridge] Connection already in progress — skipping duplicate attempt");
+    return;
+  }
+  bridgeConnecting = true;
+
   if (bridgeSocket) {
     try { bridgeSocket.destroy(); } catch {}
     bridgeSocket = null;
   }
   bridgeConnected = false;
-  if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
-  if (bridgePongCheckTimer) { clearInterval(bridgePongCheckTimer); bridgePongCheckTimer = null; }
+  cleanupBridgeTimers();
 
   let relayUrl = bridgeConfig.relayUrl || CANONICAL_RELAY_URL;
   if (bridgeFailCount >= 3 && !bridgeTriedFallback && relayUrl !== CANONICAL_RELAY_URL) {
@@ -230,10 +242,10 @@ function connectToBridgeRelay() {
     bridgeConfig.relayUrl = CANONICAL_RELAY_URL;
     saveBridgeConfig(bridgeConfig);
   }
-  if (!relayUrl) { console.log("[Bridge] No relay URL configured — skipping auto-connect"); return; }
+  if (!relayUrl) { console.log("[Bridge] No relay URL configured — skipping auto-connect"); bridgeConnecting = false; return; }
 
   let parsed;
-  try { parsed = new URL(relayUrl); } catch { console.error("[Bridge] Invalid relay URL:", relayUrl); return; }
+  try { parsed = new URL(relayUrl); } catch { console.error("[Bridge] Invalid relay URL:", relayUrl); bridgeConnecting = false; return; }
 
   const host = parsed.hostname;
   const port = parsed.port ? parseInt(parsed.port) : (parsed.protocol === "https:" ? 443 : 80);
@@ -244,13 +256,33 @@ function connectToBridgeRelay() {
     bridgeConfig.bridgeKey = bridgeKey;
     saveBridgeConfig(bridgeConfig);
   }
+  const connId = crypto.randomUUID();
+  bridgeCurrentConnId = connId;
   const wsPath = `/bridge-ws?key=${encodeURIComponent(bridgeKey)}&snapshotKey=${encodeURIComponent(snapshotKey)}`;
   const wsKeyRaw = crypto.randomBytes(16).toString("base64");
 
-  console.log(`[Bridge] Connecting to ${host}:${port}${wsPath.split("?")[0]}...`);
+  console.log(`[Bridge] Connecting to ${host}:${port}${wsPath.split("?")[0]} (connId: ${connId.substring(0, 8)})...`);
 
   const connectOpts = { host, port, servername: host };
   const socket = useTls ? tls.connect(connectOpts) : net.connect(connectOpts);
+  let socketCleaned = false;
+
+  function handleSocketEnd(reason) {
+    if (socketCleaned) return;
+    socketCleaned = true;
+    const isCurrentConn = bridgeCurrentConnId === connId;
+    if (isCurrentConn) {
+      const uptime = bridgeLastConnectedAt ? Math.round((Date.now() - bridgeLastConnectedAt) / 1000) : 0;
+      if (bridgeConnected) console.log(`[Bridge] Disconnected from relay (reason: ${reason}, uptime: ${uptime}s)`);
+      bridgeConnected = false;
+      bridgeConnecting = false;
+      bridgeSocket = null;
+      cleanupBridgeTimers();
+      scheduleBridgeReconnect();
+    } else {
+      console.log(`[Bridge] Stale connection closed (connId: ${connId.substring(0, 8)}, reason: ${reason}) — ignoring, newer connection active`);
+    }
+  }
 
   socket.on("connect", () => {
     socket.write(
@@ -282,17 +314,17 @@ function connectToBridgeRelay() {
         console.error(`[Bridge] Handshake failed: ${statusLine}`);
         bridgeFailCount++;
         socket.destroy();
-        scheduleBridgeReconnect();
         return;
       }
       handshakeDone = true;
       bridgeSocket = socket;
       bridgeConnected = true;
+      bridgeConnecting = false;
       bridgeLastConnectedAt = Date.now();
       bridgeReconnectDelay = 2000;
       bridgeFailCount = 0;
       bridgeTriedFallback = false;
-      console.log(`[Bridge] Connected to relay at ${host}`);
+      console.log(`[Bridge] Connected to relay at ${host} (connId: ${connId.substring(0, 8)})`);
       bridgeLastPongAt = Date.now();
       bridgeSend(JSON.stringify({ type: "ping" }));
       bridgePingTimer = setInterval(() => {
@@ -300,14 +332,9 @@ function connectToBridgeRelay() {
       }, 15000);
       bridgePongCheckTimer = setInterval(() => {
         const sincePong = Date.now() - bridgeLastPongAt;
-        if (sincePong > 45000 && bridgeConnected) {
+        if (sincePong > 45000 && bridgeConnected && bridgeCurrentConnId === connId) {
           console.log(`[Bridge] No pong received in ${Math.round(sincePong / 1000)}s — connection stale, forcing reconnect`);
           try { socket.destroy(); } catch {}
-          bridgeConnected = false;
-          bridgeSocket = null;
-          if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
-          if (bridgePongCheckTimer) { clearInterval(bridgePongCheckTimer); bridgePongCheckTimer = null; }
-          scheduleBridgeReconnect();
         }
       }, 20000);
       const headerBytes = Buffer.byteLength(httpBuffer.slice(0, headerEnd + 4), "utf-8");
@@ -323,22 +350,12 @@ function connectToBridgeRelay() {
   });
 
   socket.on("close", (hadError) => {
-    const uptime = bridgeLastConnectedAt ? Math.round((Date.now() - bridgeLastConnectedAt) / 1000) : 0;
-    if (bridgeConnected) console.log(`[Bridge] Disconnected from relay (hadError: ${hadError}, uptime: ${uptime}s)`);
-    bridgeConnected = false;
-    bridgeSocket = null;
-    if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
-    if (bridgePongCheckTimer) { clearInterval(bridgePongCheckTimer); bridgePongCheckTimer = null; }
-    scheduleBridgeReconnect();
+    handleSocketEnd(hadError ? "close-with-error" : "close");
   });
 
   socket.on("error", (err) => {
     console.error(`[Bridge] Connection error: ${err.code || err.message}`);
-    bridgeConnected = false;
-    bridgeSocket = null;
-    if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
-    if (bridgePongCheckTimer) { clearInterval(bridgePongCheckTimer); bridgePongCheckTimer = null; }
-    scheduleBridgeReconnect();
+    handleSocketEnd(`error: ${err.code || err.message}`);
   });
 }
 
@@ -360,8 +377,11 @@ function processBridgeBuffer() {
 }
 
 function scheduleBridgeReconnect() {
-  if (bridgeReconnectTimer) return;
-  const delay = Math.min(bridgeReconnectDelay, 60000);
+  if (bridgeReconnectTimer) {
+    console.log("[Bridge] Reconnect already scheduled — skipping duplicate");
+    return;
+  }
+  const delay = Math.max(Math.min(bridgeReconnectDelay, 60000), 2000);
   console.log(`[Bridge] Reconnecting in ${delay / 1000}s...`);
   bridgeReconnectTimer = setTimeout(() => {
     bridgeReconnectTimer = null;
