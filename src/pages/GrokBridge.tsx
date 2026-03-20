@@ -253,9 +253,10 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
     if (isElectronEnv) {
       let keyData: any = null;
       let statusData: any = null;
+      const projectParam = project ? `?project=${encodeURIComponent(project)}` : '';
       try {
         const [keyRes, statusRes] = await Promise.all([
-          fetch('http://localhost:4999/api/snapshot-key').catch(() => null),
+          fetch(`http://localhost:4999/api/snapshot-key${projectParam}`).catch(() => null),
           fetch('http://localhost:4999/api/bridge-status').catch(() => null),
         ]);
         keyData = keyRes?.ok ? await keyRes.json().catch(() => null) : null;
@@ -265,7 +266,7 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
         try {
           const devOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
           const [keyRes2, relayRes2] = await Promise.all([
-            fetch(`${devOrigin}/api/snapshot-key`).catch(() => null),
+            fetch(`${devOrigin}/api/snapshot-key${projectParam}`).catch(() => null),
             fetch(`${devOrigin}/api/bridge-relay-status`).catch(() => null),
           ]);
           keyData = keyRes2?.ok ? await keyRes2.json().catch(() => null) : null;
@@ -274,7 +275,7 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
         } catch {}
       }
       const relayUrl = statusData?.relayUrl || '';
-      const key = statusData?.key || keyData?.key || '';
+      const key = keyData?.key || statusData?.key || '';
       if (relayUrl && key) {
         const relayBase = relayUrl.replace(/\/$/, '');
         return {
@@ -286,14 +287,15 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
         };
       }
     } else {
+      const webProjectParam = project ? `?project=${encodeURIComponent(project)}` : '';
       const [keyRes, relayRes] = await Promise.all([
-        fetch('/api/snapshot-key').catch(() => null),
+        fetch(`/api/snapshot-key${webProjectParam}`).catch(() => null),
         fetch('/api/bridge-relay-status').catch(() => null),
       ]);
       const keyData = keyRes?.ok ? await keyRes.json().catch(() => null) : null;
       const relayData = relayRes?.ok ? await relayRes.json().catch(() => null) : null;
       const relayUrl = relayData?.relayUrl || '';
-      const key = relayData?.snapshotKey || keyData?.key || '';
+      const key = keyData?.key || relayData?.snapshotKey || '';
       if (relayUrl && key) {
         const relayBase = relayUrl.replace(/\/$/, '');
         return {
@@ -3980,9 +3982,10 @@ const GrokBridge: React.FC = () => {
         let keyResult: any = null;
         let statusResult: any = null;
         let serverBase = 'http://localhost:4999';
+        const statusProjectParam = activeProject ? `?project=${encodeURIComponent(activeProject)}` : '';
         try {
           const [keyRes, statusRes] = await Promise.all([
-            fetch('http://localhost:4999/api/snapshot-key'),
+            fetch(`http://localhost:4999/api/snapshot-key${statusProjectParam}`),
             fetch('http://localhost:4999/api/bridge-status'),
           ]);
           if (keyRes.ok) keyResult = await keyRes.json();
@@ -3992,7 +3995,7 @@ const GrokBridge: React.FC = () => {
           try {
             serverBase = window.location.origin || 'http://localhost:5000';
             const [keyRes2, relayRes2] = await Promise.all([
-              fetch(`${serverBase}/api/snapshot-key`),
+              fetch(`${serverBase}/api/snapshot-key${statusProjectParam}`),
               fetch(`${serverBase}/api/bridge-relay-status`).catch(() => null),
             ]);
             if (keyRes2.ok) keyResult = await keyRes2.json();
@@ -4024,9 +4027,10 @@ const GrokBridge: React.FC = () => {
           }
         } catch {}
       } else {
+        const webStatusParam = activeProject ? `?project=${encodeURIComponent(activeProject)}` : '';
         try {
           const [keyRes, relayRes] = await Promise.all([
-            fetch('/api/snapshot-key'),
+            fetch(`/api/snapshot-key${webStatusParam}`),
             fetch('/api/bridge-relay-status').catch(() => null),
           ]);
           if (keyRes.ok) {
@@ -4037,7 +4041,7 @@ const GrokBridge: React.FC = () => {
             }
             if (relayData && relayData.status === 'connected' && relayData.relayUrl) {
               const relayBase = relayData.relayUrl.replace(/\/$/, '');
-              const key = relayData.snapshotKey || data.key;
+              const key = data.key || relayData.snapshotKey;
               setSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
               setCommandEndpoint(`${relayBase}/api/sandbox/execute?key=${key}`);
               setExternalSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
@@ -4049,7 +4053,7 @@ const GrokBridge: React.FC = () => {
               setCommandEndpoint(data.commandEndpoint || `${data.baseUrl}/api/sandbox/execute?key=${data.key}`);
               if (relayData?.relayUrl) {
                 const relayBase = relayData.relayUrl.replace(/\/$/, '');
-                const key = relayData.snapshotKey || data.key;
+                const key = data.key || relayData.snapshotKey;
                 setExternalSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
                 setExternalCommandEndpoint(`${relayBase}/api/sandbox/execute?key=${key}`);
                 setBridgeRelayUrl(relayData.relayUrl);

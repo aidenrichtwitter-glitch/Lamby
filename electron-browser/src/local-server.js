@@ -57,6 +57,24 @@ function saveBridgeConfig(config) {
 
 let bridgeConfig = loadBridgeConfig();
 const snapshotKey = bridgeConfig.snapshotKey;
+
+if (!bridgeConfig.projectKeys) { bridgeConfig.projectKeys = {}; saveBridgeConfig(bridgeConfig); }
+
+function getProjectKey(projectName) {
+  if (!projectName) return snapshotKey;
+  if (bridgeConfig.projectKeys[projectName]) return bridgeConfig.projectKeys[projectName];
+  const key = crypto.randomBytes(16).toString("hex");
+  bridgeConfig.projectKeys[projectName] = key;
+  saveBridgeConfig(bridgeConfig);
+  return key;
+}
+
+function isValidKey(providedKey, projectName) {
+  if (providedKey === snapshotKey) return true;
+  if (projectName && bridgeConfig.projectKeys[projectName] === providedKey) return true;
+  return false;
+}
+
 let bridgeSocket = null;
 let bridgeConnected = false;
 let bridgeReconnectTimer = null;
@@ -480,11 +498,17 @@ const server = http.createServer(async (req, res) => {
     const host = req.headers.host || `localhost:${PORT}`;
     const protocol = req.headers["x-forwarded-proto"] || "http";
     const baseUrl = `${protocol}://${host}`;
+    const requestedProject = url.searchParams.get("project") || "";
+    const effectiveKey = requestedProject ? getProjectKey(requestedProject) : snapshotKey;
+    const allProjectKeys = { ...bridgeConfig.projectKeys };
     sendJson(res, {
-      key: snapshotKey,
+      key: effectiveKey,
+      globalKey: snapshotKey,
+      projectKeys: allProjectKeys,
+      project: requestedProject || null,
       baseUrl,
-      exampleUrl: `${baseUrl}/api/snapshot/PROJECT_NAME?key=${snapshotKey}`,
-      commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`,
+      exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}?key=${effectiveKey}`,
+      commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${effectiveKey}`,
       commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, read_multiple_files, write_file, create_file, delete_file, bulk_delete, move_file, copy_file, copy_folder, rename_file, grep, search_files, search_replace, apply_patch, bulk_write, run_command, install_deps, add_dependency, type_check, lint_and_fix, format_files, get_build_metrics, restart_dev_server, list_open_ports, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, git_push, git_pull, git_merge, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, archive_project, export_project, set_env_var, get_env_vars, rollback_last_change, project_analyze, tailwind_audit, find_usages, component_tree, extract_theme, extract_colors, capture_preview, get_preview_url, generate_component, generate_page, refactor_file, validate_change, profile_performance, create_folder, delete_folder, move_folder, rename_folder, list_tree_filtered, dead_code_detection, dependency_graph, symbol_search, grep_advanced, extract_imports, run_command_advanced, build_with_flags, clean_build_cache, start_process_named, monitor_process, get_process_logs, stop_all_processes, switch_port, git_stash_pop, git_reset, git_revert, git_tag, visual_diff, capture_component, record_video, get_dom_snapshot, get_console_errors, generate_test, generate_storybook, optimize_code, convert_to_typescript, add_feature, migrate_framework, react_profiler, memory_leak_detection, console_error_analysis, runtime_error_trace, bundle_analyzer, network_monitor, accessibility_audit, security_scan, set_tailwind_config, set_next_config, update_package_json, manage_scripts, switch_package_manager, deploy_preview, export_project_zip, import_project, super_command",
     });
     return;
@@ -492,14 +516,14 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname.startsWith("/api/snapshot/")) {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const pathParts = pathname.replace("/api/snapshot/", "").split("/").filter(Boolean);
+    const projectName = pathParts[0] || "";
     const providedKey = getKey(req, url);
-    if (providedKey !== snapshotKey) {
+    if (!isValidKey(providedKey, projectName)) {
       res.writeHead(403, { "Content-Type": "text/plain" });
       res.end("Lamby Snapshot API\n\nAccess denied — invalid or missing key.\nProvide ?key=YOUR_KEY or Authorization: Bearer YOUR_KEY");
       return;
     }
-    const pathParts = pathname.replace("/api/snapshot/", "").split("/").filter(Boolean);
-    const projectName = pathParts[0] || "";
     if (!projectName) {
       let projectList = [];
       if (fs.existsSync(PROJECTS_DIR)) {
@@ -521,7 +545,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
     try {
       const providedKey = getKey(req, url);
-      if (providedKey !== snapshotKey) {
+      const execProject = url.searchParams.get("project") || "";
+      if (!isValidKey(providedKey, execProject)) {
         sendJson(res, { error: "Invalid key" }, 403);
         return;
       }
@@ -546,7 +571,8 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/sandbox/audit-log") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     const providedKey = getKey(req, url);
-    if (providedKey !== snapshotKey) {
+    const auditProject = url.searchParams.get("project") || "";
+    if (!isValidKey(providedKey, auditProject)) {
       sendJson(res, { error: "Invalid key" }, 403);
       return;
     }
@@ -1057,7 +1083,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     const projectName = url.searchParams.get("project") || "";
     const providedKey = getKey(req, url);
-    if (providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    if (!isValidKey(providedKey, projectName)) { sendJson(res, { error: "Invalid key" }, 403); return; }
     sendJson(res, gatherConsoleLogs(projectName));
     return;
   }
@@ -1066,7 +1092,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
     try {
       const body = JSON.parse(await readBody(req));
-      bridgeConfig = { relayUrl: body.relayUrl || "", bridgeKey: body.bridgeKey || "" };
+      bridgeConfig = { relayUrl: body.relayUrl || "", bridgeKey: body.bridgeKey || "", snapshotKey: bridgeConfig.snapshotKey, projectKeys: bridgeConfig.projectKeys || {} };
       saveBridgeConfig(bridgeConfig);
       if (bridgeReconnectTimer) { clearTimeout(bridgeReconnectTimer); bridgeReconnectTimer = null; }
       bridgeReconnectDelay = 2000;
@@ -1141,7 +1167,7 @@ if (WebSocketServer) {
     if (req.url && req.url.startsWith("/ws/sandbox")) {
       const reqUrl = new URL(req.url, "http://localhost");
       const providedKey = reqUrl.searchParams.get("key") || "";
-      if (providedKey !== snapshotKey) { socket.destroy(); return; }
+      if (!isValidKey(providedKey, "")) { socket.destroy(); return; }
       sandboxWss.handleUpgrade(req, socket, head, (ws) => {
         sandboxWss.emit("connection", ws);
       });

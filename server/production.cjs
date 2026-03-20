@@ -7,16 +7,38 @@ const PORT = parseInt(process.env.PORT || "5000", 10);
 const DIST_DIR = path.resolve(__dirname, "..", "dist");
 const lambyKeysPath = path.resolve(__dirname, "..", ".lamby-keys.json");
 let snapshotKey;
+let projectKeys = {};
 try {
   if (fs.existsSync(lambyKeysPath)) {
     const saved = JSON.parse(fs.readFileSync(lambyKeysPath, "utf-8"));
     snapshotKey = saved.snapshotKey && saved.snapshotKey.length >= 16 ? saved.snapshotKey : crypto.randomBytes(16).toString("hex");
+    projectKeys = saved.projectKeys || {};
   } else {
     snapshotKey = crypto.randomBytes(16).toString("hex");
   }
-  fs.writeFileSync(lambyKeysPath, JSON.stringify({ snapshotKey }, null, 2), "utf-8");
+  const existing = fs.existsSync(lambyKeysPath) ? JSON.parse(fs.readFileSync(lambyKeysPath, "utf-8")) : {};
+  fs.writeFileSync(lambyKeysPath, JSON.stringify({ ...existing, snapshotKey, projectKeys }, null, 2), "utf-8");
 } catch {
   snapshotKey = crypto.randomBytes(16).toString("hex");
+}
+
+function getProjectKey(projectName) {
+  if (!projectName) return snapshotKey;
+  if (projectKeys[projectName]) return projectKeys[projectName];
+  const key = crypto.randomBytes(16).toString("hex");
+  projectKeys[projectName] = key;
+  try {
+    const existing = fs.existsSync(lambyKeysPath) ? JSON.parse(fs.readFileSync(lambyKeysPath, "utf-8")) : {};
+    existing.projectKeys = projectKeys;
+    fs.writeFileSync(lambyKeysPath, JSON.stringify(existing, null, 2), "utf-8");
+  } catch {}
+  return key;
+}
+
+function isValidKey(providedKey, projectName) {
+  if (providedKey === snapshotKey) return true;
+  if (projectName && projectKeys[projectName] === providedKey) return true;
+  return false;
 }
 
 const bridgeClients = new Map();
@@ -258,11 +280,16 @@ const server = http.createServer(async (req, res) => {
     const host = req.headers.host || `localhost:${PORT}`;
     const protocol = req.headers["x-forwarded-proto"] || "https";
     const baseUrl = `${protocol}://${host}`;
+    const requestedProject = url.searchParams.get("project") || "";
+    const effectiveKey = requestedProject ? getProjectKey(requestedProject) : snapshotKey;
     sendJson(res, {
-      key: snapshotKey,
+      key: effectiveKey,
+      globalKey: snapshotKey,
+      projectKeys,
+      project: requestedProject || null,
       baseUrl,
-      exampleUrl: `${baseUrl}/api/snapshot/PROJECT_NAME?key=${snapshotKey}`,
-      commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`,
+      exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}?key=${effectiveKey}`,
+      commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${effectiveKey}`,
       commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Relay-only in production — requests forwarded to connected desktop client via bridge.",
     });
     return;
@@ -270,7 +297,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/bridge-status") {
     const providedKey = getKey(req, url);
-    if (providedKey !== snapshotKey && !findBridgeClient(providedKey)) {
+    if (!isValidKey(providedKey) && !findBridgeClient(providedKey)) {
       sendJson(res, { error: "Invalid key" }, 403);
       return;
     }
@@ -290,7 +317,7 @@ const server = http.createServer(async (req, res) => {
     const projectName = pathParts[0] || "";
     const providedKey = getKey(req, url);
 
-    if (providedKey !== snapshotKey && !findBridgeClient(providedKey)) {
+    if (!isValidKey(providedKey, projectName) && !findBridgeClient(providedKey)) {
       res.writeHead(403, { "Content-Type": "text/plain" });
       res.end("Lamby Snapshot API\n\nAccess denied — invalid or missing key.\nProvide ?key=YOUR_KEY or Authorization: Bearer YOUR_KEY");
       return;
@@ -328,7 +355,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
     try {
       const providedKey = getKey(req, url);
-      if (providedKey !== snapshotKey && !findBridgeClient(providedKey)) {
+      const execProject = url.searchParams.get("project") || "";
+      if (!isValidKey(providedKey, execProject) && !findBridgeClient(providedKey)) {
         sendJson(res, { error: "Invalid key" }, 403);
         return;
       }
@@ -382,7 +410,8 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/sandbox/audit-log") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     const providedKey = getKey(req, url);
-    if (providedKey !== snapshotKey && !findBridgeClient(providedKey)) {
+    const auditProject = url.searchParams.get("project") || "";
+    if (!isValidKey(providedKey, auditProject) && !findBridgeClient(providedKey)) {
       sendJson(res, { error: "Invalid key" }, 403);
       return;
     }
