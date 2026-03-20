@@ -36,6 +36,7 @@ function createConnector(config) {
 
   let _onRelayLog = null;
   let _onStatusChange = null;
+  let _onMessage = config.onMessage || null;
 
   const chunkPurgeTimer = setInterval(() => {
     const now = Date.now();
@@ -1576,6 +1577,15 @@ function createConnector(config) {
     if (msg.type === "ping") { send({ type: "pong", ts: Date.now() }); return; }
     if (msg.type === "pong") return;
 
+    if (_onMessage) {
+      try {
+        const handled = await _onMessage(msg, send);
+        if (handled) return;
+      } catch (e) {
+        log("error", `External onMessage handler error: ${e.message}`);
+      }
+    }
+
     if (msg.type === "relay-log") {
       const lvl = (msg.level || "info").toUpperCase();
       const logMsg = msg.message || "";
@@ -1773,6 +1783,9 @@ function createConnector(config) {
 
     set onStatusChange(fn) { _onStatusChange = fn; },
     get onStatusChange() { return _onStatusChange; },
+
+    set onMessage(fn) { _onMessage = fn; },
+    get onMessage() { return _onMessage; },
 
     handleAction,
   };

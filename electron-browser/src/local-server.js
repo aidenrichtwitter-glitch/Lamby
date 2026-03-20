@@ -14,8 +14,6 @@ const {
   buildInstallCascade,
 } = require("../../server/sandbox-dispatcher.cjs");
 
-const tls = require("tls");
-const net = require("net");
 
 const USER_DATA_DIR = path.join(os.homedir(), ".guardian-ai");
 const PROJECTS_DIR = path.join(USER_DATA_DIR, "projects");
@@ -75,82 +73,7 @@ function isValidKey(providedKey, projectName) {
   return false;
 }
 
-let bridgeSocket = null;
-let bridgeConnected = false;
-let bridgeConnecting = false;
-let bridgeReconnectTimer = null;
-let bridgeReconnectDelay = 2000;
-let bridgePingTimer = null;
-let bridgeBuffer = Buffer.alloc(0);
-let bridgeFailCount = 0;
-let bridgeTriedFallback = false;
-let bridgeLastConnectedAt = 0;
-let bridgeLastPongAt = 0;
-let bridgePongCheckTimer = null;
-let bridgeCurrentConnId = null;
-const BRIDGE_GRACE_PERIOD_MS = 30000;
-
-function wsClientEncodeFrame(data) {
-  const payload = Buffer.from(data, "utf-8");
-  const len = payload.length;
-  const mask = crypto.randomBytes(4);
-  let header;
-  if (len < 126) {
-    header = Buffer.alloc(6);
-    header[0] = 0x81;
-    header[1] = 0x80 | len;
-    mask.copy(header, 2);
-  } else if (len < 65536) {
-    header = Buffer.alloc(8);
-    header[0] = 0x81;
-    header[1] = 0x80 | 126;
-    header.writeUInt16BE(len, 2);
-    mask.copy(header, 4);
-  } else {
-    header = Buffer.alloc(14);
-    header[0] = 0x81;
-    header[1] = 0x80 | 127;
-    header.writeBigUInt64BE(BigInt(len), 2);
-    mask.copy(header, 10);
-  }
-  const masked = Buffer.alloc(len);
-  for (let i = 0; i < len; i++) masked[i] = payload[i] ^ mask[i % 4];
-  return Buffer.concat([header, masked]);
-}
-
-function wsClientDecodeFrame(buf) {
-  if (buf.length < 2) return { data: null, bytesConsumed: 0 };
-  const opcode = buf[0] & 0x0f;
-  const masked = (buf[1] & 0x80) !== 0;
-  let payloadLen = buf[1] & 0x7f;
-  let offset = 2;
-  if (payloadLen === 126) {
-    if (buf.length < 4) return { data: null, bytesConsumed: 0 };
-    payloadLen = buf.readUInt16BE(2);
-    offset = 4;
-  } else if (payloadLen === 127) {
-    if (buf.length < 10) return { data: null, bytesConsumed: 0 };
-    payloadLen = Number(buf.readBigUInt64BE(2));
-    offset = 10;
-  }
-  if (masked) {
-    if (buf.length < offset + 4 + payloadLen) return { data: null, bytesConsumed: 0 };
-    const maskKey = buf.slice(offset, offset + 4);
-    offset += 4;
-    const payload = Buffer.alloc(payloadLen);
-    for (let i = 0; i < payloadLen; i++) payload[i] = buf[offset + i] ^ maskKey[i % 4];
-    return { data: payload.toString("utf-8"), opcode, bytesConsumed: offset + payloadLen };
-  }
-  if (buf.length < offset + payloadLen) return { data: null, bytesConsumed: 0 };
-  return { data: buf.slice(offset, offset + payloadLen).toString("utf-8"), opcode, bytesConsumed: offset + payloadLen };
-}
-
-function bridgeSend(data) {
-  if (!bridgeSocket || !bridgeConnected) return;
-  try { bridgeSocket.write(wsClientEncodeFrame(data)); } catch (err) {
-    console.error(`[Bridge] Send failed: ${err.message}`);
-  }
-}
+const { createConnector } = require("../../server/bridge-connector.cjs");
 
 function gatherConsoleLogs(projectName) {
   const result = { previews: [] };
@@ -172,222 +95,76 @@ function gatherConsoleLogs(projectName) {
   return result;
 }
 
-async function handleBridgeMessage(msg) {
-  try {
-    const parsed = JSON.parse(msg);
-    if (parsed.type === "snapshot-request" && parsed.requestId) {
-      console.log(`[Bridge] Received snapshot-request for "${parsed.projectName || ""}" (reqId: ${parsed.requestId.slice(0, 8)})`);
-      try {
-        const snapshot = gatherProjectSnapshot(parsed.projectName || "", PROJECTS_DIR);
-        bridgeSend(JSON.stringify({ type: "snapshot-response", requestId: parsed.requestId, snapshot }));
-        console.log(`[Bridge] Sent snapshot-response (reqId: ${parsed.requestId.slice(0, 8)}, len: ${typeof snapshot === 'string' ? snapshot.length : JSON.stringify(snapshot).length})`);
-      } catch (err) {
-        console.error(`[Bridge] snapshot error: ${err.message}`);
-        bridgeSend(JSON.stringify({ type: "snapshot-response", requestId: parsed.requestId, snapshot: `Error gathering snapshot: ${err.message}` }));
-      }
-    } else if (parsed.type === "sandbox-execute-request" && parsed.requestId) {
-      console.log(`[Bridge] Received sandbox-execute-request (reqId: ${parsed.requestId.slice(0, 8)}, actions: ${(parsed.actions || []).length})`);
-      try {
-        const result = await executeSandboxActions(parsed.actions || [], PROJECTS_DIR, { auditLog: sandboxAuditLog, previewProcesses });
-        bridgeSend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result }));
-        console.log(`[Bridge] Sent sandbox-execute-response (reqId: ${parsed.requestId.slice(0, 8)})`);
-      } catch (err) {
-        console.error(`[Bridge] sandbox-execute error: ${err.message}`);
-        bridgeSend(JSON.stringify({ type: "sandbox-execute-response", requestId: parsed.requestId, result: { error: err.message } }));
-      }
-    } else if (parsed.type === "console-logs-request" && parsed.requestId) {
-      console.log(`[Bridge] Received console-logs-request for "${parsed.projectName || ""}" (reqId: ${parsed.requestId.slice(0, 8)})`);
-      try {
-        const logs = gatherConsoleLogs(parsed.projectName || "");
-        bridgeSend(JSON.stringify({ type: "console-logs-response", requestId: parsed.requestId, logs }));
-        console.log(`[Bridge] Sent console-logs-response (reqId: ${parsed.requestId.slice(0, 8)})`);
-      } catch (err) {
-        console.error(`[Bridge] console-logs error: ${err.message}`);
-        bridgeSend(JSON.stringify({ type: "console-logs-response", requestId: parsed.requestId, logs: { error: `Error gathering console logs: ${err.message}` } }));
-      }
-    } else if (parsed.type === "ping") {
-      bridgeSend(JSON.stringify({ type: "pong" }));
-    } else if (parsed.type === "pong") {
-      bridgeLastPongAt = Date.now();
-    }
-  } catch (err) {
-    console.error(`[Bridge] handleBridgeMessage error: ${err.message}`);
-  }
-}
+let bridgeConnector = null;
 
-function cleanupBridgeTimers() {
-  if (bridgePingTimer) { clearInterval(bridgePingTimer); bridgePingTimer = null; }
-  if (bridgePongCheckTimer) { clearInterval(bridgePongCheckTimer); bridgePongCheckTimer = null; }
-}
-
-function connectToBridgeRelay() {
-  if (bridgeConnecting) {
-    console.log("[Bridge] Connection already in progress — skipping duplicate attempt");
-    return;
-  }
-  bridgeConnecting = true;
-
-  if (bridgeSocket) {
-    try { bridgeSocket.destroy(); } catch {}
-    bridgeSocket = null;
-  }
-  bridgeConnected = false;
-  cleanupBridgeTimers();
-
-  let relayUrl = bridgeConfig.relayUrl || CANONICAL_RELAY_URL;
-  if (bridgeFailCount >= 3 && !bridgeTriedFallback && relayUrl !== CANONICAL_RELAY_URL) {
-    console.log(`[Bridge] Stored relay URL failed ${bridgeFailCount} times — falling back to ${CANONICAL_RELAY_URL}`);
-    relayUrl = CANONICAL_RELAY_URL;
-    bridgeTriedFallback = true;
-    bridgeConfig.relayUrl = CANONICAL_RELAY_URL;
-    saveBridgeConfig(bridgeConfig);
-  }
-  if (!relayUrl) { console.log("[Bridge] No relay URL configured — skipping auto-connect"); bridgeConnecting = false; return; }
-
-  let parsed;
-  try { parsed = new URL(relayUrl); } catch { console.error("[Bridge] Invalid relay URL:", relayUrl); bridgeConnecting = false; return; }
-
-  const host = parsed.hostname;
-  const port = parsed.port ? parseInt(parsed.port) : (parsed.protocol === "https:" ? 443 : 80);
-  const useTls = parsed.protocol === "https:";
+function createBridgeConnector() {
+  const relayUrl = bridgeConfig.relayUrl || CANONICAL_RELAY_URL;
   let bridgeKey = bridgeConfig.bridgeKey;
   if (!bridgeKey || bridgeKey.length < 8) {
     bridgeKey = crypto.randomBytes(16).toString("hex");
     bridgeConfig.bridgeKey = bridgeKey;
     saveBridgeConfig(bridgeConfig);
   }
-  const connId = crypto.randomUUID();
-  bridgeCurrentConnId = connId;
-  const wsPath = `/bridge-ws?key=${encodeURIComponent(bridgeKey)}&snapshotKey=${encodeURIComponent(snapshotKey)}`;
-  const wsKeyRaw = crypto.randomBytes(16).toString("base64");
 
-  console.log(`[Bridge] Connecting to ${host}:${port}${wsPath.split("?")[0]} (connId: ${connId.substring(0, 8)})...`);
-
-  const connectOpts = { host, port, servername: host };
-  const socket = useTls ? tls.connect(connectOpts) : net.connect(connectOpts);
-  let socketCleaned = false;
-
-  function handleSocketEnd(reason) {
-    if (socketCleaned) return;
-    socketCleaned = true;
-    const isCurrentConn = bridgeCurrentConnId === connId;
-    if (isCurrentConn) {
-      const uptime = bridgeLastConnectedAt ? Math.round((Date.now() - bridgeLastConnectedAt) / 1000) : 0;
-      if (bridgeConnected) console.log(`[Bridge] Disconnected from relay (reason: ${reason}, uptime: ${uptime}s)`);
-      bridgeConnected = false;
-      bridgeConnecting = false;
-      bridgeSocket = null;
-      cleanupBridgeTimers();
-      scheduleBridgeReconnect();
-    } else {
-      console.log(`[Bridge] Stale connection closed (connId: ${connId.substring(0, 8)}, reason: ${reason}) — ignoring, newer connection active`);
-    }
-  }
-
-  socket.on("connect", () => {
-    socket.write(
-      `GET ${wsPath} HTTP/1.1\r\n` +
-      `Host: ${host}\r\n` +
-      `Upgrade: websocket\r\n` +
-      `Connection: Upgrade\r\n` +
-      `Sec-WebSocket-Key: ${wsKeyRaw}\r\n` +
-      `Sec-WebSocket-Version: 13\r\n` +
-      `\r\n`
-    );
-  });
-
-  if (useTls) {
-    socket.on("secureConnect", () => {});
-  }
-
-  let handshakeDone = false;
-  let httpBuffer = "";
-  bridgeBuffer = Buffer.alloc(0);
-
-  socket.on("data", (chunk) => {
-    if (!handshakeDone) {
-      httpBuffer += chunk.toString("utf-8");
-      const headerEnd = httpBuffer.indexOf("\r\n\r\n");
-      if (headerEnd === -1) return;
-      const statusLine = httpBuffer.split("\r\n")[0];
-      if (!statusLine.includes("101")) {
-        console.error(`[Bridge] Handshake failed: ${statusLine}`);
-        bridgeFailCount++;
-        socket.destroy();
-        return;
-      }
-      handshakeDone = true;
-      bridgeSocket = socket;
-      bridgeConnected = true;
-      bridgeConnecting = false;
-      bridgeLastConnectedAt = Date.now();
-      bridgeReconnectDelay = 2000;
-      bridgeFailCount = 0;
-      bridgeTriedFallback = false;
-      console.log(`[Bridge] Connected to relay at ${host} (connId: ${connId.substring(0, 8)})`);
-      bridgeLastPongAt = Date.now();
-      bridgeSend(JSON.stringify({ type: "ping" }));
-      bridgePingTimer = setInterval(() => {
-        bridgeSend(JSON.stringify({ type: "ping" }));
-      }, 15000);
-      bridgePongCheckTimer = setInterval(() => {
-        const sincePong = Date.now() - bridgeLastPongAt;
-        if (sincePong > 45000 && bridgeConnected && bridgeCurrentConnId === connId) {
-          console.log(`[Bridge] No pong received in ${Math.round(sincePong / 1000)}s — connection stale, forcing reconnect`);
-          try { socket.destroy(); } catch {}
+  bridgeConnector = createConnector({
+    relayUrl,
+    bridgeKey,
+    snapshotKey,
+    projectDir: PROJECTS_DIR,
+    onMessage: async (msg, send) => {
+      if (msg.type === "snapshot-request" && msg.requestId) {
+        console.log(`[Bridge] Received snapshot-request for "${msg.projectName || ""}" (reqId: ${msg.requestId.slice(0, 8)})`);
+        try {
+          const snapshot = gatherProjectSnapshot(msg.projectName || "", PROJECTS_DIR);
+          send({ type: "snapshot-response", requestId: msg.requestId, snapshot });
+          console.log(`[Bridge] Sent snapshot-response (reqId: ${msg.requestId.slice(0, 8)}, len: ${typeof snapshot === 'string' ? snapshot.length : JSON.stringify(snapshot).length})`);
+        } catch (err) {
+          console.error(`[Bridge] snapshot error: ${err.message}`);
+          send({ type: "snapshot-response", requestId: msg.requestId, snapshot: `Error gathering snapshot: ${err.message}` });
         }
-      }, 20000);
-      const headerBytes = Buffer.byteLength(httpBuffer.slice(0, headerEnd + 4), "utf-8");
-      const remaining = chunk.slice(headerBytes);
-      if (remaining.length > 0) {
-        bridgeBuffer = Buffer.concat([bridgeBuffer, remaining]);
-        processBridgeBuffer();
+        return true;
       }
-      return;
-    }
-    bridgeBuffer = Buffer.concat([bridgeBuffer, chunk]);
-    processBridgeBuffer();
+      if (msg.type === "sandbox-execute-request" && msg.requestId) {
+        console.log(`[Bridge] Received sandbox-execute-request (reqId: ${msg.requestId.slice(0, 8)}, actions: ${(msg.actions || []).length})`);
+        try {
+          const result = await executeSandboxActions(msg.actions || [], PROJECTS_DIR, { auditLog: sandboxAuditLog, previewProcesses });
+          send({ type: "sandbox-execute-response", requestId: msg.requestId, result });
+          console.log(`[Bridge] Sent sandbox-execute-response (reqId: ${msg.requestId.slice(0, 8)})`);
+        } catch (err) {
+          console.error(`[Bridge] sandbox-execute error: ${err.message}`);
+          send({ type: "sandbox-execute-response", requestId: msg.requestId, result: { error: err.message } });
+        }
+        return true;
+      }
+      if (msg.type === "console-logs-request" && msg.requestId) {
+        console.log(`[Bridge] Received console-logs-request for "${msg.projectName || ""}" (reqId: ${msg.requestId.slice(0, 8)})`);
+        try {
+          const logs = gatherConsoleLogs(msg.projectName || "");
+          send({ type: "console-logs-response", requestId: msg.requestId, logs });
+          console.log(`[Bridge] Sent console-logs-response (reqId: ${msg.requestId.slice(0, 8)})`);
+        } catch (err) {
+          console.error(`[Bridge] console-logs error: ${err.message}`);
+          send({ type: "console-logs-response", requestId: msg.requestId, logs: { error: `Error gathering console logs: ${err.message}` } });
+        }
+        return true;
+      }
+      return false;
+    },
   });
 
-  socket.on("close", (hadError) => {
-    handleSocketEnd(hadError ? "close-with-error" : "close");
-  });
+  bridgeConnector.onStatusChange = (status) => {
+    console.log(`[Bridge] Status changed: ${status}`);
+  };
 
-  socket.on("error", (err) => {
-    console.error(`[Bridge] Connection error: ${err.code || err.message}`);
-    handleSocketEnd(`error: ${err.code || err.message}`);
-  });
+  return bridgeConnector;
 }
 
-function processBridgeBuffer() {
-  while (bridgeBuffer.length > 0) {
-    const { data, opcode, bytesConsumed } = wsClientDecodeFrame(bridgeBuffer);
-    if (data === null) break;
-    bridgeBuffer = bridgeBuffer.slice(bytesConsumed);
-    if (opcode === 0x8) { if (bridgeSocket) bridgeSocket.destroy(); return; }
-    if (opcode === 0x9) {
-      const pong = Buffer.alloc(2); pong[0] = 0x8a; pong[1] = 0;
-      if (bridgeSocket) bridgeSocket.write(pong);
-      continue;
-    }
-    handleBridgeMessage(data).catch((err) => {
-      console.error(`[Bridge] Unhandled bridge message error: ${err.message}`);
-    });
+function connectToBridgeRelay() {
+  if (bridgeConnector) {
+    bridgeConnector.disconnect();
   }
-}
-
-function scheduleBridgeReconnect() {
-  if (bridgeReconnectTimer) {
-    console.log("[Bridge] Reconnect already scheduled — skipping duplicate");
-    return;
-  }
-  const delay = Math.max(Math.min(bridgeReconnectDelay, 60000), 2000);
-  console.log(`[Bridge] Reconnecting in ${delay / 1000}s...`);
-  bridgeReconnectTimer = setTimeout(() => {
-    bridgeReconnectTimer = null;
-    bridgeReconnectDelay = Math.min(bridgeReconnectDelay * 1.5, 60000);
-    connectToBridgeRelay();
-  }, delay);
+  createBridgeConnector();
+  bridgeConnector.connect();
 }
 
 const previewProcesses = new Map();
@@ -1088,12 +865,11 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/bridge-status") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
-    const withinGrace = !bridgeConnected && bridgeLastConnectedAt > 0 && (Date.now() - bridgeLastConnectedAt) < BRIDGE_GRACE_PERIOD_MS;
-    const effectiveStatus = bridgeConnected ? "connected" : (withinGrace ? "connected" : (bridgeReconnectTimer ? "connecting" : "disconnected"));
+    const status = bridgeConnector ? bridgeConnector.getStatus() : { status: "disconnected" };
     sendJson(res, {
-      status: effectiveStatus,
-      relayUrl: bridgeConfig.relayUrl || "",
-      bridgeKey: bridgeConfig.bridgeKey || "",
+      status: status.status,
+      relayUrl: status.relayUrl || bridgeConfig.relayUrl || "",
+      bridgeKey: status.bridgeKey || bridgeConfig.bridgeKey || "",
       key: snapshotKey,
     });
     return;
@@ -1114,10 +890,6 @@ const server = http.createServer(async (req, res) => {
       const body = JSON.parse(await readBody(req));
       bridgeConfig = { relayUrl: body.relayUrl || "", bridgeKey: body.bridgeKey || "", snapshotKey: bridgeConfig.snapshotKey, projectKeys: bridgeConfig.projectKeys || {} };
       saveBridgeConfig(bridgeConfig);
-      if (bridgeReconnectTimer) { clearTimeout(bridgeReconnectTimer); bridgeReconnectTimer = null; }
-      bridgeReconnectDelay = 2000;
-      bridgeFailCount = 0;
-      bridgeTriedFallback = false;
       connectToBridgeRelay();
       sendJson(res, { success: true });
     } catch (err) {
@@ -1128,17 +900,18 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/bridge-reconnect") {
     if (req.method !== "POST" && req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
-    if (bridgeReconnectTimer) { clearTimeout(bridgeReconnectTimer); bridgeReconnectTimer = null; }
-    bridgeReconnectDelay = 2000;
-    bridgeFailCount = 0;
-    bridgeTriedFallback = false;
-    connectToBridgeRelay();
+    if (bridgeConnector) {
+      bridgeConnector.reconnect(bridgeConfig.relayUrl || CANONICAL_RELAY_URL);
+    } else {
+      connectToBridgeRelay();
+    }
     sendJson(res, { success: true, status: "reconnecting" });
     return;
   }
 
   if (pathname === "/health" || pathname === "/healthz") {
-    sendJson(res, { status: "ok", uptime: process.uptime(), bridge: bridgeConnected ? "connected" : "disconnected" });
+    const connected = bridgeConnector ? bridgeConnector.isConnected() : false;
+    sendJson(res, { status: "ok", uptime: process.uptime(), bridge: connected ? "connected" : "disconnected" });
     return;
   }
 
