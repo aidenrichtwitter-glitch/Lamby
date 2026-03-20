@@ -5292,10 +5292,11 @@ function projectManagementPlugin(): Plugin {
         previewPort: "5000",
       });
 
+      let _sandboxWssRef: any = null;
       bridgeConnector.onRelayLog = (logEntry: any) => {
-        if (typeof sandboxWss !== "undefined") {
+        if (_sandboxWssRef) {
           const fwd = JSON.stringify({ type: "relay-log", level: logEntry.level, message: logEntry.message, ts: logEntry.ts || Date.now() });
-          sandboxWss.clients.forEach((c: any) => { try { if (c.readyState === 1) c.send(fwd); } catch {} });
+          _sandboxWssRef.clients.forEach((c: any) => { try { if (c.readyState === 1) c.send(fwd); } catch {} });
         }
       };
 
@@ -5491,6 +5492,7 @@ function projectManagementPlugin(): Plugin {
       if (server.httpServer) {
         const { WebSocketServer } = await import("ws");
         const sandboxWss = new WebSocketServer({ noServer: true });
+        _sandboxWssRef = sandboxWss;
 
         sandboxWss.on("connection", (ws: any) => {
           console.log("[Sandbox WS] Client connected");
