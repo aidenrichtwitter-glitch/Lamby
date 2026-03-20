@@ -37,6 +37,8 @@ function createConnector(config) {
   let _onRelayLog = null;
   let _onStatusChange = null;
   let _onMessage = config.onMessage || null;
+  let _suppressNextReconnect = false;
+  const projectDirCache = new Map();
 
   const chunkPurgeTimer = setInterval(() => {
     const now = Date.now();
@@ -98,12 +100,56 @@ function createConnector(config) {
     try { _socket.write(wsEncodeFrame(JSON.stringify(obj))); return true; } catch { return false; }
   }
 
+  function scanProjectDirs() {
+    const roots = [
+      path.join(projectDir, "projects"),
+      projectDir,
+    ];
+    let found = 0;
+    for (const root of roots) {
+      if (!fs.existsSync(root)) continue;
+      let entries;
+      try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch { continue; }
+      for (const e of entries) {
+        if (!e.isDirectory()) continue;
+        if (e.name.startsWith(".") || e.name === "node_modules") continue;
+        const dir = path.join(root, e.name);
+        const pkgPath = path.join(dir, "package.json");
+        let pkgName = null;
+        let hasDev = false;
+        try {
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+          pkgName = pkg.name || null;
+          hasDev  = !!(pkg.scripts && (pkg.scripts.dev || pkg.scripts.start));
+        } catch {}
+        const entry = { dir, pkgName, hasDev };
+        projectDirCache.set(e.name.toLowerCase(), entry);
+        if (pkgName) projectDirCache.set(pkgName.toLowerCase(), entry);
+        found++;
+      }
+    }
+    return found;
+  }
+
   function resolveProjectDir(project) {
     if (!project) return projectDir;
     for (const sub of ["projects", ""]) {
       const candidate = sub ? path.join(projectDir, sub, project) : path.join(projectDir, project);
       if (fs.existsSync(candidate)) return candidate;
     }
+    const lp = project.toLowerCase();
+    const cached = projectDirCache.get(lp);
+    if (cached && fs.existsSync(cached.dir)) return cached.dir;
+    for (const [key, entry] of projectDirCache) {
+      if ((key.includes(lp) || lp.includes(key)) && fs.existsSync(entry.dir)) {
+        log("info", `resolveProjectDir fuzzy match: "${project}" → "${entry.dir}"`);
+        return entry.dir;
+      }
+    }
+    scanProjectDirs();
+    const recached = projectDirCache.get(lp);
+    if (recached && fs.existsSync(recached.dir)) return recached.dir;
+    log("warn", `resolveProjectDir: no match for "${project}" in ${projectDir}. Known: [${[...projectDirCache.keys()].join(", ")}]`);
     return projectDir;
   }
 
@@ -195,6 +241,14 @@ function createConnector(config) {
         }
       });
     });
+  }
+
+  const SAFE_PATH_RE = /^[^;&|`$<>()\r\n]+$/;
+  function validateShellPath(val, fieldName = "path") {
+    if (!val || typeof val !== "string") throw new Error(`${fieldName} is required`);
+    if (!SAFE_PATH_RE.test(val)) throw new Error(`${fieldName} contains unsafe characters: ${JSON.stringify(val)}`);
+    if (val.startsWith("-")) throw new Error(`${fieldName} must not start with "-"`);
+    return val;
   }
 
   const GIT_REF_RE = /^[a-zA-Z0-9._\-/~^:@{}]+$/;
@@ -475,8 +529,33 @@ function createConnector(config) {
   async function handleAction(action) {
     const project = action.project || projectName || "";
     const projDir = resolveProjectDir(project);
+
+    if (action.type === "list_projects") {
+      scanProjectDirs();
+      const seen = new Set();
+      const projects = [];
+      for (const [, entry] of projectDirCache) {
+        if (seen.has(entry.dir)) continue;
+        seen.add(entry.dir);
+        const devPort = devPortCache.get(path.basename(entry.dir));
+        projects.push({
+          name: entry.pkgName || path.basename(entry.dir),
+          dir: entry.dir,
+          hasDev: entry.hasDev,
+          activePort: devPort ? devPort.port : null,
+        });
+      }
+      return { success: true, projects, projectDir: projectDir };
+    }
+
     if (!fs.existsSync(projDir)) {
-      throw new Error(`Project directory not found: ${projDir}. Check projectDir config and that the project name is correct.`);
+      const known = [...new Set([...projectDirCache.values()].map(e => e.pkgName || path.basename(e.dir)))].join(", ");
+      throw new Error(
+        `Project directory not found: "${project}" → resolved to "${projDir}" which does not exist. ` +
+        `PROJECT_DIR=${projectDir}. ` +
+        (known ? `Known projects: [${known}]. ` : "No projects found under PROJECT_DIR. ") +
+        `Try one of the known names, or check PROJECT_DIR in start-connector.bat.`
+      );
     }
 
     if (action.type === "list_tree") {
@@ -1576,6 +1655,11 @@ function createConnector(config) {
 
     if (msg.type === "ping") { send({ type: "pong", ts: Date.now() }); return; }
     if (msg.type === "pong") return;
+    if (msg.type === "connection_replaced") {
+      log("warn", "Connection replaced by a newer connection with the same key — suppressing reconnect.");
+      _suppressNextReconnect = true;
+      return;
+    }
 
     if (_onMessage) {
       try {
@@ -1647,6 +1731,12 @@ function createConnector(config) {
 
     log("warn", `Unhandled message type: ${msg.type}`);
   }
+
+  const _scanN = scanProjectDirs();
+  const _scanNames = [...new Set([...projectDirCache.values()].map(e => e.pkgName || path.basename(e.dir)))];
+  log("info", `Project scan: found ${_scanN} dirs under "${projectDir}" → [${_scanNames.join(", ")}]`);
+  const _scanTimer = setInterval(() => { scanProjectDirs(); }, 15000);
+  if (_scanTimer.unref) _scanTimer.unref();
 
   function doConnect() {
     if (_destroyed) return;
@@ -1723,6 +1813,11 @@ function createConnector(config) {
       clearInterval(_pingInterval); _pingInterval = null;
       _connected = false; _socket = null;
       if (_onStatusChange) _onStatusChange("disconnected");
+      if (_suppressNextReconnect) {
+        _suppressNextReconnect = false;
+        log("warn", "Disconnected (replaced by newer connection) — not reconnecting.");
+        return;
+      }
       if (!_destroyed) scheduleReconnect();
     };
     sock.on("close",   () => onDisconnect());

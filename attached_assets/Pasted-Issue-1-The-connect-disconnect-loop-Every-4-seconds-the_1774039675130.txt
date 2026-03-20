@@ -1,0 +1,28 @@
+Issue 1 — The connect/disconnect loop
+
+Every ~4 seconds, the Electron app is opening a brand new WebSocket connection while the previous one is still alive. The relay sees a duplicate key, destroys the old socket, which triggers the connector's reconnect logic, which connects again 2 seconds later, which the relay destroys again — and so on forever.
+
+The relay fix I just deployed changes socket.destroy() (forceful kill → immediate reconnect) to a graceful connection_replaced message followed by a soft close. The updated desktop-connector.js now recognizes that message and skips the reconnect. But the root cause is in your Electron app — something is triggering a new WebSocket connection every 4 seconds even when one is already open. Check:
+
+Is the connector initialized inside a function that runs multiple times (e.g., on IPC message, on window focus, on a timer)?
+Is there a setInterval or retry loop that spawns new connections without checking if one already exists?
+Are multiple renderer windows all starting a connector?
+The desktop-connector.js I updated now has the fix — the integration in your Electron app should do the same: check _suppressNextReconnect on disconnect, and set it to true when a connection_replaced message arrives.
+
+Issue 2 — ZERO matches on search_replace
+
+This is not a relay bug — it's expected behavior. Grok sent a search_replace looking for text that literally doesn't exist in package.json or index.html (possibly because the file already changed, or Grok hallucinated the content). The relay correctly returns {zeroReplacements:true} and logs the warning. The fix is on Grok's side: it should read_file first to get the exact current content before searching.
+
+also give me the dev server url for the app to connect to to show connections in the preview
+
+The dev server runs on port 3000. Here are the URLs:
+
+Dashboard (view connections & activity log):
+
+https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/?key=92781fb690e47d110da1458cbe03ac9a
+WebSocket bridge (what the Electron app connects to):
+
+wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/bridge-ws?key=YOUR_BRIDGE_KEY&snapshotKey=92781fb690e47d110da1458cbe03ac9a&project=groks-app
+Replace YOUR_BRIDGE_KEY with whatever bridge key your Electron app is using (the one ending in …2a20b8 based on the logs, so the full key starts with 6a266168).
+
+The production URL (deployed) is the same paths but on your .replit.app domain — the dev server URL above is only live while this workspace is running.
