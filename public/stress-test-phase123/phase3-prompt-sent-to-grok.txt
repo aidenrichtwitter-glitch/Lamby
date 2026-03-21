@@ -110,7 +110,7 @@ YOUR WORKFLOW (RECOMMENDED):
 
 6. ALWAYS VERIFY: After any file write/delete, ALWAYS check get_console_errors to confirm no broken imports. A single delete_file that removes a file still imported elsewhere will crash the entire app.
 
-7. DELETE SAFETY: Before deleting any file, read the importing file (usually App.tsx) to verify nothing depends on the file you're deleting. If something does, update the import first or write a replacement file first.
+7. DELETE SAFETY: Before deleting any file, read the importing file (usually App.tsx) to check nothing depends on the file you're deleting. If something does, update the import first or write a replacement file first.
 
 8. WINDOWS SHELL: run_command runs on Windows. Use PowerShell syntax for the limited commands that are allowed (npm, node, echo).
 
@@ -122,23 +122,38 @@ YOUR WORKFLOW (RECOMMENDED):
 
 12. NEVER CLAIM SUCCESS WITHOUT VERIFICATION: Always confirm edits with grok-read or get_console_errors before telling the user it's done.
 
-KNOWN UNTESTED SCENARIOS (exercise caution):
-- Concurrent/parallel browse_page calls to the bridge (bridge is a serial queue — avoid parallel requests)
-- Bridge timeout/disconnect behavior during long operations (relay has 30s timeout)
-- Bulk operations (bulk_write, bulk_delete, apply_patch) — not stress-tested
-- grok-interact actions beyond evaluate — click/type/select may require specific selectors
-=== END WORKSPACE API ===
+=== PHASE 1 & 2 RESULTS (ALREADY COMPLETED BY REPLIT AGENT) ===
+Phase 1 (Extreme Edits) — PASSED:
+- Created large files (3000+ chars) via write_file and write_file_chunk
+- Performed multi-file search/replace edits via grok-write
+- Updated routing and navigation across multiple files
+- All edits verified via grok-read and get_console_errors
 
+Phase 2 (Delete & Recovery) — PASSED:
+- Deleted files via grok-proxy + delete_file
+- Verified deletion broke imports (get_console_errors caught it)
+- Recovered by re-creating deleted files via write_file
+- Confirmed app rebuilt successfully after recovery
+
+=== YOUR PHASE 3 TASK (DO THIS NOW) ===
 Project name: groks-app
-STRESS TEST TASK: 
-  1. Read the project structure and App.tsx to understand the current state
-  2. Create a brand new src/pages/Metrics.tsx page with bridge performance metrics (at least 3000 chars of real React component code with metrics cards, animations, and dark mode support)
-  3. Rewrite src/pages/Dashboard.tsx with substantial new content (stats, activity feed, at least 2000 chars)
-  4. Update src/components/App.tsx to import and route the new Metrics page
-  5. Update src/components/Navigation.tsx to add a Metrics nav item
-  6. Check for console errors after each edit
-  7. Take a screenshot to verify the changes
-  8. Git add and commit with message "Phase 3: Grok stress test via xAI API"
-  9. Verify all files via grok-read
 
-  Do all of this using ONLY the bridge endpoints documented above. Show your work.
+You are running Phase 3 of the stress test. Phases 1 and 2 were completed by Replit Agent and confirmed all bridge endpoints work. Your job is to exercise the bridge yourself, proving Grok-4 can autonomously use browse_page to build real features.
+
+TASK — Complete these steps in order:
+  1. Call /api/diag?project=groks-app to confirm the bridge is live
+  2. Call /api/grok-tree?project=groks-app to see the file structure
+  3. Read src/App.tsx (or the actual entry point) via grok-read to understand the current app
+  4. Create a new file src/pages/Phase3Report.tsx — a React component that displays a "Phase 3 Stress Test Report" card with:
+     - Title: "Phase 3: Grok-4 Autonomous Build"
+     - A summary of what you did (which endpoints you called, what you created)
+     - A timestamp of when you ran
+     - Styled with inline styles or Tailwind classes
+     - At least 1500 chars of real component code
+  5. Update the app's routing/navigation to include the new Phase3Report page
+  6. Check get_console_errors after each edit
+  7. Take a screenshot to verify your changes are visible
+  8. Git commit with message "Phase 3: Grok-4 autonomous stress test complete"
+  9. Post a summary to /api/coord noting what you accomplished
+
+Do all of this using ONLY the bridge endpoints documented above. Show your work at each step.
