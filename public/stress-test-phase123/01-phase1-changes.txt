@@ -1,0 +1,96 @@
+===============================================================
+PHASE 1: MAKE EXTREME CHANGES, PROVE THEY WORK
+===============================================================
+
+GOAL: Push the bridge hard — create multiple files, edit them, commit
+via git, take screenshots, verify everything works. Document every
+step, every bug, every fix. Use findings to update the prompt template.
+
+=== DISCOVERY (before writing) ===
+
+Confirmed bridge connection: GET /api/diag → connected, 87ms round-trip
+Enumerated 113 proxy commands via GET /api/commands
+Found critical encoding bug: base64 contains + and = that break URLs
+  → MUST use encodeURIComponent(btoa(json)) for all grok-proxy payloads
+Found project field bug: "project" must be inside each action object
+  → Without it, files land in wrong directory
+
+=== FILE CREATION ===
+
+T1: useTheme.ts — 561 chars
+  Method: grok-proxy + write_file
+  Result: PASS (106ms, verified 561 chars via grok-read)
+
+T2: Dashboard.tsx — 3387 chars
+  Method: grok-proxy + write_file (single shot)
+  Result: PASS (106ms, verified 3387 chars)
+
+T3: Users.tsx — 2778 chars
+  Method: grok-proxy + write_file
+  Result: PASS (116ms, verified 2778 chars)
+
+T4: Analytics.tsx — 6021 chars (TOO LARGE for single write)
+  Method: grok-proxy + write_file_chunk (5 chunks x ~1500 chars)
+  Result: PASS (1052ms total, verified 6021 chars intact)
+  This proved chunked writes work for files beyond URL size limits.
+
+=== EDITING ===
+
+T5: search/replace on Dashboard.tsx
+  Method: grok-write smart endpoint
+  Changed "Welcome back!" → "Welcome back! Here is your overview."
+  Result: PASS (612ms, replacements=1, verified via grok-read)
+
+=== SHELL COMMANDS ===
+
+T6: Tried Get-ChildItem src/pages via grok-run
+  Result: FAIL — "Command not allowed"
+  Discovery: grok-run whitelist only allows npm, node, echo
+  Filesystem commands blocked — must use grok-tree / grok-read instead
+
+=== GIT ===
+
+T7: git status → PASS (5 modified/new files detected)
+T8: git add . → PASS
+T9: git commit "Phase 1: stress test" → PASS (548ms)
+  Output: [master fbd30b3] Phase 1: stress test
+
+=== SIZE LIMIT TESTING ===
+
+Content   | URL Length | Result
+561 ch    | 1040 ch   | PASS
+2778 ch   | 4100 ch   | PASS
+3387 ch   | 4948 ch   | PASS
+4000 ch   | 5594 ch   | PASS
+5000 ch   | 6930 ch   | PASS
+6000 ch   | 8250 ch   | PASS
+8000 ch   | 10920 ch  | PASS
+Relay accepts 11KB+ URLs. browse_page may truncate ~8KB.
+Safe rule: content under ~5KB → single write. Over ~5KB → chunked writes.
+
+=== SCREENSHOT ===
+
+Captured full-page screenshot via /api/screenshot/groks-app?fullPage=true&waitMs=5000
+Result: PASS (7101ms, 243KB image hosted at catbox.moe)
+All 4 new pages visible and rendering correctly.
+
+=== BUGS FOUND & FIXED ===
+
+1. Encoding: encodeURIComponent on base64 is mandatory → added to prompt
+2. Project field: must be in each action object → added to prompt
+3. grok-run whitelist: filesystem commands blocked → added to prompt
+4. git reset --hard: sanitized to --soft → added to prompt
+5. grok-process "ports": not supported → added to prompt
+
+=== PROMPT TEMPLATE UPDATED ===
+
+All findings written into public/grok-prompt-template.txt:
+  - Correct encoding steps
+  - Project field requirement
+  - Size limits and chunking rules
+  - Command whitelist
+  - Delete safety rules
+  - Verification workflow (edit → wait → check errors → screenshot)
+
+PHASE 1 RESULT: All changes working on desktop. 4 new files created,
+edited, committed. Screenshot confirms rendering. Prompt template updated.

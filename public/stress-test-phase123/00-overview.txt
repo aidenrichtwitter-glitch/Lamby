@@ -17,26 +17,20 @@ HOW THE BRIDGE WORKS:
   THIS APP DOES NOT CALL GROK'S API FOR BRIDGE CHANGES.
   GROK DOES ALL THE WORK ITSELF THROUGH BROWSE_PAGE.
 
-TEST METHODOLOGY:
-  This stress test simulated Grok's browse_page behavior by issuing
-  the exact same GET requests to the bridge endpoints that Grok would
-  make. Every URL, encoding step, and response format matches what
-  Grok sees when it calls browse_page on these endpoints.
+THREE PHASES:
+  Phase 1: Make extreme changes through the bridge. Prove they work
+           with screenshots and tests. Save everything that was done
+           to get it working. Update the prompt template with findings.
+  Phase 2: Delete everything from Phase 1. Clean slate.
+  Phase 3: Use the Context button like a normal user — paste the prompt
+           into Grok and make sure Grok actually does the same work
+           through browse_page.
 
-PHASE SUMMARY:
-  Phase 0: Discovery — enumerate all endpoints, document architecture
-  Phase 1: Simulate Grok writing 4 files + edits + git commits via bridge
-  Phase 2: Simulate Grok reverting all Phase 1 changes, verify clean state
-  Phase 3: Full endpoint test matrix (32 tests across all endpoint families)
-
-FINAL RESULTS: 28 PASS / 4 FAIL (all failures are expected/documented behaviors)
+Phase 3 is the real validation. It proves the prompt template actually
+works end-to-end when Grok reads it and acts on it.
 
 FILES IN THIS FOLDER:
-  00-overview.txt          — This file (summary)
-  01-phase0-discovery.txt  — Endpoint enumeration, architecture, 113 commands
-  02-phase1-writes.txt     — Simulated Grok writes: files, search/replace, git, timings
-  03-phase2-revert.txt     — Simulated Grok revert: cleanup, crash incident, fix
-  04-phase3-matrix.txt     — Full 32-test endpoint matrix with evidence
-  05-critical-rules.txt    — 12 stress-tested rules + known untested scenarios
-  06-size-limits.txt       — URL and content size limit testing
-  07-prompt-template.txt   — Final bulletproof Grok prompt (copy of production)
+  00-overview.txt          — This file
+  01-phase1-changes.txt    — What was changed, how, what broke, what was fixed
+  02-phase2-cleanup.txt    — Deleting everything, restoring clean state
+  03-phase3-grok-test.txt  — Grok doing the work via the Context button prompt

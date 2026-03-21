@@ -1,0 +1,59 @@
+===============================================================
+PHASE 3: GROK DOES THE WORK VIA THE CONTEXT BUTTON
+===============================================================
+
+GOAL: Use the Context button like a normal user. Copy the prompt,
+paste it into Grok on grok.com, and verify that Grok actually makes
+the same changes through browse_page that were proven in Phase 1.
+
+This is the real validation — it proves the prompt template works
+end-to-end when Grok reads it and acts on it.
+
+=== STATUS ===
+
+NOT YET EXECUTED.
+
+Phase 1 and Phase 2 are complete. The prompt template has been updated
+with all findings, encoding rules, safety checks, and the recommended
+workflow.
+
+Phase 3 requires:
+  1. Desktop Electron app running with bridge connected
+  2. User clicks "Copy Context" button in Lamby
+  3. User pastes the prompt into Grok on grok.com
+  4. Grok reads the bridge endpoint URLs from the prompt
+  5. Grok uses browse_page to call the bridge endpoints
+  6. Grok creates files, edits them, commits via git — all on its own
+  7. User verifies the changes happened on their desktop
+
+=== WHAT GROK SHOULD BE ABLE TO DO (proven in Phase 1) ===
+
+  - Create small files via write_file (up to ~5KB content)
+  - Create large files via write_file_chunk (chunked, any size)
+  - Edit existing files via grok-write search/replace
+  - Read files via grok-read
+  - List file tree via grok-tree
+  - Check for errors via get_console_errors
+  - Take screenshots via /api/screenshot
+  - Git add, commit, status, log, diff via grok-git
+  - Run npm/node/echo commands via grok-run
+  - Search code via grok-search
+
+=== WHAT TO WATCH FOR ===
+
+  - Does Grok include "project" inside each action object? (Bug found in Phase 1)
+  - Does Grok use encodeURIComponent on base64 payloads? (Bug found in Phase 1)
+  - Does Grok check imports before deleting files? (Crash found in Phase 2)
+  - Does Grok use chunked writes for files over 5KB? (Limit found in Phase 1)
+  - Does Grok check get_console_errors after edits? (Rule from Phase 2)
+  - Does Grok wait before taking screenshots? (15s patience protocol)
+
+=== WHEN THIS PHASE COMPLETES ===
+
+Phase 3 is complete when Grok has successfully:
+  1. Read the project structure via bridge endpoints
+  2. Created at least one new file on the user's desktop
+  3. Edited an existing file
+  4. Committed changes via git
+  5. Taken a screenshot showing the changes rendered
+  All done autonomously through browse_page, no API calls from this app.
