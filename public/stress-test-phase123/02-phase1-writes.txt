@@ -1,0 +1,69 @@
+===============================================================
+PHASE 1: AGENT WRITES SUBSTANTIAL CHANGES VIA BRIDGE
+===============================================================
+
+All operations performed via GET-only bridge endpoints, the same way
+Grok would use them through browse_page.
+
+--- T1: write_file useTheme.ts (small file) ---
+Method: grok-proxy + write_file
+Path: src/hooks/useTheme.ts
+Content: 561 chars (React hook with useState, useEffect, localStorage, dark mode toggle)
+URL length: 1040 chars
+Encoding: JSON.stringify → btoa → encodeURIComponent → payload= param
+Result: PASS (106ms write, verified via grok-read: 561 chars intact)
+Verification: grok-read confirmed content includes 'useTheme' function
+
+--- T2: write_file Dashboard.tsx (medium file, single shot) ---
+Method: grok-proxy + write_file
+Path: src/pages/Dashboard.tsx
+Content: 3387 chars (full React component with stats grid, activity feed, icons)
+URL length: 4948 chars
+Result: PASS (106ms write, verified: 3387 chars, includes 'Recent Activity')
+Note: Previous attempt to use write_file_chunk failed due to notebook session interruption.
+      Single write_file worked fine for this size.
+
+--- T3: write_file Users.tsx (medium file) ---
+Method: grok-proxy + write_file
+Path: src/pages/Users.tsx
+Content: 2778 chars (user list with search, role badges, status indicators)
+URL length: 4100 chars
+Result: PASS (116ms write, verified: 2778 chars, includes 'Search users')
+
+--- T4: search_replace on Dashboard.tsx ---
+Method: grok-write (smart endpoint)
+URL: /api/grok-write?project=groks-app&path=src/pages/Dashboard.tsx&search=Welcome%20back!&replace=Welcome%20back!%20Here%20is%20your%20overview.
+Result: PASS (612ms, replacements=1)
+Verification: grok-read confirmed new text present
+
+--- T5: git status ---
+Method: grok-git
+URL: /api/grok-git?project=groks-app&action=status
+Result: PASS (250ms)
+Output: 5 modified/new files detected
+
+--- T6: run_command (Get-ChildItem) ---
+Method: grok-run
+URL: /api/grok-run?project=groks-app&command=Get-ChildItem%20src/pages
+Result: FAIL — "Command not allowed"
+Discovery: grok-run has a command whitelist. Get-ChildItem, dir, cd, type, ls all BLOCKED.
+Allowed: npm, node, echo only.
+
+--- T7: write_file_chunk Analytics.tsx (large file, chunked) ---
+Method: grok-proxy + write_file_chunk
+Path: src/pages/Analytics.tsx
+Content: 6021 chars (full analytics page with bar chart, metrics, model usage)
+Chunks: 5 x ~1500 chars each
+Protocol: chunk_index 0-4, total_chunks=5, 100ms delay between
+Result: PASS (1052ms total for all 5 chunks)
+Verification: grok-read confirmed 6021 chars, includes 'Model Usage' and 'SimpleBar'
+
+--- T8: git add + commit ---
+Method: grok-git (two calls)
+  Call 1: /api/grok-git?project=groks-app&action=add&args=.
+  Call 2: /api/grok-git?project=groks-app&action=commit&message=Phase%201:%20stress%20test
+Result: PASS (548ms total)
+Output: [master fbd30b3] Phase 1: stress test - Dashboard, Users, Analytics, useTheme
+
+PHASE 1 SUMMARY: 7 PASS / 1 FAIL (run_command whitelist is expected behavior)
+Total time: ~3.5 seconds for all operations

@@ -1,0 +1,70 @@
+===============================================================
+URL AND CONTENT SIZE LIMIT TESTING
+===============================================================
+
+All tests performed against the relay directly (not through Grok browse_page).
+Each test: write content → verify via grok-read → confirm byte-exact match.
+
+=== WRITE_FILE (single request) SIZE TESTS ===
+
+Content   | URL Length | Result | Verification
+----------|-----------|--------|------------------------------------------
+561 ch    | 1040 ch   | PASS   | useTheme.ts — 561 chars verified intact
+2778 ch   | 4100 ch   | PASS   | Users.tsx — 2778 chars verified intact
+3387 ch   | 4948 ch   | PASS   | Dashboard.tsx — 3387 chars verified intact
+4000 ch   | 5594 ch   | PASS   | test file — 4000 chars verified intact
+5000 ch   | 6930 ch   | PASS   | test file — 5000 chars verified intact
+6000 ch   | 8250 ch   | PASS   | test file — 8250 chars verified intact
+8000 ch   | 10920 ch  | PASS   | test file — 8000 chars verified intact
+
+RELAY LIMIT: At least 11KB URLs work fine (10920-char URL passed).
+There is no content truncation at the relay level for these sizes.
+
+=== WRITE_FILE_CHUNK (multi-request) SIZE TEST ===
+
+Content: 6021 chars (Analytics.tsx — full React component)
+Chunk size: ~1500 chars
+Total chunks: 5
+Delay between chunks: 100ms
+
+Chunk 0/5: PASS (1500 chars)
+Chunk 1/5: PASS (1500 chars)
+Chunk 2/5: PASS (1500 chars)
+Chunk 3/5: PASS (1500 chars)
+Chunk 4/5: PASS (521 chars — final chunk triggers file assembly)
+
+Total time: 1052ms
+Verification: grok-read returned exactly 6021 chars
+Content check: includes 'Model Usage' and 'SimpleBar' (page-specific content)
+
+=== GROK BROWSE_PAGE LIMIT (NOT DIRECTLY TESTED) ===
+
+The relay itself has no practical URL length limit (tested up to 11KB).
+However, Grok's browse_page tool has its own URL processing limit,
+reported to be approximately ~8KB.
+
+SAFE RULES FOR GROK:
+  - Content < 5KB: Use write_file (single request). URL will be ~7KB, safely under limit.
+  - Content > 5KB: Use write_file_chunk with ~1500-char chunks.
+  - Always use encodeURIComponent on the base64 payload (adds ~10% to URL length).
+
+=== URL LENGTH FORMULA ===
+
+URL length ≈ relay_base_length + "?project=P&payload=" + encodeURIComponent(btoa(JSON.stringify({actions:[...]})))
+
+For write_file:
+  JSON overhead: ~80 chars (type, project, path fields)
+  Base64 expansion: content × 1.33
+  encodeURIComponent expansion: base64 × ~1.03 (only + and = get expanded)
+  
+  Approximate formula: URL ≈ 120 + (content_chars + 80) × 1.37
+
+  Examples:
+    1KB content → ~1600 char URL
+    3KB content → ~4400 char URL
+    5KB content → ~7000 char URL
+    8KB content → ~11000 char URL
+
+=== TEST FILE CLEANUP ===
+All test files (src/_test_limit.txt, src/_test_limit5k.txt, src/_test_6k.txt,
+src/_test_8k.txt) were deleted via delete_file after size limit testing.

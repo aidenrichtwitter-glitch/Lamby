@@ -1,0 +1,52 @@
+===============================================================
+PHASE 0: DISCOVERY
+===============================================================
+
+STEP 1: Confirm bridge connectivity
+  GET /api/bridge-status
+  Response: {"connectedClients":1,"clients":[{"connected":true,"lastPing":...,"project":"groks-app"}]}
+  Result: CONNECTED
+
+STEP 2: Run diagnostics
+  GET /api/diag?project=groks-app
+  Response: {
+    relay: "Lamby Bridge Relay",
+    desktop: { connected: true, project: "groks-app" },
+    roundTrip: { ok: true, latencyMs: 87 },
+    endpointPassFail: {
+      grok-read: PASS, grok-write: PASS, grok-tree: PASS,
+      grok-run: PASS, grok-git: PASS, grok-search: PASS
+    }
+  }
+  Result: All core endpoints operational, 87ms round-trip
+
+STEP 3: Enumerate all commands
+  GET /api/commands
+  Response: 113 supported commands enumerated (see full list in 04-phase3-matrix.txt)
+
+STEP 4: Architecture confirmed
+  Request Chain:
+    1. Build payload: base64(JSON.stringify({actions:[{type,project,...}]}))
+    2. GET /api/grok-proxy?project=P&payload=ENCODED_BASE64
+    3. Relay decodes, forwards via WebSocket to desktop connector
+    4. Desktop executes (file I/O, git, shell, etc.)
+    5. Result returns over WebSocket → relay → HTTP response
+
+  Key Constraints Identified:
+    - Grok browse_page = GET only, no POST
+    - URL length: relay accepts 11KB+, but browse_page may truncate ~8KB
+    - WebSocket timeout: 30 seconds
+    - Desktop runs Windows (PowerShell for shell commands)
+    - Serial command queue (one connection, no parallelism)
+
+STEP 5: Critical bug discovered
+  BUG: "project" field must be inside each action object, NOT just query param
+  Without it: files land in wrong directory, unfindable by grok-read
+  CORRECT: {"actions":[{"type":"write_file","project":"groks-app","path":"..."}]}
+  WRONG:   {"actions":[{"type":"write_file","path":"..."}]} + ?project=groks-app
+
+STEP 6: Encoding requirement discovered
+  Base64 output contains + and = characters
+  These break URL query params if not encoded
+  SOLUTION: Always encodeURIComponent(btoa(json)) before putting in payload= param
+  Without this step: silent failures, corrupted payloads

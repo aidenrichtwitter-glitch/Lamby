@@ -1,0 +1,61 @@
+===============================================================
+PHASE 2: REVERT ALL PHASE 1 CHANGES
+===============================================================
+
+OBJECTIVE: Undo all Phase 1 changes and restore the project to pre-test state.
+
+--- Step 1: Attempted git reset --hard ---
+Method: grok-git
+URL: /api/grok-git?project=groks-app&action=reset&args=--hard%20HEAD~1
+Result: SANITIZED — bridge converted to: git reset --soft HEAD
+Discovery: Bridge connector sanitizes --hard to --soft for safety.
+Impact: Commit was undone but files remained on disk.
+
+--- Step 2: Manual file cleanup via delete_file ---
+Method: grok-proxy + delete_file
+Deleted files:
+  - src/hooks/useTheme.ts → PASS
+  - src/pages/Analytics.tsx → PASS
+  - src/_proxy_project_test.txt → PASS
+  - src/_test_step1.txt → PASS
+
+--- Step 3: Restore stub files ---
+Method: grok-proxy + write_file
+Restored:
+  - src/pages/Dashboard.tsx → stub (226 chars) → PASS
+  - src/pages/Users.tsx → stub (214 chars) → PASS
+
+--- Step 4: git add + commit revert ---
+Method: grok-git
+Result: PASS — [master 3bac42d] Phase 2: revert Phase 1 stress test changes
+
+=== CRITICAL INCIDENT: APP CRASH ===
+After reverting, the desktop app CRASHED with Vite error overlay:
+  [plugin:vite:import-analysis] Failed to resolve import "../pages/Analytics"
+  from "src/components/App.tsx". Does the file exist?
+
+ROOT CAUSE:
+  When we deleted Analytics.tsx, App.tsx still had:
+    import Analytics from '../pages/Analytics'
+  This broke the entire application — Vite error overlay, no content rendered.
+
+FIX APPLIED:
+  1. Read src/components/App.tsx to confirm it imports Analytics as default export
+  2. Wrote new Analytics.tsx with proper default export:
+     const Analytics: React.FC = () => { ... }
+     export default Analytics
+  3. Verified via get_console_errors: totalErrors=0
+  4. Took screenshot: app rendering correctly again
+  5. Git committed the fix
+
+LESSON LEARNED:
+  ALWAYS check what imports a file before deleting it.
+  A single broken import crashes the entire Vite application.
+  Use get_console_errors after EVERY edit to catch this immediately.
+
+PHASE 2 SUMMARY:
+  - git reset --hard NOT possible (sanitized to --soft)
+  - delete_file works but MUST check imports first
+  - Manual revert via delete_file + write_file is the only safe way
+  - App crash incident discovered and fixed
+  - Final state: app running, 0 console errors, screenshot confirmed

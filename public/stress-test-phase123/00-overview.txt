@@ -1,0 +1,32 @@
+===============================================================
+LAMBY BRIDGE STRESS TEST — THREE-PHASE REPORT
+===============================================================
+Date: 2026-03-21
+Relay: https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev
+Project: groks-app
+Desktop: Connected (Windows, Node.js v25.4.0, npm 11.7.0)
+App Port: 4999 (Vite dev server)
+
+OBJECTIVE:
+  Make substantial changes to the groks-app desktop project using ONLY
+  GET-based bridge methods (the same way Grok would via browse_page),
+  verify everything works, revert everything, document all findings,
+  and produce a bulletproof Grok prompt template.
+
+PHASE SUMMARY:
+  Phase 0: Discovery — enumerate all endpoints, document architecture
+  Phase 1: Agent writes 4 files + edits + git commits via bridge
+  Phase 2: Revert all Phase 1 changes, verify clean state
+  Phase 3: Full endpoint test matrix (32 tests across all endpoint families)
+
+FINAL RESULTS: 28 PASS / 4 FAIL (all failures are expected/documented behaviors)
+
+FILES IN THIS FOLDER:
+  00-overview.txt          — This file (summary)
+  01-phase0-discovery.txt  — Endpoint enumeration, architecture, 113 commands
+  02-phase1-writes.txt     — Files written, search/replace, git ops, timings
+  03-phase2-revert.txt     — Revert process, crash incident, fix
+  04-phase3-matrix.txt     — Full 32-test endpoint matrix with evidence
+  05-critical-rules.txt    — 12 stress-tested rules + known untested scenarios
+  06-size-limits.txt       — URL and content size limit testing
+  07-prompt-template.txt   — Final bulletproof Grok prompt (copy of production)
