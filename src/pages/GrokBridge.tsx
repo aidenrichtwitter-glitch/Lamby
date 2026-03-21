@@ -1236,26 +1236,6 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
                     <Zap className="w-3 h-3 shrink-0" />
                     <div className="text-[10px] font-medium">Legacy P3 <span className="text-[8px] opacity-60">original prompt</span></div>
                   </button>
-                  {selectedTestLevel !== null && (
-                    <div className="flex gap-0.5 shrink-0">
-                      <button
-                        data-testid="button-record-pass"
-                        onClick={() => recordLevelResult(selectedTestLevel, 'pass')}
-                        className="px-1.5 py-1 rounded text-[8px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25"
-                        title="Record a PASS for the selected level"
-                      >
-                        <Check className="w-2.5 h-2.5" />
-                      </button>
-                      <button
-                        data-testid="button-record-fail"
-                        onClick={() => recordLevelResult(selectedTestLevel, 'fail')}
-                        className="px-1.5 py-1 rounded text-[8px] bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25"
-                        title="Record a FAIL for the selected level"
-                      >
-                        <X className="w-2.5 h-2.5" />
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -1319,6 +1299,26 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           >
             <Copy className="w-3 h-3" /> Copy
           </button>
+          {selectedTestLevel !== null && (
+            <>
+              <button
+                data-testid="button-record-pass-inline"
+                onClick={() => recordLevelResult(selectedTestLevel, 'pass')}
+                className="flex items-center gap-1 px-2 py-1 rounded text-[9px] transition-colors border shrink-0 whitespace-nowrap bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25"
+                title={`Record PASS for L${selectedTestLevel} — unlocks L${selectedTestLevel + 1}`}
+              >
+                <Check className="w-3 h-3" /> Pass
+              </button>
+              <button
+                data-testid="button-record-fail-inline"
+                onClick={() => recordLevelResult(selectedTestLevel, 'fail')}
+                className="flex items-center gap-1 px-2 py-1 rounded text-[9px] transition-colors border shrink-0 whitespace-nowrap bg-red-500/15 text-red-400 border-red-500/30 hover:bg-red-500/25"
+                title={`Record FAIL for L${selectedTestLevel}`}
+              >
+                <X className="w-3 h-3" /> Fail
+              </button>
+            </>
+          )}
           {browseEvents.length > 0 && !showBrowseResults && (
             <button
               onClick={() => setShowBrowseResults(true)}
