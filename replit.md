@@ -37,17 +37,21 @@ The following files and code sections are PERMANENTLY LOCKED. The agent MUST NOT
 
 **Locked files (do NOT edit):**
 - `server/bridge-connector.cjs` — Desktop connector (raw TLS sockets, wsEncodeFrame, wsDecodeFrame, doConnect, send)
+- `electron-browser/src/local-server.js` — Desktop local server (HTTP + bridge connector startup, file logging, EADDRINUSE handling)
 - `lamby-bridge/index.js` — Relay server source (reference copy)
 
 **Locked code sections (do NOT edit):**
 - `connectToBridge()` function in `src/pages/GrokBridge.tsx` — Browser WebSocket connection
 - Dev/Production button onClick handlers in `src/pages/GrokBridge.tsx` (the relay mode toggle buttons)
 - Relay URL constants: `wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev` and `wss://bridge-relay.replit.app`
+- The `electron:dev` script in `package.json` — three-process concurrently command (vite, electron, bridge)
 
 **What this means:**
 - If a task or request would require changing any of the above, STOP and ask the user for the unlock key first.
 - Do NOT silently modify these as part of a larger refactor or feature.
 - Do NOT replace raw TLS sockets with any WebSocket library (ws, socket.io, etc.) — EVER.
+- Do NOT remove or change the third `bridge` process from the `electron:dev` concurrently command.
+- Do NOT change the file logging setup in local-server.js (writes to `~/.guardian-ai/local-server.log`).
 - The connection code works. Leave it alone.
 
 ## Project Structure
