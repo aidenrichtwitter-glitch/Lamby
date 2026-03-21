@@ -2464,7 +2464,7 @@ async function executeSandboxAction(action, projectsDir, options) {
             try { comparison = JSON.parse(output); } catch {}
             return { status: "success", type: t, data: { beforeFile: action.beforeUrl ? `before-${ts}.png` : null, afterFile: action.afterUrl ? `after-${ts}.png` : null, outputDir: ".visual-diffs", comparison, method: "puppeteer-coldstart", ms: Date.now() - vdStart } };
           } catch (e) {
-            return { status: "error", type: t, error: `Visual diff capture failed: ${(e.stderr || e.message || "").slice(0, 500)}`, method: "puppeteer-coldstart", ms: Date.now() - vdStart };
+            return { status: "error", type: t, error: `Visual diff capture failed: ${(e.stderr || e.message || "").slice(0, 500)}`, data: { method: "puppeteer-coldstart", ms: Date.now() - vdStart } };
           }
         }
         return { status: "success", type: t, data: { beforeUrl: action.beforeUrl, afterUrl: action.afterUrl, available: false, method: "none", ms: Date.now() - vdStart, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer" } };
@@ -2497,7 +2497,7 @@ async function executeSandboxAction(action, projectsDir, options) {
               childProcess.execFileSync("node", ["-e", script], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env: chromExecEnv5 });
               return { status: "success", type: t, data: { file: `${safeName}-${ts}.png`, outputDir: ".component-captures", componentName: action.componentName, method: "puppeteer-coldstart", ms: Date.now() - ccStart } };
             } catch (e) {
-              return { status: "error", type: t, error: `Component capture failed: ${(e.stderr || e.message || "").slice(0, 500)}`, method: "puppeteer-coldstart", ms: Date.now() - ccStart };
+              return { status: "error", type: t, error: `Component capture failed: ${(e.stderr || e.message || "").slice(0, 500)}`, data: { method: "puppeteer-coldstart", ms: Date.now() - ccStart } };
             }
           }
           return { status: "success", type: t, data: { componentName: action.componentName, available: false, method: "none", ms: Date.now() - ccStart, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer. Then provide a url to capture." } };
