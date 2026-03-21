@@ -606,14 +606,41 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
   const browseAbortRef = useRef<AbortController | null>(null);
   const [selectedTestLevel, setSelectedTestLevel] = useState<number | null>(null);
   const [showLevelPicker, setShowLevelPicker] = useState(false);
+  const [levelPassHistory, setLevelPassHistory] = useState<Record<number, { passes: number; lastResult: 'pass' | 'fail' | null }>>(() => {
+    try {
+      const stored = localStorage.getItem(`lamby-test-levels-${activeProject || 'groks-app'}`);
+      return stored ? JSON.parse(stored) : {};
+    } catch { return {}; }
+  });
 
   const TEST_LEVELS = [
-    { id: 0, name: 'L0: Read-Only', desc: 'Zero writes, just read endpoints', color: 'blue', file: 'level-0-readonly.txt', est: '~2min' },
-    { id: 1, name: 'L1: Single Write', desc: 'Create one file + verify', color: 'green', file: 'level-1-single-write.txt', est: '~3min' },
-    { id: 2, name: 'L2: Read-Modify-Write', desc: 'Edit existing file + restore', color: 'amber', file: 'level-2-read-modify-write.txt', est: '~4min' },
-    { id: 3, name: 'L3: Multi-File + Git', desc: 'Full stress test with commit', color: 'purple', file: 'level-3-multi-file-git.txt', est: '~8min' },
-    { id: 4, name: 'L4: Creative Build', desc: 'Autonomous Settings page build', color: 'rose', file: 'level-4-creative-build.txt', est: '~12min' },
+    { id: 0, name: 'L0: Read-Only', desc: 'Zero writes, just read endpoints', file: 'level-0-readonly.txt', est: '~2min', passCriteria: 'All 8 coord notes posted, all endpoints returned valid data, zero writes' },
+    { id: 1, name: 'L1: Single Write', desc: 'Create one file + verify', file: 'level-1-single-write.txt', est: '~3min', passCriteria: 'BridgeTest.tsx created, verified via tree+read, console clean' },
+    { id: 2, name: 'L2: Read-Modify-Write', desc: 'Edit existing file + restore', file: 'level-2-read-modify-write.txt', est: '~4min', passCriteria: 'Dashboard.tsx modified then restored, both states verified' },
+    { id: 3, name: 'L3: Multi-File + Git', desc: 'Full stress test with commit', file: 'level-3-multi-file-git.txt', est: '~8min', passCriteria: 'Metrics.tsx created, App+Nav updated, console clean, git committed with insertions' },
+    { id: 4, name: 'L4: Creative Build', desc: 'Autonomous Settings page build', file: 'level-4-creative-build.txt', est: '~12min', passCriteria: 'Settings page with theme toggle + profile, 120+ lines, properly wired, committed' },
   ];
+
+  const recordLevelResult = useCallback((levelId: number, result: 'pass' | 'fail') => {
+    setLevelPassHistory(prev => {
+      const entry = prev[levelId] || { passes: 0, lastResult: null };
+      const updated = {
+        ...prev,
+        [levelId]: {
+          passes: result === 'pass' ? (entry.lastResult === 'pass' ? entry.passes + 1 : 1) : 0,
+          lastResult: result,
+        },
+      };
+      try { localStorage.setItem(`lamby-test-levels-${activeProject || 'groks-app'}`, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }, [activeProject]);
+
+  const isLevelUnlocked = useCallback((levelId: number): boolean => {
+    if (levelId === 0) return true;
+    const prevLevel = levelPassHistory[levelId - 1];
+    return (prevLevel?.passes ?? 0) >= 2;
+  }, [levelPassHistory]);
 
   const runGrokBrowse = useCallback(async () => {
     if (browseRunning) return;
@@ -1140,31 +1167,48 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
               <ChevronDown className="w-2.5 h-2.5" />
             </button>
             {showLevelPicker && (
-              <div className="absolute top-full left-0 mt-1 z-50 w-72 rounded-lg border border-border/40 bg-[hsl(220_20%_8%)] shadow-xl p-1.5" data-testid="level-picker-dropdown">
+              <div className="absolute top-full left-0 mt-1 z-50 w-80 rounded-lg border border-border/40 bg-[hsl(220_20%_8%)] shadow-xl p-1.5" data-testid="level-picker-dropdown">
                 <div className="text-[8px] text-muted-foreground/60 uppercase tracking-wider px-2 py-1 mb-0.5">Progressive Test Levels</div>
-                {TEST_LEVELS.map(level => (
-                  <button
-                    key={level.id}
-                    data-testid={`button-select-level-${level.id}`}
-                    onClick={() => { setSelectedTestLevel(level.id); setShowLevelPicker(false); }}
-                    className={`w-full flex items-start gap-2 px-2 py-1.5 rounded text-left transition-colors ${
-                      selectedTestLevel === level.id
-                        ? 'bg-primary/15 text-primary'
-                        : 'hover:bg-secondary/40 text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <Gauge className="w-3 h-3 mt-0.5 shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-[10px] font-medium">{level.name} <span className="text-[8px] opacity-60">{level.est}</span></div>
-                      <div className="text-[8px] opacity-60 leading-tight">{level.desc}</div>
-                    </div>
-                  </button>
-                ))}
-                <div className="border-t border-border/20 mt-1 pt-1">
+                {TEST_LEVELS.map(level => {
+                  const unlocked = isLevelUnlocked(level.id);
+                  const history = levelPassHistory[level.id];
+                  const passCount = history?.passes ?? 0;
+                  return (
+                    <button
+                      key={level.id}
+                      data-testid={`button-select-level-${level.id}`}
+                      onClick={() => { if (unlocked) { setSelectedTestLevel(level.id); setShowLevelPicker(false); } }}
+                      className={`w-full flex items-start gap-2 px-2 py-1.5 rounded text-left transition-colors ${
+                        !unlocked ? 'opacity-40 cursor-not-allowed' :
+                        selectedTestLevel === level.id
+                          ? 'bg-primary/15 text-primary'
+                          : 'hover:bg-secondary/40 text-muted-foreground hover:text-foreground'
+                      }`}
+                      title={!unlocked ? `Locked — need 2 consecutive passes on L${level.id - 1} first` : level.passCriteria}
+                    >
+                      {!unlocked ? <Lock className="w-3 h-3 mt-0.5 shrink-0 opacity-50" /> : <Gauge className="w-3 h-3 mt-0.5 shrink-0" />}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-medium">{level.name}</span>
+                          <span className="text-[8px] opacity-60">{level.est}</span>
+                          {passCount > 0 && (
+                            <span className="text-[8px] px-1 rounded bg-emerald-500/20 text-emerald-400">{passCount}x pass</span>
+                          )}
+                          {history?.lastResult === 'fail' && (
+                            <span className="text-[8px] px-1 rounded bg-red-500/20 text-red-400">failed</span>
+                          )}
+                        </div>
+                        <div className="text-[8px] opacity-60 leading-tight">{level.desc}</div>
+                        <div className="text-[7px] opacity-40 leading-tight mt-0.5 italic">Pass: {level.passCriteria}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+                <div className="border-t border-border/20 mt-1 pt-1 flex items-center gap-1">
                   <button
                     data-testid="button-select-level-legacy"
                     onClick={() => { setSelectedTestLevel(null); setShowLevelPicker(false); }}
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors ${
+                    className={`flex-1 flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors ${
                       selectedTestLevel === null
                         ? 'bg-primary/15 text-primary'
                         : 'hover:bg-secondary/40 text-muted-foreground hover:text-foreground'
@@ -1173,6 +1217,26 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
                     <Zap className="w-3 h-3 shrink-0" />
                     <div className="text-[10px] font-medium">Legacy P3 <span className="text-[8px] opacity-60">original prompt</span></div>
                   </button>
+                  {selectedTestLevel !== null && (
+                    <div className="flex gap-0.5 shrink-0">
+                      <button
+                        data-testid="button-record-pass"
+                        onClick={() => recordLevelResult(selectedTestLevel, 'pass')}
+                        className="px-1.5 py-1 rounded text-[8px] bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25"
+                        title="Record a PASS for the selected level"
+                      >
+                        <Check className="w-2.5 h-2.5" />
+                      </button>
+                      <button
+                        data-testid="button-record-fail"
+                        onClick={() => recordLevelResult(selectedTestLevel, 'fail')}
+                        className="px-1.5 py-1 rounded text-[8px] bg-red-500/15 text-red-400 border border-red-500/30 hover:bg-red-500/25"
+                        title="Record a FAIL for the selected level"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
