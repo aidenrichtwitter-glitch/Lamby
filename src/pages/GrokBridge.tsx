@@ -1701,7 +1701,6 @@ const GrokBridge: React.FC = () => {
   const [bridgeRelayUrl, setBridgeRelayUrl] = useState<string>('');
   const [showBridgeSettings, setShowBridgeSettings] = useState(false);
   const [bridgeRelayInput, setBridgeRelayInput] = useState('');
-  const [bridgeKeyInput, setBridgeKeyInput] = useState('');
   const [bridgeMode, setBridgeMode] = useState<'dev' | 'production'>(() => {
     try { return (localStorage.getItem('lamby-bridge-mode') as 'dev' | 'production') || 'production'; } catch { return 'production'; }
   });
