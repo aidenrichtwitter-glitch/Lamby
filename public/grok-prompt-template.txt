@@ -20,13 +20,14 @@ WRITE/EDIT FILES — grok-write (search/replace with automatic verify):
   GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=src/App.tsx&search=OLD_TEXT&replace=NEW_TEXT
   (URL-encode search and replace; supports \n)
 
-CREATE NEW FILES — grok-proxy + write_file:
+CREATE NEW FILES — grok-proxy + write_file (content up to ~5KB):
   GET {{RELAY_BASE}}/api/grok-proxy?project={{PROJECT}}&payload=BASE64_ENCODED_JSON
   Payload JSON: {"actions":[{"type":"write_file","project":"{{PROJECT}}","path":"src/newfile.tsx","content":"FILE_CONTENT"}]}
   Steps: JSON.stringify → btoa → encodeURIComponent → put in payload= param
   CRITICAL: project field MUST be inside EACH action object, not just in the query param
+  SIZE LIMIT: Keep content under ~5KB. The relay handles larger, but browse_page may truncate URLs beyond ~8KB.
 
-CREATE LARGE FILES — grok-proxy + write_file_chunk (for content >2KB):
+CREATE LARGE FILES — grok-proxy + write_file_chunk (for content >5KB):
   Split content into ~1500-char chunks. Send each as a separate request:
   {"actions":[{"type":"write_file_chunk","project":"{{PROJECT}}","path":"FILE","content":"CHUNK_N","chunk_index":N,"total_chunks":TOTAL}]}
   File assembles and writes only when final chunk (chunk_index == total_chunks-1) arrives.
@@ -77,8 +78,8 @@ MACROS:
 
 PROCESS MANAGEMENT — grok-process:
   GET {{RELAY_BASE}}/api/grok-process?project={{PROJECT}}&action=list
-  GET {{RELAY_BASE}}/api/grok-process?project={{PROJECT}}&action=ports
-  (actions: list, start, stop, kill, restart, ports, env)
+  (supported actions: start, start-named, stop, list, logs, monitor, stop-all, restart)
+  NOTE: "ports" is NOT a supported action. Use grok-proxy + get_preview_url instead.
 
 DIAGNOSTICS — diag:
   GET {{RELAY_BASE}}/api/diag?project={{PROJECT}}
@@ -101,7 +102,7 @@ YOUR WORKFLOW (RECOMMENDED):
 
 2. ENCODING: When building grok-proxy URLs: JSON.stringify → btoa → encodeURIComponent → payload= param. The encodeURIComponent step is CRITICAL because base64 contains + and = characters that break URLs.
 
-3. LARGE FILES (>2KB content): MUST use write_file_chunk. Split into ~1500-char chunks. Single write_file on large content means a URL >8KB which gets silently truncated and corrupts the file.
+3. LARGE FILES (>5KB content): Use write_file_chunk to be safe. Split into ~1500-char chunks. The relay accepts large URLs, but Grok's browse_page may truncate URLs beyond ~8KB. For content up to ~5KB, single write_file is safe.
 
 4. ENTRY POINT: Before writing App.tsx, ALWAYS read src/index.tsx first. Projects often import from 'components/App' not 'App', so the real file may be src/components/App.tsx. Writing to the wrong path has zero visible effect.
 

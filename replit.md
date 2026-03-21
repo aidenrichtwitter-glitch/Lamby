@@ -182,7 +182,7 @@ These replaced the old base64-encoded `grok-proxy` system. All live on the relay
 - **`grok-git` reset --hard**: Sanitized to `--soft` by bridge — no destructive resets possible. Must manually restore files via write_file/delete_file.
 - **`grok-quality` / `grok-deps`**: 5s+ response time, freeze WebSocket — avoid in normal use
 - **`grok-proxy` encoding**: Base64 payload MUST be `encodeURIComponent`-encoded (base64 contains `+` and `=` that break URLs). Project field MUST be inside each action object, not just the query param.
-- **write_file max safe size**: ~3.5KB content (URL ~5KB). Beyond that use write_file_chunk with ~1500-char chunks and 100-150ms delay between requests.
+- **write_file safe size for Grok**: ~5KB content (relay accepts up to 11KB+ URLs, but Grok's browse_page may truncate around ~8KB). Beyond ~5KB use write_file_chunk with ~1500-char chunks and 100-150ms delay between requests.
 - **delete_file safety**: ALWAYS check imports before deleting — removing a file still imported by App.tsx crashes the entire app.
 
 ### Stress Test Reference Files
