@@ -1,0 +1,74 @@
+#14 - Fast Screenshot — Replace Puppeteer Cold-Start with Sub-Second Capture
+
+What & Why
+
+Every call to capture_preview, screenshot_preview, visual_diff, or capture_component currently cold-launches a full Chromium process, navigates to the URL, waits for networkidle0, takes the screenshot, then kills the browser. This takes 15-30 seconds.
+
+The fix: replace the browser launch with native OS capture methods that run in under 200ms. Since the dev server is running on the Windows desktop and the user has a browser open showing it, capturing what's on screen IS capturing the app — no browser launch needed.
+
+Strategy — ordered fallback chain
+
+Replace the pup.launch() path in sandbox-dispatcher.cjs with this priority order:
+
+Method 1 — screenshot-desktop npm package (~50ms)
+
+Native Windows GDI/DWM API via a small compiled native addon
+One install: npm i screenshot-desktop in the connector directory
+Returns a PNG buffer directly — no subprocess, no browser, no network
+Captures full screen or a named window
+Works on Windows, macOS, Linux
+const sd = require('screenshot-desktop');
+const img = await sd(); // full screen PNG buffer, ~50ms
+fs.writeFileSync(screenshotPath, img);
+Method 2 — PowerShell CopyFromScreen (~150ms, zero install)
+
+Built into every Windows machine, callable via existing run_command
+No npm install required — works immediately on Windows with zero setup
+Can target a specific window by title or capture full screen
+Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+$b = [System.Drawing.Bitmap]::new([System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Width,
+     [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height)
+$g = [System.Drawing.Graphics]::FromImage($b)
+$g.CopyFromScreen([System.Drawing.Point]::Empty, [System.Drawing.Point]::Empty, $b.Size)
+$b.Save('C:\path\to\screenshot.png')
+Method 3 — CDP connect to existing browser (~100ms, no new launch)
+
+If Chrome/Edge is already running with --remote-debugging-port=9222
+Use puppeteer-core.connect({ browserURL: 'http://localhost:9222' }) — skips launch entirely
+Navigate existing tab to URL + screenshot ≈ 100ms
+Method 4 — Persistent Puppeteer instance (~500ms after first call)
+
+If Puppeteer is installed but methods 1-3 unavailable
+Launch browser once and keep it alive in the dispatcher's module scope
+Reuse the same browser for all subsequent screenshot calls
+Eliminates the 10-15s cold-start; each screenshot is ~500ms
+Method 5 — Puppeteer fresh launch (current, ~30s)
+
+Kept as final fallback, unchanged
+Changes in sandbox-dispatcher.cjs
+
+New function fastScreenshot(outputPath, opts) — tries methods 1-4 in order, returns { captured: true, method: "...", ms: N } on success or falls through to Puppeteer
+Module-level _persistentBrowser ref — the persistent Puppeteer instance for method 4. Includes cleanup on process exit.
+capture_preview case updated — call fastScreenshot() first before the existing Puppeteer block
+screenshot_preview case updated — same
+visual_diff case updated — for before/after comparison, use fastScreenshot() for each snapshot
+capture_component case updated — if url param provided, fastScreenshot() first
+Response includes method and ms fields — so Grok and the user can see which method was used and how fast it was
+Done looks like
+
+capture_preview and screenshot_preview return in under 200ms on a Windows machine with screenshot-desktop installed (or PowerShell fallback)
+visual_diff before/after comparison completes in under 500ms total
+Method used and time taken are included in the response
+Puppeteer still works as final fallback if none of the fast methods are available
+COMMAND-STATUS.md updated to reflect capture_preview, visual_diff, capture_component now as PASS with the fast method noted
+Files to change
+
+lamby-app/server/sandbox-dispatcher.cjs — primary changes (fastScreenshot function + updated cases)
+COMMAND-STATUS.md — update status for visual_diff, capture_component, capture_preview
+Desktop prerequisite
+
+One install unlocks method 1 (fastest):
+
+cd <connector-directory>
+npm i screenshot-desktop
+PowerShell fallback (method 2) requires zero install and works immediately.
