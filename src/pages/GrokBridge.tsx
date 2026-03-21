@@ -1203,7 +1203,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
                           ? 'bg-primary/15 text-primary'
                           : 'hover:bg-secondary/40 text-muted-foreground hover:text-foreground'
                       }`}
-                      title={!unlocked ? `Locked — need 2 consecutive passes on L${level.id - 1} first` : level.passCriteria}
+                      title={!unlocked ? `Locked — need 1 pass on L${level.id - 1} first` : level.passCriteria}
                     >
                       {!unlocked ? <Lock className="w-3 h-3 mt-0.5 shrink-0 opacity-50" /> : <Gauge className="w-3 h-3 mt-0.5 shrink-0" />}
                       <div className="min-w-0 flex-1">
@@ -1263,21 +1263,21 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           <button
             onClick={browseRunning ? () => { browseAbortRef.current?.abort(); } : () => {
               if (selectedTestLevel !== null && !isLevelUnlocked(selectedTestLevel)) {
-                alert(`Level ${selectedTestLevel} is locked. Need 2 consecutive passes on L${selectedTestLevel - 1} first.`);
+                alert(`Level ${selectedTestLevel} is locked. Need 1 pass on L${selectedTestLevel - 1} first.`);
                 return;
               }
               runGrokBrowse();
             }}
             data-testid="button-run-grok-browse"
             className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] transition-colors border shrink-0 whitespace-nowrap ${browseRunning ? 'bg-red-500/15 text-red-400 border-red-500/30 hover:bg-red-500/25' : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'}`}
-            title={browseRunning ? 'Stop the running test' : selectedTestLevel !== null && !isLevelUnlocked(selectedTestLevel) ? `Locked — need 2 passes on L${selectedTestLevel - 1}` : `Run ${selectedTestLevel !== null ? TEST_LEVELS[selectedTestLevel]?.name : 'Phase 3'}: Send prompt to Grok-4 via Responses API`}
+            title={browseRunning ? 'Stop the running test' : selectedTestLevel !== null && !isLevelUnlocked(selectedTestLevel) ? `Locked — need 1 pass on L${selectedTestLevel - 1}` : `Run ${selectedTestLevel !== null ? TEST_LEVELS[selectedTestLevel]?.name : 'Phase 3'}: Send prompt to Grok-4 via Responses API`}
           >
             {browseRunning ? <><X className="w-3 h-3" /> Stop</> : <><Play className="w-3 h-3" /> Run</>}
           </button>
           <button
             onClick={async () => {
               if (selectedTestLevel !== null && !isLevelUnlocked(selectedTestLevel)) {
-                alert(`Level ${selectedTestLevel} is locked. Need 2 consecutive passes on L${selectedTestLevel - 1} first.`);
+                alert(`Level ${selectedTestLevel} is locked. Need 1 pass on L${selectedTestLevel - 1} first.`);
                 return;
               }
               try {
