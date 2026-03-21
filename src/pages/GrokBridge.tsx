@@ -3989,17 +3989,22 @@ const GrokBridge: React.FC = () => {
   const connectToBridge = useCallback((relayWsUrl: string, project: string) => {
     if (bridgeWsRef.current) {
       const s = bridgeWsRef.current.readyState;
-      if (s === WebSocket.OPEN || s === WebSocket.CONNECTING) return;
+      if (s === WebSocket.OPEN || s === WebSocket.CONNECTING) {
+        console.log('[Bridge] Already connected/connecting, skipping');
+        return;
+      }
       bridgeWsRef.current = null;
     }
 
     const wsUrl = `${relayWsUrl.replace(/\/$/, '')}/bridge-ws?project=${encodeURIComponent(project || 'default')}`;
+    console.log('[Bridge] Connecting to:', wsUrl);
     setBridgeStatus('connecting');
 
     const ws = new WebSocket(wsUrl);
     bridgeWsRef.current = ws;
 
     ws.onopen = () => {
+      console.log('[Bridge] Connected');
       setBridgeStatus('connected');
       setStatusMessage('Bridge connected');
     };
@@ -4038,12 +4043,15 @@ const GrokBridge: React.FC = () => {
       } catch {}
     };
 
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
+      console.log('[Bridge] Closed:', ev.code, ev.reason);
       if (bridgeWsRef.current === ws) bridgeWsRef.current = null;
       setBridgeStatus('disconnected');
     };
 
-    ws.onerror = () => {};
+    ws.onerror = (ev) => {
+      console.log('[Bridge] Error:', ev);
+    };
   }, []);
 
   useEffect(() => {
