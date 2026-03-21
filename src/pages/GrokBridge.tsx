@@ -260,12 +260,20 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
         const statusRes = await fetch('http://localhost:4999/api/bridge-status').catch(() => null);
         relayData = statusRes?.ok ? await statusRes.json().catch(() => null) : null;
       } catch {}
-      if (!relayData) {
+      if (!relayData?.devRelayUrl) {
         try {
           const devOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
           const relayRes = await fetch(`${devOrigin}/api/bridge-relay-status`).catch(() => null);
-          relayData = relayRes?.ok ? await relayRes.json().catch(() => null) : null;
+          const relayStatus = relayRes?.ok ? await relayRes.json().catch(() => null) : null;
+          if (relayStatus) {
+            relayData = { ...relayData, ...relayStatus };
+          }
         } catch {}
+      }
+      if (!relayData?.devRelayUrl) {
+        const hardcodedDev = 'wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev';
+        const hardcodedProd = 'wss://bridge-relay.replit.app';
+        relayData = { ...relayData, devRelayUrl: hardcodedDev, prodRelayUrl: hardcodedProd };
       }
     } else {
       const relayRes = await fetch('/api/bridge-relay-status').catch(() => null);
@@ -286,9 +294,10 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
       };
     }
 
-    const origin = isElectronEnv
-      ? (relayData?.devRelayUrl ? relayData.devRelayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '') : 'http://localhost:4999')
-      : (relayData?.devRelayUrl ? relayData.devRelayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '') : (typeof window !== 'undefined' ? window.location.origin : ''));
+    const relayUrl = relayData?.devRelayUrl
+      ? relayData.devRelayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '')
+      : null;
+    const origin = relayUrl || (typeof window !== 'undefined' ? window.location.origin : '');
     if (origin) {
       return {
         snapUrl: `${origin}/api/snapshot/${project || 'PROJECT_NAME'}`,
