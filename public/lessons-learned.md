@@ -4,6 +4,18 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 15: Phase 1-2 retest confirms write_file is 100% reliable
+**Date:** 2026-03-21
+**Context:** Phase 1-2 retest — running the exact same workflow Grok should follow, through the bridge
+**Problem:** After 4 failed Phase 3 runs, needed to confirm the bridge itself works and that the write_file approach (read → modify → write whole file) is reliable.
+**Results:**
+  - Phase 1: Created Metrics.tsx (5120 chars, single write_file) — PASS. Updated App.tsx (read + modify + write_file) — PASS. Updated Navigation.tsx (same method) — PASS. Console clean. Git committed with 111 insertions, 3 deletions.
+  - Phase 2: Removed Metrics import from App.tsx, removed nav item from Navigation.tsx, deleted Metrics.tsx. Console clean. Git committed. Clean slate.
+  - All operations verified via grok-tree + grok-read at each step.
+**Conclusion:** The bridge works perfectly. write_file (whole-file overwrite) is 100% reliable for both new files and overwriting existing files. The failures in Phase 3 runs 1–4 are not bridge issues — they're Grok not following the instructions (ignoring verification, hallucinating success, using chunked writes unnecessarily, not posting to coord).
+
+---
+
 ## Lesson 14: Run 4 — Grok created Metrics.tsx but failed to update App.tsx, Nav.tsx, or commit
 **Date:** 2026-03-21
 **Context:** Phase 3 run 4 — had review stage + verification protocol + coord reporting instructions
