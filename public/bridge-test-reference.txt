@@ -1,0 +1,138 @@
+=== BRIDGE TEST REFERENCE ===
+Generated: 2026-03-21T16:45:18.820Z
+Relay: https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev
+Project: groks-app
+
+=====================================
+SECTION 1: SYSTEM ARCHITECTURE
+=====================================
+
+Connection Status: CONNECTED
+Connected Project: groks-app
+Connected Desktops: 1
+Relay Base: https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev
+
+Architecture: Lamby Bridge Relay - zero-dependency WebSocket bridge between Grok (cloud AI) and a local Windows desktop running Node.js.
+
+Request Chain:
+  1. Grok builds payload = base64(JSON.stringify({actions:[{type,project,...}]}))
+  2. Grok issues HTTP GET /api/grok-proxy?payload=PAYLOAD to this relay (Replit cloud)
+  3. Relay decodes payload, forwards actions via WebSocket to the connected desktop connector
+  4. Desktop connector (Node.js on Windows) executes: file I/O, shell commands, git, etc.
+  5. Connector sends result back over WebSocket
+  6. Relay returns JSON to Grok: {success:true, results:[{type:'command_type', data:{...}}]}
+
+Constraints:
+  - Grok is GET-only - every request must be a GET URL. POST is not available.
+  - URL length limit ~8 KB total - file content > 2 KB WILL be silently truncated in the URL.
+  - All commands are async over WebSocket - relay waits up to 30s for desktop response.
+  - Desktop connector runs on Windows - use PowerShell syntax for run_command shell commands.
+  - One WebSocket connection per desktop instance - commands queue; do not fire many in parallel.
+
+Project Resolution: The connector resolves project names to disk paths. Given project='groks-app', it looks for: PROJECT_DIR/projects/groks-app then PROJECT_DIR/groks-app. File paths in commands are relative to the resolved project root.
+
+Dev Server Detection: The connector dynamically detects the Vite/Next/CRA dev server port by scanning active TCP listeners on ports 3000-9999 using netstat. Result cached for 2 minutes. Use get_preview_url to get the live URL.
+
+HMR: Vite uses Hot Module Replacement - writing a file via write_file or write_file_chunk triggers an instant browser update with no server restart needed, ONLY if you write to the correct file (the one actually imported by index.tsx).
+
+=====================================
+SECTION 2: CRITICAL RULES (MUST FOLLOW)
+=====================================
+
+1. LARGE FILES: Any file content > 2 KB (React components, pages, full modules) MUST use write_file_chunk. Split into ~1500-char chunks, send chunk_index 0..N-1, total_chunks=N. One action per chunk. File assembles and writes only when final chunk arrives. write_file on large content silently truncates the URL and corrupts the file.
+
+2. ENTRY POINT: Before writing App.tsx (or any root component) ALWAYS read src/index.tsx first. Projects often import from 'components/App' not 'App', so the real file is src/components/App.tsx. Writing to src/App.tsx when nothing imports it has zero visible effect - the app won't change.
+
+3. ADD DEPENDENCY: add_dependency only edits package.json. You MUST follow it with install_deps to actually install the package into node_modules. Without install_deps, imports will fail at build time.
+
+4. SEARCH_REPLACE ZERO MATCHES: If search_replace returns {zeroReplacements:true}, the exact string was NOT found in the file. Read the file first with read_file, copy the exact target text (including whitespace/newlines), then retry.
+
+5. PROJECT NAME: Always use the exact connected project name from connection.connectedProject. Never substitute 'my-app', 'groks-app', or any guess. Every command will 503 if the project field doesn't match the connected project.
+
+6. WINDOWS SHELL: run_command runs on Windows. Use PowerShell syntax: Set-Location not cd, Get-ChildItem not ls, $env:VAR not $VAR. Avoid Unix-only tools (grep, awk, sed, tail) - use Select-String, Get-Content, etc.
+
+7. VERIFY CHANGES: After any file edit, confirm the change took effect by either: (a) read_file and check the content, or (b) take a screenshot_preview. Never assume an edit worked without verification.
+
+=====================================
+SECTION 3: HOW TO MAKE REQUESTS (grok-proxy)
+=====================================
+
+Endpoint: /api/grok-proxy
+Method: GET
+Params: payload = base64(JSON.stringify({actions:[{type, project, ...params}]}))
+
+Encoding Steps:
+  step1: Build actions array: [{type:'read_file', project:'groks-app', path:'src/index.tsx'}]
+  step2: JSON.stringify the wrapper: JSON.stringify({actions:[...]})
+  step3: base64 encode: btoa(step2) - or Buffer.from(step2).toString('base64') in Node
+  step4: URL-encode the base64 if it contains + or = characters
+  step5: GET /api/grok-proxy?payload=ENCODED_BASE64
+
+Auto Repair: Relay auto-fixes common encoding mistakes: escapes raw control chars, strips trailing commas, accepts 'types'/'commands'/'data'/'payload' as aliases for 'actions'.
+Batch Actions: You can chain up to 10 actions in one request. All execute sequentially on the desktop.
+
+=====================================
+SECTION 4: ALL 113 COMMANDS
+=====================================
+list_tree, read_file, read_multiple_files, write_file, write_file_chunk, create_file, delete_file, bulk_delete, move_file, copy_file, copy_folder, rename_file, grep, search_files, search_replace, apply_patch, bulk_write, run_command, install_deps, add_dependency, remove_dependency, type_check, lint_and_fix, format_files, get_build_metrics, restart_dev_server, list_open_ports, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, git_push, git_pull, git_merge, git_stash_pop, git_reset, git_revert, git_tag, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, archive_project, export_project, set_env_var, get_env_vars, rollback_last_change, project_analyze, tailwind_audit, find_usages, component_tree, extract_theme, extract_colors, capture_preview, get_preview_url, generate_component, generate_page, refactor_file, validate_change, profile_performance, create_folder, delete_folder, move_folder, rename_folder, list_tree_filtered, dead_code_detection, dependency_graph, symbol_search, grep_advanced, extract_imports, run_command_advanced, build_with_flags, clean_build_cache, start_process_named, monitor_process, get_process_logs, stop_all_processes, switch_port, visual_diff, capture_component, record_video, get_dom_snapshot, get_console_errors, generate_test, generate_storybook, optimize_code, convert_to_typescript, add_feature, migrate_framework, react_profiler, memory_leak_detection, console_error_analysis, runtime_error_trace, bundle_analyzer, network_monitor, accessibility_audit, security_scan, set_tailwind_config, set_next_config, update_package_json, manage_scripts, switch_package_manager, deploy_preview, export_project_zip, import_project, super_command
+
+=====================================
+SECTION 5: SIMPLIFIED GET ENDPOINTS
+=====================================
+
+grok-read: /api/grok-read?project=P&path=FILE (or files=FILE1,FILE2,FILE3)
+grok-write: /api/grok-write?project=P&path=FILE&search=OLD&replace=NEW (search/replace only)
+grok-edit: /api/grok-edit?project=P&path=FILE&searchB64=B64&replaceB64=B64 (base64 search/replace for HTML)
+grok-tree: /api/grok-tree?project=P (optional: &filter=PATTERN)
+grok-git: /api/grok-git?project=P&action=ACTION (status|add|commit|diff|log|branch|checkout|stash|stash-pop|push|pull|merge|reset|revert|tag|init) + &files=F &message=M &count=N &branch=B
+grok-process: /api/grok-process?project=P&action=ACTION (list|start|stop|kill|restart|ports|env) + &cmd=CMD &pid=PID
+grok-search: /api/grok-search?project=P&q=PATTERN (optional: &type=symbol)
+grok-run: /api/grok-run?project=P&cmd=COMMAND (PowerShell on Windows!)
+grok-macro/project-status: /api/grok-macro/project-status?project=P (combo: tree + package.json + git status + preview URL)
+grok-macro/read-context: /api/grok-macro/read-context?project=P&path=FILE (combo: file content + imports)
+screenshot: /api/screenshot/KEY/P (optional: ?fullPage=true&waitMs=2000)
+grok-interact: /api/grok-interact?project=P&action=ACTION (click|type|select|evaluate|runFunction|waitFor) + &selector=S &text=T
+coord: /api/coord?note=TEXT&from=SENDER (read: no params, write: note+from, clear: clear=1)
+diag: /api/diag?project=P (connection status, latency, endpoint pass/fail)
+
+=====================================
+SECTION 6: WRITE METHODS FOR GROK (GET-ONLY)
+=====================================
+
+METHOD 1: grok-proxy + write_file (small files <2KB)
+  URL: RELAY/api/grok-proxy?project=P&payload=BASE64
+  Payload: {"actions":[{"type":"write_file","path":"FILE_PATH","content":"FILE_CONTENT"}]}
+  Base64 encode the JSON, put in payload param
+  LIMIT: URL truncates at ~8KB, so content must be small
+
+METHOD 2: grok-proxy + write_file_chunk (large files >2KB)
+  Split content into ~1500-char chunks
+  Chunk 0: {"actions":[{"type":"write_file_chunk","project":"P","path":"FILE","content":"CHUNK0","chunk_index":0,"total_chunks":N}]}
+  Chunk 1: {"actions":[{"type":"write_file_chunk","project":"P","path":"FILE","content":"CHUNK1","chunk_index":1,"total_chunks":N}]}
+  ... repeat until chunk N-1
+  File assembles and writes only when final chunk arrives
+  Each chunk sent as separate grok-proxy GET request
+
+METHOD 3: grok-write (search/replace in existing files)
+  URL: RELAY/api/grok-write?project=P&path=FILE&search=OLD&replace=NEW
+  URL-encode search and replace values
+  Auto-verifies by reading file after write
+  Returns {zeroReplacements:true} if search text not found - must read file first and copy exact text
+
+METHOD 4: grok-edit (search/replace with base64 for HTML/special content)
+  URL: RELAY/api/grok-edit?project=P&path=FILE&searchB64=BASE64&replaceB64=BASE64
+  Use when search/replace text contains special chars that break URL encoding
+
+=====================================
+SECTION 7: DIAGNOSTICS SNAPSHOT
+=====================================
+Desktop Connected: true
+Desktop Project: groks-app
+Round Trip: OK (89ms latency)
+Endpoint Status: grok-read PASS, grok-write PASS, grok-tree PASS, grok-run PASS, grok-git PASS, grok-process PASS, grok-search PASS, grok-quality PASS, grok-deps PASS
+
+=====================================
+SECTION 8: TEST RESULTS LOG
+=====================================
+(Tests appended below as they run)
+
