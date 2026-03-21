@@ -4063,12 +4063,54 @@ const GrokBridge: React.FC = () => {
       if (bridgeWsRef.current === ws) {
         bridgeWsRef.current = null;
         setBridgeStatus('disconnected');
+        if (ev.code !== 1000 && ev.code !== 1001) {
+          console.log('[Bridge] Unexpected close, reconnecting in 3s...');
+          setTimeout(() => {
+            if (!bridgeWsRef.current) {
+              connectToBridge(relayWsUrl, project);
+            }
+          }, 3000);
+        }
       }
     };
 
     ws.onerror = (ev) => {
       console.log('[Bridge] Error:', ev);
     };
+  }, []);
+
+  const pollDesktopBridgeStatusRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const pollDesktopBridgeStatus = useCallback(() => {
+    if (pollDesktopBridgeStatusRef.current) {
+      clearInterval(pollDesktopBridgeStatusRef.current);
+    }
+    let attempts = 0;
+    const poll = async () => {
+      try {
+        const res = await fetch('http://localhost:4999/health');
+        if (res.ok) {
+          const data = await res.json();
+          const newStatus = data.bridge === 'connected' ? 'connected' : 'connecting';
+          setBridgeStatus(newStatus);
+          if (newStatus === 'connected') {
+            setStatusMessage('Bridge connected (desktop connector)');
+            if (pollDesktopBridgeStatusRef.current) {
+              clearInterval(pollDesktopBridgeStatusRef.current);
+              pollDesktopBridgeStatusRef.current = null;
+            }
+          }
+        }
+      } catch {}
+      attempts++;
+      if (attempts > 20 && pollDesktopBridgeStatusRef.current) {
+        clearInterval(pollDesktopBridgeStatusRef.current);
+        pollDesktopBridgeStatusRef.current = null;
+        setBridgeStatus('disconnected');
+      }
+    };
+    poll();
+    pollDesktopBridgeStatusRef.current = setInterval(poll, 1500);
   }, []);
 
   useEffect(() => {
@@ -5560,7 +5602,16 @@ const GrokBridge: React.FC = () => {
                           setCommandEndpoint(`${base}/api/sandbox/execute`);
                           setExternalSnapshotUrl(`${base}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
                           setExternalCommandEndpoint(`${base}/api/sandbox/execute`);
-                          connectToBridge(devUrl, activeProject || 'default');
+                          if (isElectron) {
+                            const proj = activeProject || 'default';
+                            setBridgeStatus('connecting');
+                            try {
+                              await fetch('http://localhost:4999/api/bridge-config-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ relayUrl: devUrl, projectName: proj }) });
+                            } catch (e) { console.log('[Bridge] bridge-config-save failed:', e); }
+                            pollDesktopBridgeStatus();
+                          } else {
+                            connectToBridge(devUrl, activeProject || 'default');
+                          }
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
                           bridgeMode === 'dev'
@@ -5582,7 +5633,16 @@ const GrokBridge: React.FC = () => {
                           setCommandEndpoint(`${prodBase}/api/sandbox/execute`);
                           setExternalSnapshotUrl(`${prodBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
                           setExternalCommandEndpoint(`${prodBase}/api/sandbox/execute`);
-                          connectToBridge(prodUrl, activeProject || 'default');
+                          if (isElectron) {
+                            const proj = activeProject || 'default';
+                            setBridgeStatus('connecting');
+                            try {
+                              await fetch('http://localhost:4999/api/bridge-config-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ relayUrl: prodUrl, projectName: proj }) });
+                            } catch (e) { console.log('[Bridge] bridge-config-save failed:', e); }
+                            pollDesktopBridgeStatus();
+                          } else {
+                            connectToBridge(prodUrl, activeProject || 'default');
+                          }
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
                           bridgeMode === 'production'

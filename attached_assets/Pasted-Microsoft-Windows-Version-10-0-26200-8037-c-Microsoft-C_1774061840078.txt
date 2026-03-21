@@ -1,0 +1,53 @@
+Microsoft Windows [Version 10.0.26200.8037]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:dev
+
+> guardian-ai@1.0.0 electron:dev
+> concurrently --kill-others "vite --host 0.0.0.0 --port 5000" "wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 npx electron ."
+
+[0] [Lamby] No authentication — relay URL is the secret
+[0]
+[0]   VITE v5.4.19  ready in 230 ms
+[0]
+[0]   ➜  Local:   http://localhost:5000/
+[0]   ➜  Network: http://192.168.1.182:5000/
+[1]
+[1] Grok Desktop: GPU acceleration enabled
+[0] [Preview] Starting groks-app with: npx vite --host 0.0.0.0 --port 5168
+[0] [Preview] Using local binary for groks-app: C:\Users\Aiden\Desktop\guardian-ai\projects\groks-app\node_modules\.bin\vite.cmd
+[0] (node:18784) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+[0] (Use `node --trace-deprecation ...` to show where the warning was created)
+[0] [Preview:groks-app] VITE v5.4.21  ready in 334 ms
+[0] [Preview:groks-app] ➜  Local:   http://localhost:5168/
+[0]   ➜  Network: http://192.168.1.182:5168/
+[1] [Lamby Local] Server running on port 4999
+[1] [Lamby Local] No authentication — relay URL is the secret
+[1] [Lamby Local] Projects dir: C:\Users\Aiden\.guardian-ai\projects
+[1] [Lamby Local] Sandbox API: http://localhost:4999/api/sandbox/execute
+[1] [Lamby Local] Bridge relay: https://bridge-relay.replit.app
+[1] 02:56:48 [Bridge]       Project scan: found 3 dirs under "C:\Users\Aiden\.guardian-ai\projects" → [music-+-visualizer-app, react-canva, playstation-one-emulator]
+[1] 02:56:48 [Bridge]       Connecting to https://bridge-relay.replit.app...
+[1] 02:56:49 [Bridge]       Connected to relay at bridge-relay.replit.app
+[1] [Bridge] Status changed: connected
+[1] [Relay INFO] SCREENSHOT-AUTO timer started project=default interval=10s
+[1] [Relay INFO] Keepalive ping sent key=Zj5sDEhd...
+[1] [Relay INFO] ←Desktop pong key=Zj5sDEhd...
+[1] [Relay INFO] GROK-EDIT still waiting for desktop... 45s elapsed reqId=6eb777ae...
+[1] [Bridge] Received sandbox-execute-request (reqId: 17a91a00, actions: 1)
+[1] [Relay INFO] SCREENSHOT-AUTO →Desktop reqId=17a91a00... project=default
+[1] [Bridge] Sent sandbox-execute-response (reqId: 17a91a00)
+[1] [Relay INFO] ←Desktop sandbox-execute-response reqId=17a91a00... resultLen=122 preview={"success":false,"results":[{"actionIndex":0,"status":"error","type":"screenshot_preview","error":"Directory not found"}
+[1] [Relay INFO] SCREENSHOT fan-out to 1 waiter(s) key=default::
+[1] [Relay INFO] Keepalive ping sent key=Zj5sDEhd...
+[1] [Relay INFO] ←Desktop pong key=Zj5sDEhd...
+[1] [Relay INFO] ←Desktop ping key=Zj5sDEhd... sending pong
+[1] [Bridge] Received sandbox-execute-request (reqId: 6ec14305, actions: 1)
+[1] [Relay INFO] SCREENSHOT-AUTO →Desktop reqId=6ec14305... project=default
+[1] [Bridge] Sent sandbox-execute-response (reqId: 6ec14305)
+[1] [Relay INFO] ←Desktop sandbox-execute-response reqId=6ec14305... resultLen=122 preview={"success":false,"results":[{"actionIndex":0,"status":"error","type":"screenshot_preview","error":"Directory not found"}
+[1] [Relay INFO] SCREENSHOT fan-out to 1 waiter(s) key=default::
+[1] [Relay INFO] HTTP GET /api/grok-edit connected=yes
+[1] [Relay INFO] GROK-EDIT project=landing-page path=index.html search="cdn.tailwindcss.com" replace="TEST-SUCCESS" replaceAll=false
+[1] [Relay INFO] GROK-EDIT fan-in to existing in-flight key=landing-page:index.html:cdn.tailwindcss....
+[1] [Relay INFO] GROK-EDIT still waiting for desktop... 60s elapsed reqId=6eb777ae...
