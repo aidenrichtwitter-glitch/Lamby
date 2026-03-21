@@ -5,9 +5,34 @@ const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 const os = require("os");
 
-console.log(`[Lamby Local] Starting local-server.js...`);
+const _USER_DATA = path.join(os.homedir(), ".guardian-ai");
+if (!fs.existsSync(_USER_DATA)) fs.mkdirSync(_USER_DATA, { recursive: true });
+const LOG_FILE = path.join(_USER_DATA, "local-server.log");
+const _logStream = fs.createWriteStream(LOG_FILE, { flags: "a" });
+const _origLog = console.log;
+const _origErr = console.error;
+const _origWarn = console.warn;
+function _ts() { return new Date().toISOString().slice(11, 23); }
+console.log = function (...args) {
+  const line = `${_ts()} ${args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ")}`;
+  _logStream.write(line + "\n");
+  _origLog.apply(console, args);
+};
+console.error = function (...args) {
+  const line = `${_ts()} ERROR ${args.map(a => typeof a === "string" ? a : (a && a.stack ? a.stack : JSON.stringify(a))).join(" ")}`;
+  _logStream.write(line + "\n");
+  _origErr.apply(console, args);
+};
+console.warn = function (...args) {
+  const line = `${_ts()} WARN ${args.map(a => typeof a === "string" ? a : JSON.stringify(a)).join(" ")}`;
+  _logStream.write(line + "\n");
+  _origWarn.apply(console, args);
+};
+
+console.log(`[Lamby Local] ====== STARTING ======`);
 console.log(`[Lamby Local] Node ${process.version} | PID ${process.pid} | ${process.platform}`);
 console.log(`[Lamby Local] CWD: ${process.cwd()}`);
+console.log(`[Lamby Local] Log file: ${LOG_FILE}`);
 
 let executeSandboxActions, gatherProjectSnapshot, validateProjectPath, detectPmForDir, buildPmCommand, buildInstallCascade;
 try {
@@ -25,12 +50,11 @@ try {
 }
 
 
-const USER_DATA_DIR = path.join(os.homedir(), ".guardian-ai");
+const USER_DATA_DIR = _USER_DATA;
 const PROJECTS_DIR = path.join(USER_DATA_DIR, "projects");
 const BRIDGE_CONFIG_PATH = path.join(USER_DATA_DIR, "bridge-config.json");
 const PORT = parseInt(process.env.LAMBY_PORT || "4999", 10);
 
-if (!fs.existsSync(USER_DATA_DIR)) fs.mkdirSync(USER_DATA_DIR, { recursive: true });
 if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
 const CANONICAL_RELAY_URL = "wss://bridge-relay.replit.app";
