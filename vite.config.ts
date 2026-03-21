@@ -445,7 +445,7 @@ function projectManagementPlugin(): Plugin {
               });
             }
             res.setHeader("Content-Type", "text/plain");
-            res.end(`Lamby Snapshot API\n\nAvailable projects:\n${projectList.map(p => `- ${p}`).join("\n") || "(none)"}\n\nUsage: /api/snapshot/PROJECT_NAME?key=YOUR_KEY`);
+            res.end(`Lamby Snapshot API\n\nAvailable projects:\n${projectList.map(p => `- ${p}`).join("\n") || "(none)"}\n\nUsage: /api/snapshot/PROJECT_NAME`);
             return;
           }
 
@@ -4123,7 +4123,7 @@ function projectManagementPlugin(): Plugin {
             break;
           case "console_logs": {
             try {
-              const clUrl = `${bridgeRelayUrl}/api/console-logs?key=${encodeURIComponent(bridgeKey)}&project=${encodeURIComponent(project)}`;
+              const clUrl = `${bridgeRelayUrl}/api/console-logs?project=${encodeURIComponent(project)}`;
               const clResp = await fetch(clUrl);
               return await clResp.text();
             } catch (e: any) {
@@ -4132,7 +4132,7 @@ function projectManagementPlugin(): Plugin {
           }
           case "read_snapshot": {
             try {
-              const snapUrl = `${bridgeRelayUrl}/api/snapshot/${encodeURIComponent(project)}?key=${encodeURIComponent(bridgeKey)}`;
+              const snapUrl = `${bridgeRelayUrl}/api/snapshot/${encodeURIComponent(project)}`;
               const snapResp = await fetch(snapUrl);
               const snapText = await snapResp.text();
               return snapText.length > 80000 ? snapText.slice(0, 80000) + "\n...(truncated)" : snapText;
@@ -4148,7 +4148,7 @@ function projectManagementPlugin(): Plugin {
         }
 
         try {
-          const execUrl = `${bridgeRelayUrl}/api/sandbox/execute?key=${encodeURIComponent(bridgeKey)}`;
+          const execUrl = `${bridgeRelayUrl}/api/sandbox/execute`;
           const execResp = await fetch(execUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },

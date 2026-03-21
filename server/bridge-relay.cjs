@@ -229,7 +229,7 @@ const server = http.createServer(async (req, res) => {
       baseUrl,
       snapshotUrl: `${baseUrl}/api/snapshot/PROJECT_NAME`,
       commandEndpoint: `${baseUrl}/api/sandbox/execute`,
-      bridgeWs: `wss://${host}/bridge-ws?key=YOUR_BRIDGE_KEY`,
+      bridgeWs: `wss://${host}/bridge-ws?project=YOUR_PROJECT`,
       commandProtocol: "POST JSON {actions: [{type, project, ...}]}. All requests forwarded to connected desktop client via bridge.",
     });
     return;
@@ -482,7 +482,7 @@ const server = http.createServer(async (req, res) => {
     const project = url.searchParams.get("project") || "";
     const action = url.searchParams.get("action") || "";
     if (!project || !action) {
-      sendJson(res, { error: "Required params: project, action", actions: ["click", "type", "select", "evaluate", "runFunction", "waitFor"], example: `https://${req.headers.host || "bridge-relay.replit.app"}/api/grok-interact?key=KEY&project=my-app&action=click&selector=%23screenshot-btn`, params: { selector: "CSS selector", text: "text to type (mapped to value)", value: "value for type/select", code: "JS code for evaluate (mapped to script)", script: "JS code for evaluate", functionName: "for runFunction", args: "JSON array for runFunction", screenshot: "true to capture after", waitAfter: "ms to wait after action", timeout: "ms for waitFor" } });
+      sendJson(res, { error: "Required params: project, action", actions: ["click", "type", "select", "evaluate", "runFunction", "waitFor"], example: `https://${req.headers.host || "bridge-relay.replit.app"}/api/grok-interact?project=my-app&action=click&selector=%23screenshot-btn`, params: { selector: "CSS selector", text: "text to type (mapped to value)", value: "value for type/select", code: "JS code for evaluate (mapped to script)", script: "JS code for evaluate", functionName: "for runFunction", args: "JSON array for runFunction", screenshot: "true to capture after", waitAfter: "ms to wait after action", timeout: "ms for waitFor" } });
       return;
     }
 
@@ -557,7 +557,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   res.writeHead(404, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ error: "Not found", endpoints: ["/", "/api/grok", "/api/screenshot/:key/:project", "/api/grok-edit", "/api/grok-interact", "/api/grok-proxy", "/api/snapshot-key", "/api/bridge-status", "/api/snapshot/:project", "/api/console-logs", "/api/sandbox/execute", "/api/sandbox/audit-log", "/api/commands"] }));
+  res.end(JSON.stringify({ error: "Not found", endpoints: ["/", "/api/grok", "/api/screenshot/:project", "/api/grok-edit", "/api/grok-interact", "/api/grok-proxy", "/api/snapshot-key", "/api/bridge-status", "/api/snapshot/:project", "/api/console-logs", "/api/sandbox/execute", "/api/sandbox/audit-log", "/api/commands"] }));
 });
 
 server.on("upgrade", (req, socket, head) => {
