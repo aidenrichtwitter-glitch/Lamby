@@ -543,7 +543,7 @@ function extractContextSections(fullText: string): string[] {
   return sections;
 }
 
-function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport, onReplaceRepo, toasterConfig, toasterAvailable, userTask, setUserTask, onGenerateContext, onEditContext, onEditTemplate, hasCustomTemplate, contextLoading, projectContext, injectTextRef, autoDetectEnabled, onToggleAutoDetect }: { onApply: (filePath: string, code: string, editType?: string, searchCode?: string) => void; onApplyAll?: (blocks: { filePath: string; code: string; editType?: string; searchCode?: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void; onReplaceRepo?: (url: string) => void; toasterConfig?: OllamaToasterConfig; toasterAvailable?: boolean; userTask: string; setUserTask: (task: string) => void; onGenerateContext: (task?: string) => Promise<void>; onEditContext: () => void; onEditTemplate: () => void; hasCustomTemplate: boolean; contextLoading: boolean; projectContext: string; injectTextRef?: React.MutableRefObject<((text: string) => void) | null>; autoDetectEnabled: boolean; onToggleAutoDetect: (val: boolean) => void }) {
+function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport, onReplaceRepo, toasterConfig, toasterAvailable, userTask, setUserTask, onGenerateContext, onEditContext, onEditTemplate, hasCustomTemplate, contextLoading, projectContext, injectTextRef, autoDetectEnabled, onToggleAutoDetect, onPhase3Complete }: { onApply: (filePath: string, code: string, editType?: string, searchCode?: string) => void; onApplyAll?: (blocks: { filePath: string; code: string; editType?: string; searchCode?: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void; onReplaceRepo?: (url: string) => void; toasterConfig?: OllamaToasterConfig; toasterAvailable?: boolean; userTask: string; setUserTask: (task: string) => void; onGenerateContext: (task?: string) => Promise<void>; onEditContext: () => void; onEditTemplate: () => void; hasCustomTemplate: boolean; contextLoading: boolean; projectContext: string; injectTextRef?: React.MutableRefObject<((text: string) => void) | null>; autoDetectEnabled: boolean; onToggleAutoDetect: (val: boolean) => void; onPhase3Complete?: (convo: Conversation) => void }) {
   type ProjectExtractorState = {
     blocks: ExtractedBlock[];
     detectedDeps: { dependencies: string[]; devDependencies: string[] };
@@ -613,6 +613,9 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
     const controller = new AbortController();
     browseAbortRef.current = controller;
 
+    const allEvents: { event: string; data: any; ts: number }[] = [];
+    let promptUsed = '';
+
     try {
       const phase3Resp = await fetch('/stress-test-phase123/phase3-prompt-sent-to-grok.txt');
       let promptText: string;
@@ -624,6 +627,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
         const task = userTask.trim() || 'Read the project file tree and take a screenshot to confirm the bridge is working.';
         promptText = promptText.replace(/\{\{TASK\}\}/g, task);
       }
+      promptUsed = promptText;
 
       const response = await fetch('/api/grok-browse', {
         method: 'POST',
@@ -639,7 +643,9 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
 
       if (!response.ok) {
         const errText = await response.text();
-        setBrowseEvents(prev => [...prev, { event: 'error', data: { error: errText }, ts: Date.now() }]);
+        const ev = { event: 'error', data: { error: errText }, ts: Date.now() };
+        allEvents.push(ev);
+        setBrowseEvents(prev => [...prev, ev]);
         setBrowseRunning(false);
         return;
       }
@@ -665,7 +671,9 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
             if (dataStr) {
               try {
                 const data = JSON.parse(dataStr);
-                setBrowseEvents(prev => [...prev, { event: eventName, data, ts: Date.now() }]);
+                const ev = { event: eventName, data, ts: Date.now() };
+                allEvents.push(ev);
+                setBrowseEvents(prev => [...prev, ev]);
               } catch {}
             }
           }
@@ -673,13 +681,64 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
       }
     } catch (err: any) {
       if (err.name !== 'AbortError') {
-        setBrowseEvents(prev => [...prev, { event: 'error', data: { error: err.message }, ts: Date.now() }]);
+        const ev = { event: 'error', data: { error: err.message }, ts: Date.now() };
+        allEvents.push(ev);
+        setBrowseEvents(prev => [...prev, ev]);
       }
     } finally {
       setBrowseRunning(false);
       browseAbortRef.current = null;
+
+      if (allEvents.length > 0) {
+        const textEvent = allEvents.find(e => e.event === 'text');
+        const doneEvent = allEvents.find(e => e.event === 'done');
+        const errorEvents = allEvents.filter(e => e.event === 'error');
+        const toolCallEvents = allEvents.filter(e => e.event === 'tool_call');
+
+        let assistantContent = '';
+        if (textEvent?.data?.content) {
+          assistantContent = textEvent.data.content;
+        }
+
+        let statusLine = '';
+        if (doneEvent?.data?.usage) {
+          const u = doneEvent.data.usage;
+          statusLine = `\n\n---\n**Phase 3 complete** | Tokens: ${u.total_tokens || '?'} (${u.prompt_tokens || '?'} prompt + ${u.completion_tokens || '?'} completion)`;
+          if (doneEvent.data.serverSideToolUsage) {
+            const tools = Object.entries(doneEvent.data.serverSideToolUsage).map(([k, v]) => `${k}: ${v}`).join(', ');
+            statusLine += ` | Tools: ${tools}`;
+          }
+        }
+        if (errorEvents.length > 0) {
+          statusLine += `\n\n**Errors:** ${errorEvents.map(e => e.data.error).join('; ')}`;
+        }
+        if (toolCallEvents.length > 0) {
+          statusLine += `\n\n**Server-side tool calls:** ${toolCallEvents.length}`;
+        }
+
+        assistantContent += statusLine;
+
+        if (!assistantContent.trim()) {
+          assistantContent = allEvents.map(e => `[${e.event}] ${JSON.stringify(e.data)}`).join('\n');
+        }
+
+        const taskSummary = promptUsed.match(/STRESS TEST TASK:\s*([\s\S]*?)(?:Do all of this|$)/)?.[1]?.trim().split('\n')[0] || 'Phase 3 stress test';
+        const convoTitle = `Phase 3: ${taskSummary.slice(0, 60)}`;
+        const convoMessages: Msg[] = [
+          { role: 'user', content: `[Phase 3 — Grok-4 via browse_page API]\n\n${taskSummary}` },
+          { role: 'assistant', content: assistantContent },
+        ];
+        const convo: Conversation = {
+          id: crypto.randomUUID(),
+          title: convoTitle,
+          messages: convoMessages,
+          model: 'grok-4',
+          createdAt: Date.now(),
+        };
+        onPhase3Complete?.(convo);
+      }
     }
-  }, [browseRunning, projectContext, userTask, activeProject]);
+  }, [browseRunning, projectContext, userTask, activeProject, onPhase3Complete]);
 
   const pasteRef = useRef<HTMLTextAreaElement>(null);
   const extractorContentRef = useRef<HTMLDivElement>(null);
@@ -6487,7 +6546,7 @@ const GrokBridge: React.FC = () => {
 
             {/* Code extractor — shared across both modes */}
             <ParallaxPortal wall="bottom">
-              <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} onReplaceRepo={handleReplaceRepo} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} userTask={userTask} setUserTask={setUserTask} onGenerateContext={async (task?: string) => { const ctx = await buildProjectContext(task); if (ctx) copyContextToClipboard(ctx); }} onEditContext={() => { setEditableContext(projectContext); setShowContextEditor(true); setTimeout(() => contextEditorRef.current?.focus(), 100); }} onEditTemplate={() => { setShowPromptTemplateEditor(true); setTimeout(() => promptTemplateRef.current?.focus(), 100); }} hasCustomTemplate={!!customPromptTemplate.trim()} contextLoading={contextLoading} projectContext={projectContext} injectTextRef={injectExtractorTextRef} autoDetectEnabled={autoDetectEnabled} onToggleAutoDetect={(val) => { setAutoDetectEnabled(val); localStorage.setItem('lamby-autodetect', val ? 'true' : 'false'); }} />
+              <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} onReplaceRepo={handleReplaceRepo} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} userTask={userTask} setUserTask={setUserTask} onGenerateContext={async (task?: string) => { const ctx = await buildProjectContext(task); if (ctx) copyContextToClipboard(ctx); }} onEditContext={() => { setEditableContext(projectContext); setShowContextEditor(true); setTimeout(() => contextEditorRef.current?.focus(), 100); }} onEditTemplate={() => { setShowPromptTemplateEditor(true); setTimeout(() => promptTemplateRef.current?.focus(), 100); }} hasCustomTemplate={!!customPromptTemplate.trim()} contextLoading={contextLoading} projectContext={projectContext} injectTextRef={injectExtractorTextRef} autoDetectEnabled={autoDetectEnabled} onToggleAutoDetect={(val) => { setAutoDetectEnabled(val); localStorage.setItem('lamby-autodetect', val ? 'true' : 'false'); }} onPhase3Complete={(convo) => { setConversations(prev => [convo, ...prev]); setActiveConvoId(convo.id); setMessages(convo.messages); setModel(convo.model); setMode('api'); }} />
             </ParallaxPortal>
           </div>
           )}
