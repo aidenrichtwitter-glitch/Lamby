@@ -1,0 +1,25 @@
+Now I see it all clearly. There are actually two separate problems here that explain everything:
+
+Problem 1: The connector is pointing at localhost:5000, not your Replit server
+The reference desktop-connector.js defaults to wss://bridge-relay.replit.app when no RELAY_URL is set. But your Electron app's connector has RELAY_URL set to localhost:5000 — meaning it's connecting to a local copy of the relay running on your own Windows machine, not to Replit at all.
+
+The [Bridge Relay] log messages (with connId:) are coming from that local relay on port 5000 — notice those messages have a different format (connId) that doesn't exist in the Replit relay code. So you're running two relays: one locally and one on Replit, and they're not talking to each other.
+
+Why this matters: Grok calls the Replit relay. The desktop connects to the local relay. They're on two completely separate servers and never meet.
+
+Problem 2: connect() is being called twice at startup
+The reconnect loop (connect → 2s → connect again → disconnect old → connect again every 4s) happens because something in your Electron app calls connect() a second time while already connected. The reconnectDelay starts at 2000ms — exactly the 2-second gap you're seeing — which is what fires after the first disconnect caused by the second connect replacing it.
+
+There's no guard at the top of connect() to say "I'm already connected, do nothing." One line fixes this:
+
+function connect() {
+  if (_connected) return;  // ← this line is missing
+  ...
+What Needs to Happen
+Immediate (config): Your Electron app's RELAY_URL needs to point to the Replit relay URL — either the dev URL (wss://35c4f698-...janeway.replit.dev) or the production URL once the key is fixed.
+
+Code fix in connector: Add the if (_connected) return; guard so the second startup call doesn't cause a loop.
+
+Simplification (the task we discussed): Replace the whole connection_replaced + _suppressNextReconnect dance with the single guard above — then none of the loop behavior can happen at all.
+
+Want me to queue this up as a task so we can fix it properly?

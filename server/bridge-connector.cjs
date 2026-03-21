@@ -1839,6 +1839,7 @@ function createConnector(config) {
 
   return {
     connect() {
+      if (_connected && _socket) return;
       _destroyed = false;
       _reconnectDelay = 2000;
       doConnect();

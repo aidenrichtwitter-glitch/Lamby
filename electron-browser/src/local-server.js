@@ -23,7 +23,7 @@ const PORT = parseInt(process.env.LAMBY_PORT || "4999", 10);
 if (!fs.existsSync(USER_DATA_DIR)) fs.mkdirSync(USER_DATA_DIR, { recursive: true });
 if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
-const CANONICAL_RELAY_URL = "https://bridge-relay.replit.app";
+const CANONICAL_RELAY_URL = "wss://bridge-relay.replit.app";
 
 function loadBridgeConfig() {
   try {
@@ -31,6 +31,10 @@ function loadBridgeConfig() {
       const cfg = JSON.parse(fs.readFileSync(BRIDGE_CONFIG_PATH, "utf-8"));
       let changed = false;
       if (!cfg.relayUrl) { cfg.relayUrl = CANONICAL_RELAY_URL; changed = true; }
+      if (cfg.relayUrl && /^wss?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/.test(cfg.relayUrl)) {
+        console.log(`[Lamby Local] Auto-fixing localhost relay URL → ${CANONICAL_RELAY_URL}`);
+        cfg.relayUrl = CANONICAL_RELAY_URL; changed = true;
+      }
       if (!cfg.bridgeKey || cfg.bridgeKey.length < 8) { cfg.bridgeKey = crypto.randomBytes(16).toString("hex"); changed = true; }
       if (!cfg.snapshotKey || cfg.snapshotKey.length < 16) { cfg.snapshotKey = crypto.randomBytes(16).toString("hex"); changed = true; }
       if (changed) { try { fs.writeFileSync(BRIDGE_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8"); } catch {} }
