@@ -288,7 +288,7 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
 
     const origin = isElectronEnv
       ? (relayData?.devRelayUrl ? relayData.devRelayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '') : 'http://localhost:4999')
-      : (typeof window !== 'undefined' ? window.location.origin : '');
+      : (relayData?.devRelayUrl ? relayData.devRelayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '') : (typeof window !== 'undefined' ? window.location.origin : ''));
     if (origin) {
       return {
         snapUrl: `${origin}/api/snapshot/${project || 'PROJECT_NAME'}`,
