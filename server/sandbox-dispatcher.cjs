@@ -151,6 +151,147 @@ async function uploadScreenshot(filePath, maxRetries = 3) {
   return uploadScreenshotCurl(filePath);
 }
 
+let _persistentBrowser = null;
+let _persistentBrowserLastUsed = 0;
+const _PERSISTENT_BROWSER_TTL = 300000;
+
+function _closePersistentBrowser() {
+  if (_persistentBrowser) {
+    try { _persistentBrowser.close(); } catch {}
+    _persistentBrowser = null;
+    _persistentBrowserLastUsed = 0;
+  }
+}
+process.on("exit", _closePersistentBrowser);
+process.on("SIGINT", () => { _closePersistentBrowser(); process.exit(0); });
+process.on("SIGTERM", () => { _closePersistentBrowser(); process.exit(0); });
+
+let _screenshotDesktopChecked = false;
+let _screenshotDesktopModule = null;
+function _getScreenshotDesktop() {
+  if (_screenshotDesktopChecked) return _screenshotDesktopModule;
+  _screenshotDesktopChecked = true;
+  try { _screenshotDesktopModule = require("screenshot-desktop"); } catch {}
+  return _screenshotDesktopModule;
+}
+
+async function _fastMethod1_ScreenshotDesktop(outputPath) {
+  const sd = _getScreenshotDesktop();
+  if (!sd) return null;
+  try {
+    const img = await sd({ format: "png" });
+    fs.writeFileSync(outputPath, img);
+    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 100) {
+      return { captured: true, method: "screenshot-desktop" };
+    }
+  } catch {}
+  return null;
+}
+
+function _fastMethod2_PowerShell(outputPath) {
+  if (process.platform !== "win32") return null;
+  const psScript = `Add-Type -AssemblyName System.Windows.Forms,System.Drawing;$s=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds;$b=New-Object System.Drawing.Bitmap($s.Width,$s.Height);$g=[System.Drawing.Graphics]::FromImage($b);$g.CopyFromScreen($s.Location,[System.Drawing.Point]::Empty,$s.Size);$b.Save('${outputPath.replace(/'/g, "''")}');$g.Dispose();$b.Dispose()`;
+  try {
+    childProcess.execSync(`powershell -NoProfile -NonInteractive -Command "${psScript.replace(/"/g, '\\"')}"`, {
+      timeout: 10000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
+    });
+    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 100) {
+      return { captured: true, method: "powershell-copyfromscreen" };
+    }
+  } catch {}
+  return null;
+}
+
+async function _fastMethod3_CDPConnect(outputPath, opts) {
+  const puppeteerCorePath = findPuppeteerPath();
+  if (!puppeteerCorePath) return null;
+  try {
+    const pup = require(puppeteerCorePath);
+    if (!pup.connect) return null;
+    const browser = await pup.connect({ browserURL: "http://localhost:9222", timeout: 2000 });
+    const pages = await browser.pages();
+    let page = pages.find(p => {
+      const u = p.url();
+      return u && !u.startsWith("chrome://") && !u.startsWith("edge://") && !u.startsWith("about:");
+    });
+    if (!page && pages.length > 0) page = pages[0];
+    if (!page) { browser.disconnect(); return null; }
+    if (opts && opts.url && page.url() !== opts.url) {
+      await page.goto(opts.url, { waitUntil: "networkidle2", timeout: 8000 }).catch(() => {});
+    }
+    await page.screenshot({ path: outputPath, fullPage: !!(opts && opts.fullPage) });
+    browser.disconnect();
+    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 100) {
+      return { captured: true, method: "cdp-connect" };
+    }
+  } catch {}
+  return null;
+}
+
+async function _fastMethod4_PersistentPuppeteer(outputPath, opts) {
+  const puppeteerPath = findPuppeteerPath();
+  if (!puppeteerPath) return null;
+  const chromePath = getChromiumPath();
+  if (!chromePath && !puppeteerPath) return null;
+  try {
+    const pup = require(puppeteerPath);
+    if (!pup.launch) return null;
+    if (_persistentBrowser) {
+      const stale = (Date.now() - _persistentBrowserLastUsed) > _PERSISTENT_BROWSER_TTL;
+      let alive = false;
+      try { alive = _persistentBrowser.isConnected(); } catch {}
+      if (stale || !alive) {
+        _closePersistentBrowser();
+      }
+    }
+    if (!_persistentBrowser) {
+      const launchOpts = { headless: "new", args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"] };
+      if (chromePath) launchOpts.executablePath = chromePath;
+      _persistentBrowser = await pup.launch(launchOpts);
+    }
+    _persistentBrowserLastUsed = Date.now();
+    const page = await _persistentBrowser.newPage();
+    const vw = (opts && opts.width) || 1280;
+    const vh = (opts && opts.height) || 720;
+    await page.setViewport({ width: vw, height: vh });
+    const targetUrl = (opts && opts.url) || "about:blank";
+    if (targetUrl !== "about:blank") {
+      await page.goto(targetUrl, { waitUntil: "networkidle0", timeout: 15000 }).catch(() => {});
+    }
+    if (opts && opts.waitMs) {
+      await new Promise(r => setTimeout(r, opts.waitMs));
+    }
+    await page.screenshot({ path: outputPath, fullPage: !!(opts && opts.fullPage) });
+    await page.close();
+    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 100) {
+      return { captured: true, method: "persistent-puppeteer" };
+    }
+  } catch (e) {
+    _closePersistentBrowser();
+  }
+  return null;
+}
+
+async function fastScreenshot(outputPath, opts) {
+  const t0 = Date.now();
+  const dir = path.dirname(outputPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const r1 = await _fastMethod1_ScreenshotDesktop(outputPath);
+  if (r1) { r1.ms = Date.now() - t0; return r1; }
+
+  const r2 = _fastMethod2_PowerShell(outputPath);
+  if (r2) { r2.ms = Date.now() - t0; return r2; }
+
+  const r3 = await _fastMethod3_CDPConnect(outputPath, opts);
+  if (r3) { r3.ms = Date.now() - t0; return r3; }
+
+  const r4 = await _fastMethod4_PersistentPuppeteer(outputPath, opts);
+  if (r4) { r4.ms = Date.now() - t0; return r4; }
+
+  return null;
+}
+
 function detectPmForDir(projDir) {
   if (fs.existsSync(path.join(projDir, "bun.lockb")) || fs.existsSync(path.join(projDir, "bun.lock"))) return "bun";
   if (fs.existsSync(path.join(projDir, "pnpm-lock.yaml")) || fs.existsSync(path.join(projDir, "pnpm-workspace.yaml"))) return "pnpm";
@@ -287,7 +428,7 @@ const ALLOWED_CMD_PREFIXES = [
 
 const sandboxProcesses = new Map();
 
-function executeSandboxAction(action, projectsDir, options) {
+async function executeSandboxAction(action, projectsDir, options) {
   const t = action.type;
   const projectName = action.project || "";
   const _opts = options || {};
@@ -1347,6 +1488,14 @@ function executeSandboxAction(action, projectsDir, options) {
         } else {
           screenshotPath = path.join(dir, `preview-${Date.now()}.png`);
         }
+        {
+          const fastResult = await fastScreenshot(screenshotPath, { url: previewUrl, width: action.width || 1280, height: action.height || 720, fullPage: !!action.fullPage });
+          if (fastResult && fastResult.captured && fs.existsSync(screenshotPath)) {
+            const imgData = fs.readFileSync(screenshotPath);
+            const base64 = imgData.toString("base64");
+            return { status: "success", type: t, data: { url: previewUrl, port: previewPort, screenshotPath, base64: base64.length < 5000000 ? base64 : null, base64Length: base64.length, captured: true, method: fastResult.method, ms: fastResult.ms } };
+          }
+        }
         const cpPuppeteerPath = findPuppeteerPath();
         const playwrightBin = path.join(dir, "node_modules/playwright");
         const puppeteerBin = path.join(dir, "node_modules/puppeteer");
@@ -1358,6 +1507,7 @@ function executeSandboxAction(action, projectsDir, options) {
           const captureScript = hasPlaywright
             ? `const { chromium } = require('playwright'); (async()=>{ const b=await chromium.launch({headless:true}); const p=await b.newPage(); await p.setViewportSize({width:${action.width||1280},height:${action.height||720}}); await p.goto('${previewUrl}',{waitUntil:'networkidle',timeout:15000}).catch(()=>{}); await p.screenshot({path:'${screenshotPath.replace(/'/g,"\\'")}',fullPage:${!!action.fullPage}}); await b.close(); })();`
             : `const pup = require(${pupRequire}); (async()=>{ const b=await pup.launch({headless:'new',args:['--no-sandbox','--disable-gpu'],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined}); const p=await b.newPage(); await p.setViewport({width:${action.width||1280},height:${action.height||720}}); await p.goto('${previewUrl}',{waitUntil:'networkidle0',timeout:15000}).catch(()=>{}); await p.screenshot({path:'${screenshotPath.replace(/'/g,"\\'")}',fullPage:${!!action.fullPage}}); await b.close(); })();`;
+          const cpCaptureStart = Date.now();
           return new Promise((resolve) => {
             try {
               const chromExecEnv = Object.assign({}, process.env);
@@ -1367,7 +1517,7 @@ function executeSandboxAction(action, projectsDir, options) {
               if (fs.existsSync(screenshotPath)) {
                 const imgData = fs.readFileSync(screenshotPath);
                 const base64 = imgData.toString("base64");
-                resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, screenshotPath, base64: base64.length < 5000000 ? base64 : null, base64Length: base64.length, captured: true } });
+                resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, screenshotPath, base64: base64.length < 5000000 ? base64 : null, base64Length: base64.length, captured: true, method: "puppeteer-coldstart", ms: Date.now() - cpCaptureStart } });
               } else {
                 resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: "Screenshot file not created" } });
               }
@@ -1431,6 +1581,23 @@ function executeSandboxAction(action, projectsDir, options) {
         const viewportW = action.width || 1280;
         const viewportH = action.height || 720;
         const waitMs = action.waitMs || 2000;
+        {
+          const fastResult = await fastScreenshot(screenshotPath, { url: targetUrl, width: viewportW, height: viewportH, fullPage: !!action.fullPage, waitMs });
+          if (fastResult && fastResult.captured && fs.existsSync(screenshotPath)) {
+            const screenshotRelPath = `_screenshots/${screenshotName}`;
+            const upload = await uploadScreenshot(screenshotPath);
+            const fileSize = fs.statSync(screenshotPath).size;
+            return { status: "success", type: t, data: {
+              url: previewUrl, port: previewPort, captured: true,
+              screenshotPath: screenshotRelPath,
+              screenshotUrl: upload.uploaded ? upload.url : null,
+              uploadError: upload.uploaded ? undefined : upload.reason,
+              fileSize,
+              width: viewportW, height: viewportH,
+              method: fastResult.method, ms: fastResult.ms
+            }};
+          }
+        }
         let puppeteerPath = findPuppeteerPath();
         const playwrightBin = path.join(dir, "node_modules/playwright");
         const puppeteerBin = path.join(dir, "node_modules/puppeteer");
@@ -1450,6 +1617,7 @@ function executeSandboxAction(action, projectsDir, options) {
         const captureScript = hasPlaywright
           ? `const{chromium}=require('playwright');(async()=>{const b=await chromium.launch({headless:true});const p=await b.newPage();await p.setViewportSize({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle',timeout:15000}).catch(()=>{});await p.waitForTimeout(${waitMs});const ss=${JSON.stringify(screenshotPath)};${selectorSnippet};await b.close()})();`
           : `const pup=require(${JSON.stringify(puppeteerPath || "puppeteer")});(async()=>{const b=await pup.launch({headless:'new',args:['--no-sandbox','--disable-gpu'],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined});const p=await b.newPage();await p.setViewport({width:${viewportW},height:${viewportH}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:'networkidle0',timeout:15000}).catch(()=>{});await new Promise(r=>setTimeout(r,${waitMs}));const ss=${JSON.stringify(screenshotPath)};${selectorSnippet};await b.close()})();`;
+        const spCaptureStart = Date.now();
         return new Promise(async (resolve) => {
           try {
             const chromExecEnv2 = Object.assign({}, process.env);
@@ -1466,7 +1634,8 @@ function executeSandboxAction(action, projectsDir, options) {
                 screenshotUrl: upload.uploaded ? upload.url : null,
                 uploadError: upload.uploaded ? undefined : upload.reason,
                 fileSize,
-                width: viewportW, height: viewportH
+                width: viewportW, height: viewportH,
+                method: "puppeteer-coldstart", ms: Date.now() - spCaptureStart
               }});
             } else {
               resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: "Screenshot file not created" } });
@@ -2203,13 +2372,43 @@ function executeSandboxAction(action, projectsDir, options) {
       case "visual_diff": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!action.beforeUrl && !action.afterUrl) return { status: "error", type: t, error: "beforeUrl and afterUrl required" };
+        const outDir = path.join(dir, ".visual-diffs");
+        if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+        const ts = Date.now();
+        const beforeFile = path.join(outDir, `before-${ts}.png`);
+        const afterFile = path.join(outDir, `after-${ts}.png`);
+        const vdStart = Date.now();
+        let usedFast = false;
+        let vdMethod = "puppeteer-coldstart";
+        if (action.beforeUrl) {
+          const fr1 = await fastScreenshot(beforeFile, { url: action.beforeUrl, fullPage: true });
+          if (fr1 && fr1.captured) { usedFast = true; vdMethod = fr1.method; }
+        }
+        if (action.afterUrl) {
+          const fr2 = await fastScreenshot(afterFile, { url: action.afterUrl, fullPage: true });
+          if (fr2 && fr2.captured) { usedFast = true; vdMethod = fr2.method; }
+        }
+        const bothExist = (!action.beforeUrl || fs.existsSync(beforeFile)) && (!action.afterUrl || fs.existsSync(afterFile));
+        if (usedFast && bothExist) {
+          const comparison = { captured: true };
+          if (fs.existsSync(beforeFile) && fs.existsSync(afterFile)) {
+            const b1 = fs.readFileSync(beforeFile);
+            const b2 = fs.readFileSync(afterFile);
+            comparison.beforeSize = b1.length;
+            comparison.afterSize = b2.length;
+            comparison.sizeMatch = b1.length === b2.length;
+            let diffBytes = 0;
+            const minLen = Math.min(b1.length, b2.length);
+            for (let i = 0; i < minLen; i++) { if (b1[i] !== b2[i]) diffBytes++; }
+            diffBytes += Math.abs(b1.length - b2.length);
+            comparison.diffBytes = diffBytes;
+            comparison.diffPercent = minLen > 0 ? ((diffBytes / minLen) * 100).toFixed(2) : "N/A";
+            comparison.identical = diffBytes === 0;
+          }
+          return { status: "success", type: t, data: { beforeFile: action.beforeUrl ? `before-${ts}.png` : null, afterFile: action.afterUrl ? `after-${ts}.png` : null, outputDir: ".visual-diffs", comparison, method: vdMethod, ms: Date.now() - vdStart } };
+        }
         let puppeteerPath = findPuppeteerPath();
         if (puppeteerPath) {
-          const outDir = path.join(dir, ".visual-diffs");
-          if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-          const ts = Date.now();
-          const beforeFile = path.join(outDir, `before-${ts}.png`);
-          const afterFile = path.join(outDir, `after-${ts}.png`);
           const diffScript = `const p=require("${puppeteerPath.replace(/\\/g, "/")}");const fs=require("fs");(async()=>{const b=await p.launch({headless:"new",args:["--no-sandbox","--disable-gpu"],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined});const pg=await b.newPage();` +
             (action.beforeUrl ? `await pg.goto(${JSON.stringify(action.beforeUrl)},{waitUntil:"networkidle2",timeout:15000});await pg.screenshot({path:${JSON.stringify(beforeFile)},fullPage:true});` : "") +
             (action.afterUrl ? `await pg.goto(${JSON.stringify(action.afterUrl)},{waitUntil:"networkidle2",timeout:15000});await pg.screenshot({path:${JSON.stringify(afterFile)},fullPage:true});` : "") +
@@ -2230,7 +2429,7 @@ function executeSandboxAction(action, projectsDir, options) {
             const output = childProcess.execFileSync("node", ["-e", diffScript], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env: chromExecEnv4 }).trim();
             let comparison = {};
             try { comparison = JSON.parse(output); } catch {}
-            return { status: "success", type: t, data: { beforeFile: action.beforeUrl ? `before-${ts}.png` : null, afterFile: action.afterUrl ? `after-${ts}.png` : null, outputDir: ".visual-diffs", comparison } };
+            return { status: "success", type: t, data: { beforeFile: action.beforeUrl ? `before-${ts}.png` : null, afterFile: action.afterUrl ? `after-${ts}.png` : null, outputDir: ".visual-diffs", comparison, method: "puppeteer-coldstart", ms: Date.now() - vdStart } };
           } catch (e) {
             return { status: "error", type: t, error: `Visual diff capture failed: ${(e.stderr || e.message || "").slice(0, 500)}` };
           }
@@ -2240,28 +2439,37 @@ function executeSandboxAction(action, projectsDir, options) {
       case "capture_component": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
         if (!action.componentName && !action.url) return { status: "error", type: t, error: "componentName or url required" };
-        let puppeteerPath = findPuppeteerPath();
-        if (puppeteerPath && action.url) {
+        if (action.url) {
           const outDir = path.join(dir, ".component-captures");
           if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
           const ts = Date.now();
           const safeName = (action.componentName || "component").replace(/[^a-zA-Z0-9_-]/g, "_");
           const outFile = path.join(outDir, `${safeName}-${ts}.png`);
-          const selectorCode = action.selector
-            ? `const el=await pg.$(${JSON.stringify(action.selector)});if(el){await el.screenshot({path:${JSON.stringify(outFile)}})}else{await pg.screenshot({path:${JSON.stringify(outFile)},fullPage:true})}`
-            : `await pg.screenshot({path:${JSON.stringify(outFile)},fullPage:true})`;
-          const script = `const p=require("${puppeteerPath.replace(/\\/g, "/")}");(async()=>{const b=await p.launch({headless:"new",args:["--no-sandbox","--disable-gpu"],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined});const pg=await b.newPage();` +
-            `await pg.goto(${JSON.stringify(action.url)},{waitUntil:"networkidle2",timeout:15000});${selectorCode};await b.close();console.log("done");})().catch(e=>{console.error(e.message);process.exit(1);})`;
-          try {
-            const chromExecEnv5 = Object.assign({}, process.env);
-            const chromPath5 = getChromiumPath();
-            if (chromPath5) chromExecEnv5.PUPPETEER_CHROMIUM_PATH = chromPath5;
-            childProcess.execFileSync("node", ["-e", script], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env: chromExecEnv5 });
-            return { status: "success", type: t, data: { file: `${safeName}-${ts}.png`, outputDir: ".component-captures", componentName: action.componentName } };
-          } catch (e) {
-            return { status: "error", type: t, error: `Component capture failed: ${(e.stderr || e.message || "").slice(0, 500)}` };
+          const ccStart = Date.now();
+          const fastResult = await fastScreenshot(outFile, { url: action.url, fullPage: true });
+          if (fastResult && fastResult.captured && fs.existsSync(outFile)) {
+            return { status: "success", type: t, data: { file: `${safeName}-${ts}.png`, outputDir: ".component-captures", componentName: action.componentName, method: fastResult.method, ms: fastResult.ms } };
           }
+          let puppeteerPath = findPuppeteerPath();
+          if (puppeteerPath) {
+            const selectorCode = action.selector
+              ? `const el=await pg.$(${JSON.stringify(action.selector)});if(el){await el.screenshot({path:${JSON.stringify(outFile)}})}else{await pg.screenshot({path:${JSON.stringify(outFile)},fullPage:true})}`
+              : `await pg.screenshot({path:${JSON.stringify(outFile)},fullPage:true})`;
+            const script = `const p=require("${puppeteerPath.replace(/\\/g, "/")}");(async()=>{const b=await p.launch({headless:"new",args:["--no-sandbox","--disable-gpu"],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined});const pg=await b.newPage();` +
+              `await pg.goto(${JSON.stringify(action.url)},{waitUntil:"networkidle2",timeout:15000});${selectorCode};await b.close();console.log("done");})().catch(e=>{console.error(e.message);process.exit(1);})`;
+            try {
+              const chromExecEnv5 = Object.assign({}, process.env);
+              const chromPath5 = getChromiumPath();
+              if (chromPath5) chromExecEnv5.PUPPETEER_CHROMIUM_PATH = chromPath5;
+              childProcess.execFileSync("node", ["-e", script], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env: chromExecEnv5 });
+              return { status: "success", type: t, data: { file: `${safeName}-${ts}.png`, outputDir: ".component-captures", componentName: action.componentName, method: "puppeteer-coldstart", ms: Date.now() - ccStart } };
+            } catch (e) {
+              return { status: "error", type: t, error: `Component capture failed: ${(e.stderr || e.message || "").slice(0, 500)}` };
+            }
+          }
+          return { status: "success", type: t, data: { componentName: action.componentName, available: false, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer. Then provide a url to capture." } };
         }
+        let puppeteerPath = findPuppeteerPath();
         if (!puppeteerPath) {
           return { status: "success", type: t, data: { componentName: action.componentName, available: false, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer. Then provide a url to capture." } };
         }
@@ -2970,4 +3178,5 @@ module.exports = {
   buildInstallCascade,
   sandboxProcesses,
   ALLOWED_CMD_PREFIXES,
+  fastScreenshot,
 };
