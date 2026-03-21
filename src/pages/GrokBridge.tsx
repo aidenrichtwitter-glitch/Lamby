@@ -4056,6 +4056,12 @@ const GrokBridge: React.FC = () => {
   const [editableContext, setEditableContext] = useState('');
   const contextEditorRef = useRef<HTMLTextAreaElement>(null);
 
+  const [customPromptTemplate, setCustomPromptTemplate] = useState<string>(() => {
+    try { return localStorage.getItem('lamby-prompt-template') || ''; } catch { return ''; }
+  });
+  const [showPromptTemplateEditor, setShowPromptTemplateEditor] = useState(false);
+  const promptTemplateRef = useRef<HTMLTextAreaElement>(null);
+
   const connectToBridge = useCallback((relayWsUrl: string, project: string) => {
     if (bridgeWsRef.current) {
       try { bridgeWsRef.current.close(); } catch {}
@@ -4256,6 +4262,16 @@ const GrokBridge: React.FC = () => {
     const CHARS_BUDGET = 64000;
 
     try {
+      if (customPromptTemplate.trim()) {
+        const task = taskOverride || userTask || '';
+        const result = customPromptTemplate
+          .replace(/\{\{PROJECT\}\}/gi, activeProject || '')
+          .replace(/\{\{TASK\}\}/gi, task);
+        setProjectContext(result);
+        setContextLoading(false);
+        return result;
+      }
+
       let flatPaths: string[] = [];
       let pkgJsonRaw = '';
       let frameworkHint = '';
