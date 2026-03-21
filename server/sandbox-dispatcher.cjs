@@ -305,6 +305,12 @@ async function fastScreenshot(outputPath, opts) {
   const r4 = await _fastMethod4_PersistentPuppeteer(outputPath, opts);
   if (r4) { r4.ms = Date.now() - t0; return r4; }
 
+  const r2 = _fastMethod2_PowerShell(outputPath);
+  if (r2) { r2.ms = Date.now() - t0; return r2; }
+
+  const r1 = await _fastMethod1_ScreenshotDesktop(outputPath);
+  if (r1) { r1.ms = Date.now() - t0; return r1; }
+
   return { captured: false, method: "none", ms: Date.now() - t0 };
 }
 
