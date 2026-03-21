@@ -1,0 +1,42 @@
+grok CANNOT seem to get any visible changes to work through the bridge. can you look at the production logs and tell me what grok did, what it was trying to do, and how we can fix it so that grok has as much success as you do when making changes. also the desktop app keeps opening and closing connections to the bridge and i dont understand, the bridges job is to stay connected to the desktop app, and thats not happening
+
+Let me get more context around the successful connection to understand the full picture:
+
+Now I have the full picture. There are three completely separate problems stacked on top of each other:
+
+What Grok Was Trying to Do
+Grok was making legitimate attempts — reading files in groks-app, editing App.tsx, writing test files, taking screenshots, running commands. The actual intent was correct. It just hit a wall every single time. Here's why:
+
+Problem 1 — The Biggest One: Two Relays, Two Different Keys
+This is why 90% of Grok's requests fail with "wrong key."
+
+When you published the relay to production, it generated a completely new random key (b4245051...) because the SNAPSHOT_KEY environment variable isn't set in the production deployment. So there are now two separate relays running:
+
+Dev relay (Replit workspace)	Production relay (published app)
+Key	92781fb6...	b4245051...
+Desktop	not connected (most of the time)	IS connected
+Grok learned the dev key (92781fb6) at some point. But your desktop Electron app connected to the production relay. So every time Grok makes a request using 92781fb6, the production relay says 401 — wrong key. They're talking past each other on two separate servers.
+
+The fix: Set SNAPSHOT_KEY=92781fb690e47d110da1458cbe03ac9a as an environment variable in the production deployment so both relays share the same key.
+
+Problem 2 — The Reconnect Loop
+This is the connect/disconnect churn you're seeing.
+
+The production logs show the desktop connecting and immediately being bumped off, every ~5 minutes like clockwork:
+
+Desktop connected key=e4474197...
+Replacing existing connection for key=e4474197...   ← only 200ms later
+Desktop disconnected key=e4474197...
+Something in the Electron app is opening a second WebSocket connection to the same relay without checking if one is already open. The relay sees two connections with the same key, sends "you've been replaced" to the old one, and closes it. But then the newly-opened connection also closes shortly after (likely because the code path that opened it also tries to close/restart it).
+
+The _suppressNextReconnect fix we applied to desktop-connector.js would prevent the old connection from reconnecting — but what's actually happening is the new connection is being opened unnecessarily. The fix lives in your Electron app's connector code, not in the relay. Specifically: before calling new WebSocket(...), the connector should check if (this.ws && this.ws.readyState === WebSocket.OPEN) return; — don't open a new connection if one is already live.
+
+Problem 3 — "Directory not found"
+On the one occasion Grok used the correct key and the desktop was connected, the desktop responded "error": "Directory not found" for groks-app. This means the project directory name Grok is using doesn't match what the Electron app can see on your filesystem. Grok needs to know the exact folder name as it exists on your Windows desktop.
+
+Summary of Fixes Needed
+Problem	Where to fix	What to do
+Wrong key in production	Production deployment env vars	Set SNAPSHOT_KEY=92781fb690e47d110da1458cbe03ac9a
+Duplicate connection / churn	Your Electron app's connector code	Guard new WebSocket() with a check: don't connect if already open
+Directory not found	Tell Grok	Use the exact Windows folder name (e.g. guardian-ai not groks-app)
+Want me to create a task to handle the production key fix and help you identify the right guard to add to the Electron connector?

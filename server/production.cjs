@@ -191,9 +191,20 @@ function handleWsUpgrade(req, socket, bridgeKey, clientSnapshotKey) {
     "\r\n"
   );
 
-  console.log(`[Bridge Relay] Desktop client connected (key: ${bridgeKey.substring(0, 8)}...)`);
+  const connId = crypto.randomUUID();
 
-  const client = { socket, snapshotKey: clientSnapshotKey, lastPing: Date.now(), alive: true };
+  const existingClient = bridgeClients.get(bridgeKey);
+  if (existingClient) {
+    console.log(`[Bridge Relay] Replacing stale connection for key ${bridgeKey.substring(0, 8)}... (old connId: ${(existingClient.connId || "?").substring(0, 8)})`);
+    existingClient.alive = false;
+    existingClient.replaced = true;
+    try { existingClient.send(JSON.stringify({ type: "connection_replaced", reason: "A newer connection with the same key has connected." })); } catch {}
+    setTimeout(() => { try { existingClient.socket.destroy(); } catch {} }, 500);
+  }
+
+  console.log(`[Bridge Relay] Desktop client connected (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)})`);
+
+  const client = { socket, snapshotKey: clientSnapshotKey, lastPing: Date.now(), alive: true, connId, replaced: false };
   bridgeClients.set(bridgeKey, client);
 
   client.send = (data) => {
@@ -253,14 +264,24 @@ function handleWsUpgrade(req, socket, bridgeKey, clientSnapshotKey) {
   });
 
   socket.on("close", () => {
-    console.log(`[Bridge Relay] Desktop client disconnected (key: ${bridgeKey.substring(0, 8)}...)`);
+    if (client.replaced) {
+      console.log(`[Bridge Relay] Old connection closed (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)}) — already replaced, not removing from map`);
+      return;
+    }
+    console.log(`[Bridge Relay] Desktop client disconnected (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)})`);
     client.alive = false;
-    bridgeClients.delete(bridgeKey);
+    const current = bridgeClients.get(bridgeKey);
+    if (current && current.connId === connId) {
+      bridgeClients.delete(bridgeKey);
+    }
   });
 
   socket.on("error", () => {
     client.alive = false;
-    bridgeClients.delete(bridgeKey);
+    const current = bridgeClients.get(bridgeKey);
+    if (current && current.connId === connId) {
+      bridgeClients.delete(bridgeKey);
+    }
   });
 }
 
