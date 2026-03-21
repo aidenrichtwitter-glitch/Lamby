@@ -604,6 +604,16 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
   const [browseEvents, setBrowseEvents] = useState<{ event: string; data: any; ts: number }[]>([]);
   const [showBrowseResults, setShowBrowseResults] = useState(false);
   const browseAbortRef = useRef<AbortController | null>(null);
+  const [selectedTestLevel, setSelectedTestLevel] = useState<number | null>(null);
+  const [showLevelPicker, setShowLevelPicker] = useState(false);
+
+  const TEST_LEVELS = [
+    { id: 0, name: 'L0: Read-Only', desc: 'Zero writes, just read endpoints', color: 'blue', file: 'level-0-readonly.txt', est: '~2min' },
+    { id: 1, name: 'L1: Single Write', desc: 'Create one file + verify', color: 'green', file: 'level-1-single-write.txt', est: '~3min' },
+    { id: 2, name: 'L2: Read-Modify-Write', desc: 'Edit existing file + restore', color: 'amber', file: 'level-2-read-modify-write.txt', est: '~4min' },
+    { id: 3, name: 'L3: Multi-File + Git', desc: 'Full stress test with commit', color: 'purple', file: 'level-3-multi-file-git.txt', est: '~8min' },
+    { id: 4, name: 'L4: Creative Build', desc: 'Autonomous Settings page build', color: 'rose', file: 'level-4-creative-build.txt', est: '~12min' },
+  ];
 
   const runGrokBrowse = useCallback(async () => {
     if (browseRunning) return;
@@ -617,15 +627,39 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
     let promptUsed = '';
 
     try {
-      const phase3Resp = await fetch('/stress-test-phase123/phase3-prompt-sent-to-grok.txt');
       let promptText: string;
-      if (phase3Resp.ok) {
-        promptText = await phase3Resp.text();
+      const level = TEST_LEVELS.find(l => l.id === selectedTestLevel);
+
+      if (level) {
+        const [headerResp, levelResp, freshEndpoints] = await Promise.all([
+          fetch('/stress-test-phase123/levels/shared-header.txt'),
+          fetch(`/stress-test-phase123/levels/${level.file}`),
+          fetchFreshBridgeEndpoints(activeProject || 'groks-app'),
+        ]);
+        if (!headerResp.ok || !levelResp.ok) {
+          const ev = { event: 'error', data: { error: `Failed to load level ${level.id} prompt files` }, ts: Date.now() };
+          allEvents.push(ev);
+          setBrowseEvents(prev => [...prev, ev]);
+          setBrowseRunning(false);
+          return;
+        }
+        const header = await headerResp.text();
+        const levelTask = await levelResp.text();
+        const relayBase = extractBaseUrl(freshEndpoints.cmdUrl || freshEndpoints.snapUrl || freshEndpoints.proxyUrl || '');
+        const proj = activeProject || 'groks-app';
+        promptText = (header + '\n' + levelTask)
+          .replace(/\{\{RELAY_BASE\}\}/g, relayBase)
+          .replace(/\{\{PROJECT\}\}/g, proj);
       } else {
-        const templateResp = await fetch('/grok-prompt-template.txt');
-        promptText = await templateResp.text();
-        const task = userTask.trim() || 'Read the project file tree and take a screenshot to confirm the bridge is working.';
-        promptText = promptText.replace(/\{\{TASK\}\}/g, task);
+        const phase3Resp = await fetch('/stress-test-phase123/phase3-prompt-sent-to-grok.txt');
+        if (phase3Resp.ok) {
+          promptText = await phase3Resp.text();
+        } else {
+          const templateResp = await fetch('/grok-prompt-template.txt');
+          promptText = await templateResp.text();
+          const task = userTask.trim() || 'Read the project file tree and take a screenshot to confirm the bridge is working.';
+          promptText = promptText.replace(/\{\{TASK\}\}/g, task);
+        }
       }
       promptUsed = promptText;
 
@@ -722,10 +756,13 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           assistantContent = allEvents.map(e => `[${e.event}] ${JSON.stringify(e.data)}`).join('\n');
         }
 
-        const taskSummary = promptUsed.match(/STRESS TEST TASK:\s*([\s\S]*?)(?:Do all of this|$)/)?.[1]?.trim().split('\n')[0] || 'Phase 3 stress test';
-        const convoTitle = `Phase 3: ${taskSummary.slice(0, 60)}`;
+        const levelInfo = TEST_LEVELS.find(l => l.id === selectedTestLevel);
+        const taskSummary = levelInfo
+          ? `${levelInfo.name}: ${levelInfo.desc}`
+          : (promptUsed.match(/STRESS TEST TASK:\s*([\s\S]*?)(?:Do all of this|$)/)?.[1]?.trim().split('\n')[0] || 'Phase 3 stress test');
+        const convoTitle = levelInfo ? `Test ${levelInfo.name}` : `Phase 3: ${taskSummary.slice(0, 60)}`;
         const convoMessages: Msg[] = [
-          { role: 'user', content: `[Phase 3 — Grok-4 via browse_page API]\n\n${taskSummary}` },
+          { role: 'user', content: `[${levelInfo ? `Test ${levelInfo.name}` : 'Phase 3'} — Grok-4 via browse_page API]\n\n${taskSummary}` },
           { role: 'assistant', content: assistantContent },
         ];
         const convo: Conversation = {
@@ -738,7 +775,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
         onPhase3Complete?.(convo);
       }
     }
-  }, [browseRunning, projectContext, userTask, activeProject, onPhase3Complete]);
+  }, [browseRunning, projectContext, userTask, activeProject, onPhase3Complete, selectedTestLevel]);
 
   const pasteRef = useRef<HTMLTextAreaElement>(null);
   const extractorContentRef = useRef<HTMLDivElement>(null);
@@ -1087,24 +1124,93 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           >
             <FileCode className="w-3 h-3" /> Template{hasCustomTemplate ? ' ✓' : ''}
           </button>
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setShowLevelPicker(!showLevelPicker)}
+              data-testid="button-level-picker"
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] transition-colors border whitespace-nowrap ${
+                selectedTestLevel !== null
+                  ? 'bg-violet-500/15 text-violet-400 border-violet-500/30'
+                  : 'bg-secondary/30 text-muted-foreground border-border/20 hover:text-foreground hover:bg-secondary/50'
+              }`}
+              title="Pick a test level (L0-L4) to run progressive bridge tests"
+            >
+              <TestTube2 className="w-3 h-3" />
+              {selectedTestLevel !== null ? TEST_LEVELS[selectedTestLevel]?.name : 'Test Level'}
+              <ChevronDown className="w-2.5 h-2.5" />
+            </button>
+            {showLevelPicker && (
+              <div className="absolute top-full left-0 mt-1 z-50 w-72 rounded-lg border border-border/40 bg-[hsl(220_20%_8%)] shadow-xl p-1.5" data-testid="level-picker-dropdown">
+                <div className="text-[8px] text-muted-foreground/60 uppercase tracking-wider px-2 py-1 mb-0.5">Progressive Test Levels</div>
+                {TEST_LEVELS.map(level => (
+                  <button
+                    key={level.id}
+                    data-testid={`button-select-level-${level.id}`}
+                    onClick={() => { setSelectedTestLevel(level.id); setShowLevelPicker(false); }}
+                    className={`w-full flex items-start gap-2 px-2 py-1.5 rounded text-left transition-colors ${
+                      selectedTestLevel === level.id
+                        ? 'bg-primary/15 text-primary'
+                        : 'hover:bg-secondary/40 text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Gauge className="w-3 h-3 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-medium">{level.name} <span className="text-[8px] opacity-60">{level.est}</span></div>
+                      <div className="text-[8px] opacity-60 leading-tight">{level.desc}</div>
+                    </div>
+                  </button>
+                ))}
+                <div className="border-t border-border/20 mt-1 pt-1">
+                  <button
+                    data-testid="button-select-level-legacy"
+                    onClick={() => { setSelectedTestLevel(null); setShowLevelPicker(false); }}
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors ${
+                      selectedTestLevel === null
+                        ? 'bg-primary/15 text-primary'
+                        : 'hover:bg-secondary/40 text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Zap className="w-3 h-3 shrink-0" />
+                    <div className="text-[10px] font-medium">Legacy P3 <span className="text-[8px] opacity-60">original prompt</span></div>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <button
             onClick={browseRunning ? () => { browseAbortRef.current?.abort(); } : runGrokBrowse}
             data-testid="button-run-grok-browse"
             className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] transition-colors border shrink-0 whitespace-nowrap ${browseRunning ? 'bg-red-500/15 text-red-400 border-red-500/30 hover:bg-red-500/25' : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'}`}
-            title={browseRunning ? 'Stop the running Phase 3 test' : 'Run Phase 3: Send stress-test prompt to Grok-4 via Responses API — Grok uses browse_page to call bridge endpoints for real'}
+            title={browseRunning ? 'Stop the running test' : `Run ${selectedTestLevel !== null ? TEST_LEVELS[selectedTestLevel]?.name : 'Phase 3'}: Send prompt to Grok-4 via Responses API`}
           >
-            {browseRunning ? <><X className="w-3 h-3" /> Stop</> : <><Zap className="w-3 h-3" /> Phase 3</>}
+            {browseRunning ? <><X className="w-3 h-3" /> Stop</> : <><Play className="w-3 h-3" /> Run</>}
           </button>
           <button
             onClick={async () => {
               try {
-                const resp = await fetch('/stress-test-phase123/phase3-prompt-sent-to-grok.txt');
-                if (!resp.ok) { alert('Could not load phase3 prompt file'); return; }
-                const promptText = await resp.text();
+                let promptText: string;
+                const level = TEST_LEVELS.find(l => l.id === selectedTestLevel);
+                if (level) {
+                  const [headerResp, levelResp, freshEndpoints] = await Promise.all([
+                    fetch('/stress-test-phase123/levels/shared-header.txt'),
+                    fetch(`/stress-test-phase123/levels/${level.file}`),
+                    fetchFreshBridgeEndpoints(activeProject || 'groks-app'),
+                  ]);
+                  if (!headerResp.ok || !levelResp.ok) { alert('Could not load level prompt files'); return; }
+                  const relayBase = extractBaseUrl(freshEndpoints.cmdUrl || freshEndpoints.snapUrl || freshEndpoints.proxyUrl || '');
+                  const proj = activeProject || 'groks-app';
+                  promptText = ((await headerResp.text()) + '\n' + (await levelResp.text()))
+                    .replace(/\{\{RELAY_BASE\}\}/g, relayBase)
+                    .replace(/\{\{PROJECT\}\}/g, proj);
+                } else {
+                  const resp = await fetch('/stress-test-phase123/phase3-prompt-sent-to-grok.txt');
+                  if (!resp.ok) { alert('Could not load phase3 prompt file'); return; }
+                  promptText = await resp.text();
+                }
                 await navigator.clipboard.writeText(promptText);
                 const convo: Conversation = {
                   id: crypto.randomUUID(),
-                  title: 'Phase 3 prompt (copied to clipboard)',
+                  title: level ? `${level.name} prompt (copied)` : 'Phase 3 prompt (copied to clipboard)',
                   messages: [{ role: 'user', content: promptText }],
                   model: 'grok-4',
                   createdAt: Date.now(),
@@ -1116,9 +1222,9 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
             }}
             data-testid="button-copy-phase3-prompt"
             className="flex items-center gap-1 px-2 py-1 rounded text-[9px] transition-colors border shrink-0 whitespace-nowrap bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
-            title="Copy Phase 3 prompt to clipboard and show it in the API tab — paste into Grok on browser for live feedback"
+            title="Copy selected test level prompt to clipboard — paste into Grok on browser for live feedback"
           >
-            <Copy className="w-3 h-3" /> Copy P3
+            <Copy className="w-3 h-3" /> Copy
           </button>
           {browseEvents.length > 0 && !showBrowseResults && (
             <button

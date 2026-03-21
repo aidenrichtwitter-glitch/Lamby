@@ -1,0 +1,55 @@
+{
+  "levels": [
+    {
+      "id": 0,
+      "name": "Read-Only",
+      "file": "level-0-readonly.txt",
+      "description": "Bridge connectivity — zero writes, just read endpoints",
+      "icon": "eye",
+      "color": "blue",
+      "passCriteria": "All 8 coord notes posted, all endpoints returned valid data, zero writes",
+      "estimatedMinutes": 2
+    },
+    {
+      "id": 1,
+      "name": "Single Write",
+      "file": "level-1-single-write.txt",
+      "description": "Create one new file via write_file and verify it",
+      "icon": "file-plus",
+      "color": "green",
+      "passCriteria": "BridgeTest.tsx created, verified via tree+read, console clean",
+      "estimatedMinutes": 3
+    },
+    {
+      "id": 2,
+      "name": "Read-Modify-Write",
+      "file": "level-2-read-modify-write.txt",
+      "description": "Read existing file, modify it, write back, verify, restore",
+      "icon": "edit",
+      "color": "amber",
+      "passCriteria": "Dashboard.tsx modified then restored, both states verified",
+      "estimatedMinutes": 4
+    },
+    {
+      "id": 3,
+      "name": "Multi-File + Git",
+      "file": "level-3-multi-file-git.txt",
+      "description": "Create Metrics page, wire routing + nav, git commit — the full stress test",
+      "icon": "git-branch",
+      "color": "purple",
+      "passCriteria": "Metrics.tsx created, App+Nav updated, console clean, git committed with insertions",
+      "estimatedMinutes": 8
+    },
+    {
+      "id": 4,
+      "name": "Creative Build",
+      "file": "level-4-creative-build.txt",
+      "description": "Design and build a Settings page autonomously from a high-level goal",
+      "icon": "wand",
+      "color": "rose",
+      "passCriteria": "Settings page with theme toggle + profile, 120+ lines, properly wired, committed",
+      "estimatedMinutes": 12
+    }
+  ],
+  "sharedHeader": "shared-header.txt"
+}

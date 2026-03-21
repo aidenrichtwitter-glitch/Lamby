@@ -1,0 +1,67 @@
+=== LEVEL 2: READ-MODIFY-WRITE TEST ===
+=== OBJECTIVE: Read an existing file, make a small change, write it back, verify ===
+
+You will modify ONE existing file using the read → modify → write_file pattern.
+This tests the most important skill: safely editing existing code.
+
+IMPORTANT: Do NOT use grok-write (search/replace) for this test. Use write_file to overwrite the entire file.
+This is the reliable approach that has been stress-tested and confirmed working.
+
+STEPS (do them in order, post to coord after each):
+
+1. DISCOVERY: Call /api/diag?project={{PROJECT}}
+   → Post to coord: "L2-S1: diag OK, relay online"
+
+2. READ THE TARGET FILE: Call /api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
+   → Study the content carefully. Note the exact structure and all existing code.
+   → Post to coord: "L2-S2: Dashboard.tsx read OK, [N] chars, [N] lines"
+
+3. MODIFY THE CONTENT: In your response, take the ENTIRE file content from step 2.
+   Add this comment block at the very top of the file (before any imports):
+   // Bridge Test L2: Modified by Grok-4 at {{TIMESTAMP}}
+   // This comment proves read-modify-write works correctly.
+
+   Keep ALL existing code exactly as-is. Only add those 2 comment lines at the top.
+   → Post to coord: "L2-S3: content modified, adding 2-line comment header"
+
+4. WRITE IT BACK: Use grok-proxy + write_file to overwrite src/pages/Dashboard.tsx with the modified content.
+   CRITICAL: The content must include the ENTIRE original file plus your 2-line comment.
+   Do NOT send just the comment — send the WHOLE file.
+   → Post to coord: "L2-S4: write_file sent for Dashboard.tsx, [N] chars"
+
+5. VERIFY CONTENT: Call /api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
+   → Confirm the file starts with your "// Bridge Test L2:" comment
+   → Confirm the rest of the file is unchanged from step 2
+   → Post to coord: "L2-S5: Dashboard.tsx verified, comment present, original code intact"
+   → If the comment is missing: Post failure, re-read, and retry steps 3-5
+
+6. CONSOLE CHECK: Use grok-proxy + get_console_errors
+   → Post to coord: "L2-S6: console [clean/errors]"
+   → If errors: The modification broke something. Read the error, fix the file, retry.
+
+7. RESTORE ORIGINAL: Use grok-proxy + write_file to write back the ORIGINAL content from step 2
+   (without the comment lines). This leaves the project clean.
+   → Post to coord: "L2-S7: Dashboard.tsx restored to original content"
+
+8. VERIFY RESTORE: Call /api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
+   → Confirm the comment is gone and the file matches the original from step 2
+   → Post to coord: "L2-S8: restore verified, file matches original"
+
+9. FINAL: Post to coord: "L2 COMPLETE: Read-modify-write cycle succeeded. File modified, verified, and restored."
+
+=== PASS CRITERIA ===
+- All coord notes posted (L2-S1 through L2-S8 + final)
+- Step 5 verification shows the comment was added correctly
+- Step 6 console check is clean
+- Step 8 verification shows the file was restored to its original state
+- No other files were modified
+- No git commit was made
+
+=== FAIL CONDITIONS ===
+- Dashboard.tsx content corrupted (missing code, truncated, garbled)
+- Comment not present after write
+- Original code not intact after modification
+- File not properly restored in step 7
+- Console errors after modification
+- Any other file modified
+- Coord notes missing

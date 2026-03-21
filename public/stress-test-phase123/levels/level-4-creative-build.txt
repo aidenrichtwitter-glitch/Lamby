@@ -1,0 +1,89 @@
+=== LEVEL 4: CREATIVE AUTONOMOUS BUILD ===
+=== OBJECTIVE: Design and build a Settings page from a high-level goal ===
+
+This tests your ability to go beyond mechanical follow-through and build something creative.
+
+YOUR GOAL: Build a Settings page for the app with these features:
+1. Theme toggle (light/dark mode switch)
+2. User profile section (name, avatar placeholder, email display)
+3. Notification preferences (toggles for email, push, in-app)
+4. App info section (version number, build date, links)
+
+You must design the component yourself — there is no template to copy.
+The page must look polished and be fully functional (toggles actually toggle, theme actually switches).
+
+APPROACH:
+1. First, study the existing app's style by reading 2-3 existing pages (Dashboard, Activity, etc.)
+2. Match the existing design patterns (imports, component structure, styling approach)
+3. Build the Settings page to look like it belongs in the app
+4. Wire it into routing and navigation
+
+STEPS (post to coord after each):
+
+1. DISCOVERY + STUDY: Call diag, then read 2 existing pages to understand the design patterns
+   → Post to coord: "L4-S1: studied [page1] and [page2], uses [tailwind/css modules/etc]"
+
+2. READ APP + NAV: Read App routing file and Navigation.tsx to understand the structure
+   → Post to coord: "L4-S2: App has [N] routes, Nav has [N] items, icon library: [lucide/etc]"
+
+3. DESIGN PLAN: Before writing any code, post your design plan to coord:
+   → Post to coord: "L4-S3: Settings plan: [brief description of layout/sections/approach]"
+
+4. CREATE SETTINGS PAGE: Use grok-proxy + write_file to create src/pages/Settings.tsx
+   Requirements:
+   - Must be a real, working React component (not a placeholder)
+   - Must match the app's existing style and patterns
+   - Theme toggle must use useState and actually apply a class
+   - Profile section must have editable fields (even if just local state)
+   - At least 120 lines of real code
+   - Use the same icon library as other pages
+   → Post to coord: "L4-S4: Settings.tsx created, [N] chars, [N] lines"
+
+5. VERIFY SETTINGS: grok-tree + grok-read
+   → Post to coord: "L4-S5: Settings.tsx verified, [N] chars"
+
+6. UPDATE APP ROUTING: Read → modify → write_file entire App file
+   → Post to coord: "L4-S6: App.tsx updated with Settings route"
+
+7. VERIFY APP: grok-read → confirm Settings import + route
+   → Post to coord: "L4-S7: App.tsx verified"
+
+8. UPDATE NAVIGATION: Read → modify → write_file Navigation.tsx (add Settings nav item with Settings icon)
+   → Post to coord: "L4-S8: Navigation.tsx updated with Settings nav"
+
+9. VERIFY NAVIGATION: grok-read → confirm settings nav item, no duplicates
+   → Post to coord: "L4-S9: Nav verified"
+
+10. CONSOLE CHECK: get_console_errors
+    → Post to coord: "L4-S10: console [clean/errors]"
+
+11. SCREENSHOT: /api/screenshot with waitMs=10000
+    Navigate to the Settings page if possible (add ?page=settings or check the URL pattern)
+    → Post to coord: "L4-S11: screenshot captured"
+
+12. GIT: add + commit with message "Level 4: Add Settings page with theme toggle and user profile"
+    → Post to coord: "L4-S12: committed [hash]"
+
+13. VERIFY COMMIT: git log + diff stat
+    → Post to coord: "L4-S13: commit verified, [N] files, [N] insertions"
+
+=== REVIEW STAGE ===
+14. Re-read Settings.tsx, App file, Navigation.tsx
+15. Check console errors
+16. Post to coord: "L4 REVIEW: [PASS/FAIL] — Settings [present/missing] [N lines], App [updated], Nav [updated], console [clean], commit [verified]"
+
+=== PASS CRITERIA ===
+- Settings.tsx exists with 120+ lines of real, working React code
+- Theme toggle, profile section, notification toggles, and app info are all present
+- Component matches the app's existing design patterns
+- Routing and navigation properly wired
+- Console clean, git committed
+- All coord notes posted
+
+=== FAIL CONDITIONS ===
+- Settings page is a placeholder or has fewer than 120 lines
+- Toggles don't actually work (no useState)
+- Design doesn't match the rest of the app
+- Missing from routing or navigation
+- Console errors
+- Coord notes missing

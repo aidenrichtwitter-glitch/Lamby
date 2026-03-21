@@ -1,0 +1,109 @@
+=== LEVEL 3: MULTI-FILE + GIT COMMIT TEST ===
+=== OBJECTIVE: Create a new page, wire it into routing and navigation, commit to git ===
+
+This is the full stress test. You will:
+- Create a brand new page component
+- Add it to the app's routing
+- Add it to the navigation menu
+- Verify everything compiles
+- Commit to git
+
+CRITICAL APPROACH — USE write_file FOR EVERYTHING:
+For ALL file writes (new AND existing), use grok-proxy + write_file to overwrite the entire file.
+Do NOT use grok-write (search/replace) — it is fragile and has failed 4 times in previous runs.
+For existing files: grok-read the file → modify the content → write_file the entire modified content.
+
+STEPS:
+
+0. CLEANUP: Call /api/grok-git?project={{PROJECT}}&action=status
+   → If dirty, investigate. Do NOT delete files — deletions get committed later.
+   → Post to coord: "L3-S0: git [clean/dirty], [details]"
+
+1. READ TREE: Call /api/grok-tree?project={{PROJECT}}
+   → Post to coord: "L3-S1: [N] files, Metrics.tsx [present/missing]"
+
+2. READ ENTRY POINT: Call /api/grok-read?project={{PROJECT}}&path=src/index.tsx
+   → Find the real App import path (e.g., './components/App' or './App')
+   → Then read that App file
+   → Post to coord: "L3-S2: App at [path], [N] page routes"
+
+3. READ NAVIGATION: Call /api/grok-read for Navigation.tsx (check path from tree)
+   → Note exact NAV_ITEMS array contents and all imports
+   → Post to coord: "L3-S3: [N] nav items, imports [list]"
+
+4. CREATE METRICS PAGE: Use grok-proxy + write_file to create src/pages/Metrics.tsx
+   The file should be a real React component with:
+   - At least 3 metric cards (bridge latency, uptime, requests)
+   - useState hooks for interactivity
+   - Proper TypeScript types
+   - Dark mode support via CSS classes
+   - At least 80 lines of real code (not placeholder/lorem ipsum)
+   USE SINGLE write_file (not write_file_chunk) — keep under 5KB.
+   → Post to coord: "L3-S4: Metrics.tsx write_file sent ([N] chars)"
+
+5. VERIFY METRICS: Call grok-tree AND grok-read for src/pages/Metrics.tsx
+   → BOTH must confirm the file exists with correct content
+   → Post to coord: "L3-S5: Metrics.tsx verified, [N] chars, tree [present]"
+   → If MISSING or EMPTY: STOP. Post failure. Retry step 4. Do NOT continue.
+
+6. UPDATE APP ROUTING: grok-read the App file → add Metrics import + route → write_file entire file
+   → Post to coord: "L3-S6: App.tsx write_file sent (added Metrics import + route)"
+
+7. VERIFY APP: grok-read App file → confirm Metrics import AND route entry present
+   → Post to coord: "L3-S7: App.tsx verified, Metrics import [yes/no], route [yes/no]"
+   → If either missing: STOP. Read the file again, fix, rewrite. Do NOT continue.
+
+8. UPDATE NAVIGATION: grok-read Navigation.tsx → add metrics nav item to NAV_ITEMS → write_file
+   CRITICAL: Check for duplicate imports. Do NOT add an import that already exists.
+   → Post to coord: "L3-S8: Navigation.tsx write_file sent (added metrics nav)"
+
+9. VERIFY NAVIGATION: grok-read Navigation.tsx → confirm metrics in NAV_ITEMS, no duplicate imports
+   → Post to coord: "L3-S9: Navigation.tsx verified, metrics nav [yes/no], duplicates [yes/no]"
+   → If nav item missing or duplicates found: Fix and rewrite.
+
+10. CONSOLE CHECK: Use grok-proxy + get_console_errors
+    → Post to coord: "L3-S10: console [clean/N errors]"
+    → If errors: Fix them before continuing. Do NOT commit with errors.
+
+11. SCREENSHOT: Call /api/screenshot/{{PROJECT}}?fullPage=true&waitMs=10000
+    → Post to coord: "L3-S11: screenshot taken"
+
+12. PRE-COMMIT CHECK: grok-tree must show Metrics.tsx. grok-git status must show all 3 files.
+    → Post to coord: "L3-S12: pre-commit [OK/PROBLEM: details]"
+    → If ANY expected file missing from status: DO NOT COMMIT. Fix first.
+
+13. GIT ADD: /api/grok-git?project={{PROJECT}}&action=add&args=.
+    → Post to coord: "L3-S13: git add completed"
+
+14. GIT COMMIT: /api/grok-git?project={{PROJECT}}&action=commit&message=Level 3: Add Metrics page with routing and navigation
+    → CHECK the response. If "nothing to commit": something went wrong.
+    → Post to coord: "L3-S14: committed [hash] / FAILED: [reason]"
+
+15. VERIFY COMMIT: grok-git log&count=3 → confirm hash. grok-git diff HEAD~1..HEAD --stat → confirm adds.
+    → Post to coord: "L3-S15: commit verified, [N] files changed, [N] insertions"
+    → If the diff shows only deletions: THE COMMIT IS WRONG. Report immediately.
+
+=== REVIEW STAGE (MANDATORY) ===
+16. Re-read src/pages/Metrics.tsx — paste first 5 lines to prove it exists
+17. Re-read App file — confirm Metrics import + route
+18. Re-read Navigation.tsx — confirm metrics nav item, no duplicate imports
+19. Check git diff stat — confirm the commit ADDS files
+20. Check console errors — confirm zero errors
+21. Post to coord: "L3 REVIEW: [PASS/FAIL] — Metrics [present/missing], App [updated/unchanged], Nav [updated/unchanged], diff [adds/deletes], console [clean/errors]"
+
+=== PASS CRITERIA ===
+- All coord notes posted (L3-S0 through L3-S15 + review)
+- Metrics.tsx exists with real component code (80+ lines)
+- App routing includes Metrics import and route
+- Navigation includes metrics nav item, no duplicate imports
+- Console is clean
+- Git commit exists with correct files (insertions, not just deletions)
+- Review stage confirms all checks pass
+
+=== FAIL CONDITIONS ===
+- Any file missing or unchanged after write
+- Git commit contains only deletions
+- Console errors after edits
+- Duplicate imports in Navigation.tsx
+- Coord notes missing
+- Review stage shows failures but "PASS" is claimed
