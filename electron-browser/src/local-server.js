@@ -84,9 +84,11 @@ let bridgeConnector = null;
 
 function createBridgeConnector() {
   const relayUrl = bridgeConfig.relayUrl || CANONICAL_RELAY_URL;
+  const projectName = bridgeConfig.projectName || "";
 
   bridgeConnector = createConnector({
     relayUrl,
+    projectName,
     projectDir: PROJECTS_DIR,
     onMessage: async (msg, send) => {
       if (msg.type === "snapshot-request" && msg.requestId) {
@@ -836,7 +838,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
     try {
       const body = JSON.parse(await readBody(req));
-      bridgeConfig = { relayUrl: body.relayUrl || "" };
+      bridgeConfig = { relayUrl: body.relayUrl || "", projectName: body.projectName || bridgeConfig.projectName || "" };
       saveBridgeConfig(bridgeConfig);
       connectToBridgeRelay();
       sendJson(res, { success: true });

@@ -5541,8 +5541,19 @@ const GrokBridge: React.FC = () => {
                           setCommandEndpoint(`${base}/api/sandbox/execute`);
                           setExternalSnapshotUrl(`${base}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
                           setExternalCommandEndpoint(`${base}/api/sandbox/execute`);
-                          if (bridgeWsRef.current) { try { bridgeWsRef.current.close(); } catch {} bridgeWsRef.current = null; }
-                          connectToBridge(devUrl, activeProject || 'default');
+                          if (isElectron) {
+                            const proj = activeProject || 'default';
+                            try {
+                              const ipcRenderer = (window as any).require('electron').ipcRenderer;
+                              await ipcRenderer.invoke('bridge-config-save', { relayUrl: devUrl, projectName: proj });
+                            } catch {
+                              try { await fetch('http://localhost:4999/api/bridge-config-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ relayUrl: devUrl, projectName: proj }) }); } catch {}
+                            }
+                            setBridgeStatus('connecting');
+                          } else {
+                            if (bridgeWsRef.current) { try { bridgeWsRef.current.close(); } catch {} bridgeWsRef.current = null; }
+                            connectToBridge(devUrl, activeProject || 'default');
+                          }
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
                           bridgeMode === 'dev'
@@ -5564,8 +5575,19 @@ const GrokBridge: React.FC = () => {
                           setCommandEndpoint(`${prodBase}/api/sandbox/execute`);
                           setExternalSnapshotUrl(`${prodBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
                           setExternalCommandEndpoint(`${prodBase}/api/sandbox/execute`);
-                          if (bridgeWsRef.current) { try { bridgeWsRef.current.close(); } catch {} bridgeWsRef.current = null; }
-                          connectToBridge(prodUrl, activeProject || 'default');
+                          if (isElectron) {
+                            const proj = activeProject || 'default';
+                            try {
+                              const ipcRenderer = (window as any).require('electron').ipcRenderer;
+                              await ipcRenderer.invoke('bridge-config-save', { relayUrl: prodUrl, projectName: proj });
+                            } catch {
+                              try { await fetch('http://localhost:4999/api/bridge-config-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ relayUrl: prodUrl, projectName: proj }) }); } catch {}
+                            }
+                            setBridgeStatus('connecting');
+                          } else {
+                            if (bridgeWsRef.current) { try { bridgeWsRef.current.close(); } catch {} bridgeWsRef.current = null; }
+                            connectToBridge(prodUrl, activeProject || 'default');
+                          }
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
                           bridgeMode === 'production'
