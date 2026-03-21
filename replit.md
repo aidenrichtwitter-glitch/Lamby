@@ -100,6 +100,17 @@ supabase/
 - Readiness is scoped per-prompt: `grok-send-prompt` snapshots baseline signal counts (copy buttons, reactions, follow-ups) before sending. `grok-check-response-ready` only triggers "ready" when signal counts INCREASE beyond that baseline — old responses from previous projects are ignored.
 - Manual send detection: A background watcher (3s interval) calls `grok-snapshot-baseline` to check if Grok is generating without the app having sent a prompt. If detected, it snapshots the baseline and starts the same polling loop to auto-capture and process the response.
 
+## Lamby Bridge Relay — SEPARATE APPLICATION
+The Bridge Relay is a **completely separate Replit application** — it is NOT part of this codebase and does NOT run here. The relay is deployed independently:
+- **Dev relay**: `https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev` (separate Repl)
+- **Production relay**: `https://bridge-relay.replit.app` (separate deployed Repl)
+- **Relay source**: `server/bridge-relay.cjs` is a **reference copy** of the relay code — editing it here does NOT change the running relays. Changes must be deployed to the separate relay Repls.
+- **Desktop connector**: `server/bridge-connector.cjs` runs on the user's local machine inside the Electron app. It connects TO the relay via WebSocket.
+- **Browser connector**: `connectToBridge()` in `GrokBridge.tsx` connects to the relay via browser WebSocket API. Both desktop and browser use the same relay.
+- **Connection URL pattern**: `wss://<relay-host>/bridge-ws?project=<PROJECT_NAME>` — no auth keys, the URL itself is the security boundary.
+- **How it works**: Clients (desktop or browser) connect via WebSocket to the relay. The relay forwards snapshot/sandbox requests between Grok (via HTTP API) and the connected client. The client responds with local project data.
+- **Key rule**: This app's Vite dev server and the relay are unrelated servers. Never confuse API calls to this app's backend (`/api/...` relative URLs) with API calls to the relay (`https://<relay-host>/api/...` absolute URLs).
+
 ## Function Calling (Grok ↔ Bridge Relay)
 - **Endpoint**: `POST /api/grok-responses` in `vite.config.ts` — handles full xAI Responses API loop with function calling
 - **Flow**: Client sends messages → server calls xAI `/v1/responses` with 10 function tools → when Grok returns `function_call`, server executes it against the bridge relay → feeds result back as `function_call_output` → loops until Grok returns final text
