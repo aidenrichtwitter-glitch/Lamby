@@ -173,12 +173,21 @@ These replaced the old base64-encoded `grok-proxy` system. All live on the relay
 - API endpoint: `https://api.x.ai/v1/chat/completions`
 - Models: `grok-3-mini` (fast), `grok-4` (full power)
 
-### Known Bridge Bugs
+### Known Bridge Bugs & Limitations (Stress-Tested 2026-03-21)
 - **`grok-read` multi-file**: Returns only 1 result regardless of file count
 - **`grok-tree` filter**: Leaks non-matching directory entries
+- **`grok-run` command whitelist**: Only `npm`, `node`, `echo` allowed. Filesystem commands (`dir`, `cd`, `type`, `Get-ChildItem`, `ls`) are BLOCKED. Use `grok-tree` for listing, `grok-read` for reading. Param is `command` (not `cmd`).
 - **`grok-run` nested quotes**: Get shell-mangled
 - **`grok-git` no action**: Silently defaults to status
+- **`grok-git` reset --hard**: Sanitized to `--soft` by bridge — no destructive resets possible. Must manually restore files via write_file/delete_file.
 - **`grok-quality` / `grok-deps`**: 5s+ response time, freeze WebSocket — avoid in normal use
+- **`grok-proxy` encoding**: Base64 payload MUST be `encodeURIComponent`-encoded (base64 contains `+` and `=` that break URLs). Project field MUST be inside each action object, not just the query param.
+- **write_file max safe size**: ~3.5KB content (URL ~5KB). Beyond that use write_file_chunk with ~1500-char chunks and 100-150ms delay between requests.
+- **delete_file safety**: ALWAYS check imports before deleting — removing a file still imported by App.tsx crashes the entire app.
+
+### Stress Test Reference Files
+- **`public/grok-prompt-template.txt`** — Production Grok prompt with all verified endpoints, rules, and workflow
+- **`public/bridge-test-reference.txt`** — Complete test results, all 113 commands, encoding steps, write methods, and failure modes
 
 ## Function Calling (Grok ↔ Bridge Relay)
 - **Endpoint**: `POST /api/grok-responses` in `vite.config.ts` — handles full xAI Responses API loop with function calling
