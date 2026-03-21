@@ -1697,6 +1697,7 @@ const GrokBridge: React.FC = () => {
     try { return (localStorage.getItem('lamby-bridge-mode') as 'dev' | 'production') || 'production'; } catch { return 'production'; }
   });
   const [serverDevRelayUrl, setServerDevRelayUrl] = useState<string>('');
+  const bridgeWsRef = useRef<WebSocket | null>(null);
   const [browserUrl, setBrowserUrl] = useState('https://grok.com');
   const [customUrl, setCustomUrl] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -3985,6 +3986,66 @@ const GrokBridge: React.FC = () => {
   const [editableContext, setEditableContext] = useState('');
   const contextEditorRef = useRef<HTMLTextAreaElement>(null);
 
+  const connectToBridge = useCallback((relayWsUrl: string, project: string) => {
+    if (bridgeWsRef.current) {
+      const s = bridgeWsRef.current.readyState;
+      if (s === WebSocket.OPEN || s === WebSocket.CONNECTING) return;
+      bridgeWsRef.current = null;
+    }
+
+    const wsUrl = `${relayWsUrl.replace(/\/$/, '')}/bridge-ws?project=${encodeURIComponent(project || 'default')}`;
+    setBridgeStatus('connecting');
+
+    const ws = new WebSocket(wsUrl);
+    bridgeWsRef.current = ws;
+
+    ws.onopen = () => {
+      setBridgeStatus('connected');
+      setStatusMessage('Bridge connected');
+    };
+
+    ws.onmessage = async (event) => {
+      try {
+        const msg = JSON.parse(typeof event.data === 'string' ? event.data : await event.data.text());
+        if (msg.type === 'ping') {
+          ws.send(JSON.stringify({ type: 'pong' }));
+          return;
+        }
+        if (msg.type === 'snapshot-request' && msg.requestId) {
+          try {
+            const snapRes = await fetch(`/api/snapshot/${encodeURIComponent(msg.projectName || project || 'default')}`);
+            const snapshot = await snapRes.text();
+            ws.send(JSON.stringify({ type: 'snapshot-response', requestId: msg.requestId, snapshot }));
+          } catch (e: any) {
+            ws.send(JSON.stringify({ type: 'snapshot-response', requestId: msg.requestId, snapshot: `Error: ${e.message}` }));
+          }
+          return;
+        }
+        if (msg.type === 'sandbox-execute-request' && msg.requestId) {
+          try {
+            const execRes = await fetch('/api/sandbox/execute', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ actions: msg.actions }),
+            });
+            const result = await execRes.json();
+            ws.send(JSON.stringify({ type: 'sandbox-execute-response', requestId: msg.requestId, result }));
+          } catch (e: any) {
+            ws.send(JSON.stringify({ type: 'sandbox-execute-response', requestId: msg.requestId, result: { error: e.message } }));
+          }
+          return;
+        }
+      } catch {}
+    };
+
+    ws.onclose = () => {
+      if (bridgeWsRef.current === ws) bridgeWsRef.current = null;
+      setBridgeStatus('disconnected');
+    };
+
+    ws.onerror = () => {};
+  }, []);
+
   useEffect(() => {
     async function fetchSnapshotInfo() {
       let relayData: any = null;
@@ -4036,18 +4097,14 @@ const GrokBridge: React.FC = () => {
         setCommandEndpoint(`${serverBase}/api/sandbox/execute`);
         setExternalSnapshotUrl(`${serverBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
         setExternalCommandEndpoint(`${serverBase}/api/sandbox/execute`);
-        setBridgeStatus('connected');
+        if (!bridgeWsRef.current || bridgeWsRef.current.readyState !== WebSocket.OPEN) {
+          connectToBridge(devRelayUrl, activeProject || 'default');
+        }
       }
     }
     fetchSnapshotInfo();
-    let fastPollCount = 0;
-    const fastPollId = setInterval(() => {
-      fastPollCount++;
-      if (fastPollCount >= 5) { clearInterval(fastPollId); return; }
-      fetchSnapshotInfo();
-    }, 2000);
-    const interval = setInterval(fetchSnapshotInfo, 15000);
-    return () => { clearInterval(fastPollId); clearInterval(interval); };
+    const interval = setInterval(fetchSnapshotInfo, 30000);
+    return () => { clearInterval(interval); };
   }, [activeProject]);
 
   const estimateTokens = useCallback((text: string): number => {
@@ -5478,8 +5535,8 @@ const GrokBridge: React.FC = () => {
                           setBridgeRelayUrl(devUrl);
                           setExternalSnapshotUrl(`${base}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
                           setExternalCommandEndpoint(`${base}/api/sandbox/execute`);
-                          setBridgeStatus('connected');
-                          setStatusMessage('Dev relay: Connected (local server)');
+                          if (bridgeWsRef.current) { try { bridgeWsRef.current.close(); } catch {} bridgeWsRef.current = null; }
+                          connectToBridge(devUrl, activeProject || 'default');
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
                           bridgeMode === 'dev'
@@ -5499,21 +5556,8 @@ const GrokBridge: React.FC = () => {
                           setBridgeRelayUrl(prodUrl);
                           setExternalSnapshotUrl(`${prodBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
                           setExternalCommandEndpoint(`${prodBase}/api/sandbox/execute`);
-                          setStatusMessage('Checking Production relay...');
-                          try {
-                            const statusRes = await fetch(`${prodBase}/api/bridge-status`).catch(() => null);
-                            const statusData = statusRes?.ok ? await statusRes.json().catch(() => null) : null;
-                            if (statusData?.status === 'connected' || statusData?.connectedClients > 0) {
-                              setBridgeStatus('connected');
-                              setStatusMessage(`Production relay: Connected (${statusData.connectedClients || 1} client${(statusData.connectedClients || 1) > 1 ? 's' : ''})`);
-                            } else {
-                              setBridgeStatus('disconnected');
-                              setStatusMessage('Production relay: No desktop connector connected');
-                            }
-                          } catch {
-                            setBridgeStatus('disconnected');
-                            setStatusMessage('Production relay: Could not reach');
-                          }
+                          if (bridgeWsRef.current) { try { bridgeWsRef.current.close(); } catch {} bridgeWsRef.current = null; }
+                          connectToBridge(prodUrl, activeProject || 'default');
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
                           bridgeMode === 'production'
@@ -5571,17 +5615,19 @@ const GrokBridge: React.FC = () => {
                         <button
                           data-testid="button-reconnect-bridge"
                           onClick={async () => {
-                            try {
-                              if (isElectron) {
-                                try {
-                                  const ipcRenderer = (window as any).require('electron').ipcRenderer;
-                                  await ipcRenderer.invoke('bridge-reconnect');
-                                } catch {
-                                  await fetch('http://localhost:4999/api/bridge-reconnect');
-                                }
+                            if (isElectron) {
+                              try {
+                                const ipcRenderer = (window as any).require('electron').ipcRenderer;
+                                await ipcRenderer.invoke('bridge-reconnect');
+                                setStatusMessage('Bridge reconnecting...');
+                              } catch {
+                                try { await fetch('http://localhost:4999/api/bridge-reconnect'); setStatusMessage('Bridge reconnecting...'); } catch {}
                               }
-                              setStatusMessage('Bridge reconnecting...');
-                            } catch {}
+                            } else {
+                              if (bridgeWsRef.current) { try { bridgeWsRef.current.close(); } catch {} bridgeWsRef.current = null; }
+                              const url = bridgeRelayUrl || serverDevRelayUrl || `wss://${window.location.host}`;
+                              connectToBridge(url, activeProject || 'default');
+                            }
                           }}
                           className="px-2 py-1 rounded text-[9px] bg-muted text-muted-foreground hover:bg-muted/80 border border-border"
                         >
