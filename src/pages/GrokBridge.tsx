@@ -4423,7 +4423,6 @@ const GrokBridge: React.FC = () => {
 
       if (changedFiles.length > 0) active += `Recently changed files: ${changedFiles.join(', ')}\n\n`;
 
-      const task = taskOverride || userTask;
       active += `Primary task right now: `;
       if (task) {
         active += `${task}\n\n`;
