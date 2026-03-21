@@ -1325,7 +1325,8 @@ function executeSandboxAction(action, projectsDir, options) {
         }
         if (!previewPort) {
           try {
-            const ssOut = childProcess.execSync("ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo none", { cwd: dir, timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            const ssCmd = process.platform === "win32" ? "netstat -ano" : "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo none";
+            const ssOut = childProcess.execSync(ssCmd, { cwd: dir, timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
             const portMatches = ssOut.match(/:(\d{4,5})\s/g);
             if (portMatches) {
               const devPorts = portMatches.map(m => parseInt(m.slice(1))).filter(p => p >= 3000 && p <= 9999);
@@ -1404,12 +1405,20 @@ function executeSandboxAction(action, projectsDir, options) {
         }
         if (!previewPort) {
           try {
-            const ssOut = childProcess.execSync("ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo none", { cwd: dir, timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            const ssCmd = process.platform === "win32" ? "netstat -ano" : "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo none";
+            const ssOut = childProcess.execSync(ssCmd, { cwd: dir, timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
             const portMatches = ssOut.match(/:(\d{4,5})\s/g);
             if (portMatches) {
               const devPorts = portMatches.map(m => parseInt(m.slice(1))).filter(p => p >= 3000 && p <= 9999);
               if (devPorts.length > 0) previewPort = devPorts[0];
             }
+          } catch {}
+        }
+        if (!previewPort) {
+          try {
+            const probeScript = `const net=require("net");const ports=[3000,5173,5174,4200,8080,8000,3001];let i=0;function tryNext(){if(i>=ports.length){process.exit(1);return}const p=ports[i++];const s=new net.Socket();s.setTimeout(300);s.on("connect",()=>{process.stdout.write(String(p));s.destroy();process.exit(0)});s.on("error",tryNext);s.on("timeout",()=>{s.destroy();tryNext()});s.connect(p,"127.0.0.1")}tryNext()`;
+            const foundPort = childProcess.execSync(`node -e "${probeScript.replace(/"/g, '\\"')}"`, { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+            if (foundPort && /^\d+$/.test(foundPort)) previewPort = parseInt(foundPort);
           } catch {}
         }
         if (!previewUrl) previewUrl = previewPort ? `http://localhost:${previewPort}` : null;
@@ -1497,12 +1506,20 @@ function executeSandboxAction(action, projectsDir, options) {
         }
         if (!previewPort) {
           try {
-            const ssOut = childProcess.execSync("ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo none", { cwd: dir, timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+            const ssCmd = process.platform === "win32" ? "netstat -ano" : "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo none";
+            const ssOut = childProcess.execSync(ssCmd, { cwd: dir, timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
             const portMatches = ssOut.match(/:(\d{4,5})\s/g);
             if (portMatches) {
               const devPorts = portMatches.map(m => parseInt(m.slice(1))).filter(p => p >= 3000 && p <= 9999);
               if (devPorts.length > 0) previewPort = devPorts[0];
             }
+          } catch {}
+        }
+        if (!previewPort) {
+          try {
+            const probeScript = `const net=require("net");const ports=[3000,5173,5174,4200,8080,8000,3001];let i=0;function tryNext(){if(i>=ports.length){process.exit(1);return}const p=ports[i++];const s=new net.Socket();s.setTimeout(300);s.on("connect",()=>{process.stdout.write(String(p));s.destroy();process.exit(0)});s.on("error",tryNext);s.on("timeout",()=>{s.destroy();tryNext()});s.connect(p,"127.0.0.1")}tryNext()`;
+            const foundPort = childProcess.execSync(`node -e "${probeScript.replace(/"/g, '\\"')}"`, { timeout: 5000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+            if (foundPort && /^\d+$/.test(foundPort)) previewPort = parseInt(foundPort);
           } catch {}
         }
         if (!previewUrl) previewUrl = previewPort ? `http://localhost:${previewPort}` : null;
