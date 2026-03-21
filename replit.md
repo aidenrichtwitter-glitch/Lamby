@@ -157,9 +157,9 @@ These replaced the old base64-encoded `grok-proxy` system. All live on the relay
 - **`grok-write`** — Edit files with auto-verify. Params: `project`, `path`, `search`, `replace` (URL-encoded)
 - **`grok-tree`** — File tree. Params: `project`, optional `filter`
 - **`grok-git`** — 16 git actions. Params: `project`, `action` (status/add/commit/diff/log/branch/checkout/stash/stash-pop/push/pull/merge/reset/revert/tag/init), plus `files`, `message`, `count`, `branch` as needed
-- **`grok-process`** — Process management. Params: `project`, `action` (list/start/stop/kill/restart/ports/env), `cmd`, `pid`
+- **`grok-process`** — Process management. Params: `project`, `action` (start/start-named/stop/list/logs/monitor/stop-all/restart), `cmd`, `pid`. NOTE: "ports" and "env" are NOT supported actions.
 - **`grok-search`** — Text/regex/symbol search. Params: `project`, `q`, optional `type=symbol`
-- **`grok-run`** — Run shell commands. Params: `project`, `cmd`
+- **`grok-run`** — Run shell commands. Params: `project`, `command` (NOT `cmd`). Whitelist: npm, node, echo only.
 - **`grok-macro/project-status`** — Combo: tree + package.json + git status + preview URL in 1 call
 - **`grok-macro/read-context`** — Combo: file content + imports analysis in 1 call
 - **`screenshot/:project`** — Fast screenshot. Params: `fullPage`, `waitMs`
