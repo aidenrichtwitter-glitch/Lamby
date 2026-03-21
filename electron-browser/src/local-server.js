@@ -51,7 +51,7 @@ try {
 
 
 const USER_DATA_DIR = _USER_DATA;
-const PROJECTS_DIR = process.env.PROJECT_DIR || path.join(USER_DATA_DIR, "projects");
+const PROJECTS_DIR = path.resolve(process.env.PROJECT_DIR || path.join(USER_DATA_DIR, "projects"));
 const BRIDGE_CONFIG_PATH = path.join(USER_DATA_DIR, "bridge-config.json");
 const PORT = parseInt(process.env.LAMBY_PORT || "4999", 10);
 
@@ -312,7 +312,12 @@ function resolveLocalBin(devCmd, projectDir) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  let rawUrl = req.url || "/";
+  const ampIdx = rawUrl.indexOf("&");
+  if (ampIdx > 0 && !rawUrl.includes("?")) {
+    rawUrl = rawUrl.substring(0, ampIdx) + "?" + rawUrl.substring(ampIdx + 1);
+  }
+  const url = new URL(rawUrl, `http://${req.headers.host || "localhost"}`);
   const pathname = url.pathname;
 
   res.setHeader("Access-Control-Allow-Origin", "*");

@@ -1703,18 +1703,30 @@ function createConnector(config) {
     }
 
     if (msg.type === "snapshot-request" && msg.requestId) {
-      log("info", `snapshot-request reqId=${msg.requestId.substring(0, 8)} project=${msg.project || "(none)"}`);
+      log("info", `snapshot-request reqId=${msg.requestId.substring(0, 8)} project=${msg.project || msg.projectName || "(none)"}`);
       const project = msg.project || msg.projectName || projectName || "";
       const projDir = resolveProjectDir(project);
-      let snapshot = `=== Lamby Bridge Connector Snapshot ===\nProject: ${project || "(default)"}\nDir: ${projDir}\nConnector: integrated module v2.0\nTime: ${new Date().toISOString()}\n\n`;
+      let snapshot = "";
       try {
-        const pkgPath = path.join(projDir, "package.json");
-        if (fs.existsSync(pkgPath)) snapshot += `=== package.json ===\n${fs.readFileSync(pkgPath, "utf-8")}\n\n`;
-      } catch {}
-      try {
-        const { stdout } = await execp("git status --short && git log --oneline -5", { cwd: projDir }).catch(() => ({ stdout: "" }));
-        if (stdout) snapshot += `=== git status + log ===\n${stdout}\n\n`;
-      } catch {}
+        const dispatcher = require(path.join(__dirname, "sandbox-dispatcher.cjs"));
+        if (dispatcher && typeof dispatcher.gatherProjectSnapshot === "function") {
+          const parentDir = path.dirname(projDir);
+          snapshot = dispatcher.gatherProjectSnapshot(project || path.basename(projDir), parentDir);
+        }
+      } catch (e) {
+        log("warn", `gatherProjectSnapshot failed: ${e.message}, using fallback`);
+      }
+      if (!snapshot || snapshot.startsWith("Error:")) {
+        snapshot = `=== Lamby Bridge Connector Snapshot ===\nProject: ${project || "(default)"}\nDir: ${projDir}\nConnector: integrated module v2.0\nTime: ${new Date().toISOString()}\n\n`;
+        try {
+          const pkgPath = path.join(projDir, "package.json");
+          if (fs.existsSync(pkgPath)) snapshot += `=== package.json ===\n${fs.readFileSync(pkgPath, "utf-8")}\n\n`;
+        } catch {}
+        try {
+          const { stdout } = await execp("git status --short && git log --oneline -5", { cwd: projDir }).catch(() => ({ stdout: "" }));
+          if (stdout) snapshot += `=== git status + log ===\n${stdout}\n\n`;
+        } catch {}
+      }
       send({ type: "snapshot-response", requestId: msg.requestId, snapshot });
       return;
     }

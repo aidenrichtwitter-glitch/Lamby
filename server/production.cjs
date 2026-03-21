@@ -262,7 +262,12 @@ function handleWsUpgrade(req, socket, bridgeKey, clientSnapshotKey) {
 }
 
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  let rawUrl = req.url || "/";
+  const ampIdx = rawUrl.indexOf("&");
+  if (ampIdx > 0 && !rawUrl.includes("?")) {
+    rawUrl = rawUrl.substring(0, ampIdx) + "?" + rawUrl.substring(ampIdx + 1);
+  }
+  const url = new URL(rawUrl, `http://${req.headers.host || "localhost"}`);
   const pathname = url.pathname;
 
   if (pathname === "/api/snapshot-key") {

@@ -224,7 +224,7 @@ function buildInstallCascade(pm) {
 
 function validateProjectPath(projectName, filePath, projectsDir) {
   if (projectName === "__main__") {
-    const projectRoot = path.dirname(projectsDir);
+    const projectRoot = path.resolve(path.dirname(projectsDir));
     if (!filePath) return { valid: true, resolved: projectRoot };
     const BLOCKED_MAIN_DIRS = new Set(["node_modules", ".git", "projects", ".local", ".agents", ".upm", ".config", ".cache", "dist", "attached_assets", "path", ".replit"]);
     const BLOCKED_MAIN_FILES = new Set([".env", ".env.local", ".env.development", ".env.production", ".gitattributes", ".gitignore", "bun.lock", "package-lock.json"]);
@@ -241,8 +241,9 @@ function validateProjectPath(projectName, filePath, projectsDir) {
   if (!projectName || /[\/\\]|\.\./.test(projectName) || projectName === '.' || projectName.startsWith('.')) {
     return { valid: false, resolved: "", error: "Invalid project name" };
   }
-  const projectDir = path.resolve(projectsDir, projectName);
-  if (!projectDir.startsWith(projectsDir + path.sep) && projectDir !== projectsDir) {
+  const absProjectsDir = path.resolve(projectsDir);
+  const projectDir = path.resolve(absProjectsDir, projectName);
+  if (!projectDir.startsWith(absProjectsDir + path.sep) && projectDir !== absProjectsDir) {
     return { valid: false, resolved: "", error: "Path traversal blocked" };
   }
   if (filePath) {

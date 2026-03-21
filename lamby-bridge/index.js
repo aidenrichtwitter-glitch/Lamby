@@ -605,7 +605,12 @@ function handleWsUpgrade(req, socket, clientProject) {
   });
 }
 const server = http.createServer({ maxHeaderSize: 1048576 }, async (req, res) => {
-  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  let rawUrl = req.url || "/";
+  const ampIdx = rawUrl.indexOf("&");
+  if (ampIdx > 0 && !rawUrl.includes("?")) {
+    rawUrl = rawUrl.substring(0, ampIdx) + "?" + rawUrl.substring(ampIdx + 1);
+  }
+  const url = new URL(rawUrl, `http://${req.headers.host || "localhost"}`);
   const pathname = url.pathname;
   const silent = pathname === "/" || pathname === "/api/status" || pathname === "/api/bridge-status" || pathname === "/health" || pathname === "/healthz";
   if (!silent) {
