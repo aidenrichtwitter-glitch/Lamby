@@ -4270,11 +4270,39 @@ const GrokBridge: React.FC = () => {
     const CHARS_BUDGET = 64000;
 
     try {
+      const freshCtx = await fetchFreshBridgeEndpoints(activeProject || '');
+      const ctxSnapUrl = freshCtx.snapUrl;
+      const ctxCmdUrl = freshCtx.cmdUrl;
+      const ctxBridgeOnline = freshCtx.online;
+
+      const task = taskOverride || userTask || '';
+
+      if (ctxBridgeOnline && ctxCmdUrl && activeProject) {
+        const relayBase = ctxSnapUrl.replace(/\/api\/snapshot\/.*$/, '');
+        let templateText = customPromptTemplate.trim();
+        if (!templateText) {
+          try {
+            const res = await fetch('/grok-prompt-template.txt');
+            if (res.ok) templateText = await res.text();
+          } catch {}
+        }
+        if (templateText) {
+          const taskLine = task ? `Primary task right now: ${task}` : '';
+          const result = templateText
+            .replace(/\{\{PROJECT\}\}/gi, activeProject)
+            .replace(/\{\{RELAY_BASE\}\}/gi, relayBase)
+            .replace(/\{\{TASK\}\}/gi, taskLine);
+          setProjectContext(result);
+          setContextLoading(false);
+          return result;
+        }
+      }
+
       if (customPromptTemplate.trim()) {
-        const task = taskOverride || userTask || '';
         const result = customPromptTemplate
           .replace(/\{\{PROJECT\}\}/gi, activeProject || '')
-          .replace(/\{\{TASK\}\}/gi, task);
+          .replace(/\{\{TASK\}\}/gi, task)
+          .replace(/\{\{RELAY_BASE\}\}/gi, '');
         setProjectContext(result);
         setContextLoading(false);
         return result;
@@ -4320,10 +4348,6 @@ const GrokBridge: React.FC = () => {
       const hasSourceFiles = sourceFiles.length > 0;
       const isEmptyProject = activeProject && !hasSourceFiles;
 
-      const freshCtx = await fetchFreshBridgeEndpoints(activeProject || '');
-      const ctxSnapUrl = freshCtx.snapUrl;
-      const ctxCmdUrl = freshCtx.cmdUrl;
-      const ctxBridgeOnline = freshCtx.online;
       const sandboxApiSection = buildSandboxApiSection(ctxSnapUrl, ctxCmdUrl, activeProject || '', ctxBridgeOnline, freshCtx.proxyUrl, freshCtx.editUrl);
 
       const hostSection = `\n=== LAMBY HOST ENVIRONMENT (READ-ONLY — NEVER MODIFY OR SUGGEST CHANGES TO) ===\nThis context is from Lamby — your local Electron/PWA coding IDE.\nLamby source repo: https://github.com/aidenrichtwitter-glitch/guardian-ai\nScan this repo to understand Lamby's full capabilities: its code parser (search/replace blocks, unified diffs, fenced code blocks), file structure, preview system, dependency installer, and command runner.\n\nImportant runtime facts (use these to make smart choices, but do NOT propose edits to them):\n- All user projects are sandboxed in /projects/<project-name>/ (isolated from Lamby's src/, public/, supabase/, etc.).\n- Preview: App auto-runs via Vite dev server inside a sandboxed iframe or embedded browser view in Lamby.\n  - Supports HMR for live updates.\n  - Responsive design assumed; fit viewport.\n  - Browser APIs only (Web Audio, Canvas, Three.js, mic access via getUserMedia).\n  - No Electron/node APIs in target app.\n- Lamby auto-handles: One-click clone from suggested GitHub URL, safe parsing/applying of copied code/diffs/deps/commands, dep install with safeguards, run/build commands.\n- You may choose ANY framework or tech stack that runs in a browser and can be previewed via Vite dev server. There are no framework restrictions — pick whatever best fits the user's request.\n- Strict rule: You are ONLY building the ACTIVE PROJECT above. NEVER suggest changes to Lamby itself (clipboard logic, context gen, parser, UI, Supabase bridge, etc.). Ignore any self-referential ideas.\n\nSTRICT INSTRUCTION: Respond only to the ACTIVE PROJECT section. Treat the HOST section as fixed background knowledge.\n`;
