@@ -3992,8 +3992,9 @@ const GrokBridge: React.FC = () => {
       bridgeWsRef.current = null;
     }
 
+    const apiBase = isElectron ? 'http://localhost:4999' : '';
     const wsUrl = `${relayWsUrl.replace(/\/$/, '')}/bridge-ws?project=${encodeURIComponent(project || 'default')}`;
-    console.log('[Bridge] Connecting to:', wsUrl);
+    console.log('[Bridge] Connecting to:', wsUrl, isElectron ? '(Electron — API via localhost:4999)' : '(browser)');
     setBridgeStatus('connecting');
 
     const ws = new WebSocket(wsUrl);
@@ -4012,9 +4013,14 @@ const GrokBridge: React.FC = () => {
           ws.send(JSON.stringify({ type: 'pong' }));
           return;
         }
+        if (msg.type === 'pong' || msg.type === 'connection_replaced') {
+          console.log(`[Bridge] ${msg.type}`);
+          return;
+        }
         if (msg.type === 'snapshot-request' && msg.requestId) {
+          const proj = encodeURIComponent(msg.projectName || project || 'default');
           try {
-            const snapRes = await fetch(`/api/snapshot/${encodeURIComponent(msg.projectName || project || 'default')}`);
+            const snapRes = await fetch(`${apiBase}/api/snapshot/${proj}`);
             const snapshot = await snapRes.text();
             ws.send(JSON.stringify({ type: 'snapshot-response', requestId: msg.requestId, snapshot }));
           } catch (e: any) {
@@ -4024,7 +4030,7 @@ const GrokBridge: React.FC = () => {
         }
         if (msg.type === 'sandbox-execute-request' && msg.requestId) {
           try {
-            const execRes = await fetch('/api/sandbox/execute', {
+            const execRes = await fetch(`${apiBase}/api/sandbox/execute`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ actions: msg.actions }),
@@ -4036,7 +4042,20 @@ const GrokBridge: React.FC = () => {
           }
           return;
         }
-      } catch {}
+        if (msg.type === 'console-logs-request' && msg.requestId) {
+          try {
+            const logsRes = await fetch(`${apiBase}/api/console-logs?project=${encodeURIComponent(msg.projectName || project || 'default')}`);
+            const logs = await logsRes.json();
+            ws.send(JSON.stringify({ type: 'console-logs-response', requestId: msg.requestId, logs }));
+          } catch (e: any) {
+            ws.send(JSON.stringify({ type: 'console-logs-response', requestId: msg.requestId, logs: { error: e.message } }));
+          }
+          return;
+        }
+        console.log('[Bridge] Unhandled message type:', msg.type);
+      } catch (e) {
+        console.log('[Bridge] Message parse error:', e);
+      }
     };
 
     ws.onclose = (ev) => {
@@ -5541,19 +5560,7 @@ const GrokBridge: React.FC = () => {
                           setCommandEndpoint(`${base}/api/sandbox/execute`);
                           setExternalSnapshotUrl(`${base}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
                           setExternalCommandEndpoint(`${base}/api/sandbox/execute`);
-                          if (isElectron) {
-                            const proj = activeProject || 'default';
-                            try {
-                              const ipcRenderer = (window as any).require('electron').ipcRenderer;
-                              await ipcRenderer.invoke('bridge-config-save', { relayUrl: devUrl, projectName: proj });
-                            } catch {
-                              try { await fetch('http://localhost:4999/api/bridge-config-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ relayUrl: devUrl, projectName: proj }) }); } catch {}
-                            }
-                            setBridgeStatus('connecting');
-                          } else {
-                            if (bridgeWsRef.current) { try { bridgeWsRef.current.close(); } catch {} bridgeWsRef.current = null; }
-                            connectToBridge(devUrl, activeProject || 'default');
-                          }
+                          connectToBridge(devUrl, activeProject || 'default');
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
                           bridgeMode === 'dev'
@@ -5575,19 +5582,7 @@ const GrokBridge: React.FC = () => {
                           setCommandEndpoint(`${prodBase}/api/sandbox/execute`);
                           setExternalSnapshotUrl(`${prodBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
                           setExternalCommandEndpoint(`${prodBase}/api/sandbox/execute`);
-                          if (isElectron) {
-                            const proj = activeProject || 'default';
-                            try {
-                              const ipcRenderer = (window as any).require('electron').ipcRenderer;
-                              await ipcRenderer.invoke('bridge-config-save', { relayUrl: prodUrl, projectName: proj });
-                            } catch {
-                              try { await fetch('http://localhost:4999/api/bridge-config-save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ relayUrl: prodUrl, projectName: proj }) }); } catch {}
-                            }
-                            setBridgeStatus('connecting');
-                          } else {
-                            if (bridgeWsRef.current) { try { bridgeWsRef.current.close(); } catch {} bridgeWsRef.current = null; }
-                            connectToBridge(prodUrl, activeProject || 'default');
-                          }
+                          connectToBridge(prodUrl, activeProject || 'default');
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
                           bridgeMode === 'production'
