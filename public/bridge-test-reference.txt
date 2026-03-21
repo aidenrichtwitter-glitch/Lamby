@@ -107,7 +107,7 @@ SECTION 4: FULL ENDPOINT TEST MATRIX (26 tests)
 
 === SMART GET ENDPOINTS ===
 PASS | grok-read single    | /api/grok-read?project=P&path=FILE                  | 108ms | Returns {path, content}
-PASS | grok-read multi     | /api/grok-read?project=P&files=F1,F2                | 94ms  | Returns {files:[{path,content},...]} — works despite known bug doc
+PASS | grok-read multi     | /api/grok-read?project=P&files=F1,F2                | 94ms  | Returns {files:[{path,content},...]} — use &files= param (comma-separated)
 PASS | grok-write s/r      | /api/grok-write?project=P&path=F&search=S&replace=R | 612ms | Returns {results:[{path,replacements:N}]}
 PASS | grok-tree           | /api/grok-tree?project=P                            | 86ms  | Returns {entries:[...]}
 PASS | grok-tree filter    | /api/grok-tree?project=P&filter=*.tsx               | 87ms  | Returns {entries:[], filterApplied:"*.tsx"} (filter may leak dirs)
@@ -224,7 +224,13 @@ SECTION 7: ALL 113 PROXY COMMANDS
 =====================================
 list_tree, read_file, read_multiple_files, write_file, write_file_chunk, create_file, delete_file, bulk_delete, move_file, copy_file, copy_folder, rename_file, grep, search_files, search_replace, apply_patch, bulk_write, run_command, install_deps, add_dependency, remove_dependency, type_check, lint_and_fix, format_files, get_build_metrics, restart_dev_server, list_open_ports, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, git_push, git_pull, git_merge, git_stash_pop, git_reset, git_revert, git_tag, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, archive_project, export_project, set_env_var, get_env_vars, rollback_last_change, project_analyze, tailwind_audit, find_usages, component_tree, extract_theme, extract_colors, capture_preview, get_preview_url, generate_component, generate_page, refactor_file, validate_change, profile_performance, create_folder, delete_folder, move_folder, rename_folder, list_tree_filtered, dead_code_detection, dependency_graph, symbol_search, grep_advanced, extract_imports, run_command_advanced, build_with_flags, clean_build_cache, start_process_named, monitor_process, get_process_logs, stop_all_processes, switch_port, visual_diff, capture_component, record_video, get_dom_snapshot, get_console_errors, generate_test, generate_storybook, optimize_code, convert_to_typescript, add_feature, migrate_framework, react_profiler, memory_leak_detection, console_error_analysis, runtime_error_trace, bundle_analyzer, network_monitor, accessibility_audit, security_scan, set_tailwind_config, set_next_config, update_package_json, manage_scripts, switch_package_manager, deploy_preview, export_project_zip, import_project, super_command
 
-NOTE: These are all commands the proxy accepts. Not all have been individually stress-tested. The above test matrix covers the most commonly used ones. The full list was discovered via /api/commands endpoint.
+COVERAGE NOTE: These are all commands the proxy accepts, discovered via /api/commands endpoint.
+The test matrix above covers the 15 most commonly used endpoints + 8 proxy commands = 26 tests with evidence.
+NOT individually tested (low-usage commands): bulk_write, apply_patch, bulk_delete, move_file, copy_file,
+copy_folder, rename_file, archive_project, export_project, set_env_var, get_env_vars, rollback_last_change,
+and various analysis/generation commands. These are documented by the relay but not exercised in this test run.
+Concurrency testing: Not performed (bridge design is single-connection serial queue).
+Timeout/disconnect testing: Not performed (would require killing desktop connector mid-request).
 
 =====================================
 SECTION 8: DIAGNOSTICS SNAPSHOT

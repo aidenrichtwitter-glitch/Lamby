@@ -106,7 +106,7 @@ YOUR WORKFLOW (RECOMMENDED):
 
 4. ENTRY POINT: Before writing App.tsx, ALWAYS read src/index.tsx first. Projects often import from 'components/App' not 'App', so the real file may be src/components/App.tsx. Writing to the wrong path has zero visible effect.
 
-5. SEARCH_REPLACE ZERO MATCHES: If grok-write returns {zeroReplacements:true}, the exact string was NOT found. Read the file first, copy the exact text (including whitespace), then retry.
+5. SEARCH_REPLACE ZERO MATCHES: If grok-write returns {replacements:0} in the results array, the exact string was NOT found. Response format: {"results":[{"path":"file","replacements":0}]}. Read the file first, copy the exact text (including whitespace), then retry.
 
 6. ALWAYS VERIFY: After any file write/delete, ALWAYS check get_console_errors to confirm no broken imports. A single delete_file that removes a file still imported elsewhere will crash the entire app.
 

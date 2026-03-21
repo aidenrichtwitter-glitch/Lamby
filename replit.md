@@ -174,7 +174,7 @@ These replaced the old base64-encoded `grok-proxy` system. All live on the relay
 - Models: `grok-3-mini` (fast), `grok-4` (full power)
 
 ### Known Bridge Bugs & Limitations (Stress-Tested 2026-03-21)
-- **`grok-read` multi-file**: Returns only 1 result regardless of file count
+- **`grok-read` multi-file**: Now returns all files via `files` param (tested PASS with 2 files). Use `&files=F1,F2` not `&path=F1&path=F2`.
 - **`grok-tree` filter**: Leaks non-matching directory entries
 - **`grok-run` command whitelist**: Only `npm`, `node`, `echo` allowed. Filesystem commands (`dir`, `cd`, `type`, `Get-ChildItem`, `ls`) are BLOCKED. Use `grok-tree` for listing, `grok-read` for reading. Param is `command` (not `cmd`).
 - **`grok-run` nested quotes**: Get shell-mangled
