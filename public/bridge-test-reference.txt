@@ -1,16 +1,16 @@
 === BRIDGE TEST REFERENCE ===
 Generated: 2026-03-21 (Full endpoint stress test)
-Relay: https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev
-Project: groks-app
+Relay: {{RELAY_BASE}} (resolve from /api/diag or bridge connection)
+Project: {{PROJECT}} (resolve from connected desktop)
 
 =====================================
 SECTION 1: SYSTEM ARCHITECTURE
 =====================================
 
-Connection Status: CONNECTED
-Connected Project: groks-app
+Connection Status: CONNECTED (at test time)
+Connected Project: {{PROJECT}}
 Connected Desktops: 1
-Relay Base: https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev
+Relay Base: {{RELAY_BASE}}
 
 Architecture: Lamby Bridge Relay - zero-dependency WebSocket bridge between Grok (cloud AI) and a local Windows desktop running Node.js.
 

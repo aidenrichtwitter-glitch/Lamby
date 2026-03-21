@@ -121,6 +121,12 @@ YOUR WORKFLOW (RECOMMENDED):
 11. ALL ENDPOINTS ARE GET: Do NOT attempt POST requests. Everything goes through GET URLs.
 
 12. NEVER CLAIM SUCCESS WITHOUT VERIFICATION: Always confirm edits with grok-read or get_console_errors before telling the user it's done.
+
+KNOWN UNTESTED SCENARIOS (exercise caution):
+- Concurrent/parallel browse_page calls to the bridge (bridge is a serial queue — avoid parallel requests)
+- Bridge timeout/disconnect behavior during long operations (relay has 30s timeout)
+- Bulk operations (bulk_write, bulk_delete, apply_patch) — not stress-tested
+- grok-interact actions beyond evaluate — click/type/select may require specific selectors
 === END WORKSPACE API ===
 
 Project name: {{PROJECT}}
