@@ -5,14 +5,24 @@ const crypto = require("crypto");
 const { spawn, execSync } = require("child_process");
 const os = require("os");
 
-const {
-  executeSandboxActions,
-  gatherProjectSnapshot,
-  validateProjectPath,
-  detectPmForDir,
-  buildPmCommand,
-  buildInstallCascade,
-} = require("../../server/sandbox-dispatcher.cjs");
+console.log(`[Lamby Local] Starting local-server.js...`);
+console.log(`[Lamby Local] Node ${process.version} | PID ${process.pid} | ${process.platform}`);
+console.log(`[Lamby Local] CWD: ${process.cwd()}`);
+
+let executeSandboxActions, gatherProjectSnapshot, validateProjectPath, detectPmForDir, buildPmCommand, buildInstallCascade;
+try {
+  const sandbox = require("../../server/sandbox-dispatcher.cjs");
+  executeSandboxActions = sandbox.executeSandboxActions;
+  gatherProjectSnapshot = sandbox.gatherProjectSnapshot;
+  validateProjectPath = sandbox.validateProjectPath;
+  detectPmForDir = sandbox.detectPmForDir;
+  buildPmCommand = sandbox.buildPmCommand;
+  buildInstallCascade = sandbox.buildInstallCascade;
+  console.log(`[Lamby Local] Loaded sandbox-dispatcher.cjs OK`);
+} catch (e) {
+  console.error(`[Lamby Local] FATAL: Failed to load sandbox-dispatcher.cjs: ${e.message}`);
+  console.error(e.stack);
+}
 
 
 const USER_DATA_DIR = path.join(os.homedir(), ".guardian-ai");
@@ -57,8 +67,19 @@ function saveBridgeConfig(config) {
 }
 
 let bridgeConfig = loadBridgeConfig();
+console.log(`[Lamby Local] Bridge config: relay=${bridgeConfig.relayUrl || '(none)'} project=${bridgeConfig.projectName || '(none)'}`);
 
-const { createConnector } = require("../../server/bridge-connector.cjs");
+let createConnector;
+try {
+  const mod = require("../../server/bridge-connector.cjs");
+  createConnector = mod.createConnector;
+  console.log(`[Lamby Local] Loaded bridge-connector.cjs OK`);
+} catch (e) {
+  console.error(`[Lamby Local] FATAL: Failed to load bridge-connector.cjs: ${e.message}`);
+  console.error(`[Lamby Local] Make sure you have the latest bridge-connector.cjs (raw TLS sockets, NOT ws library)`);
+  console.error(e.stack);
+  createConnector = null;
+}
 
 function gatherConsoleLogs(projectName) {
   const result = { previews: [] };
@@ -83,8 +104,13 @@ function gatherConsoleLogs(projectName) {
 let bridgeConnector = null;
 
 function createBridgeConnector() {
+  if (!createConnector) {
+    console.error(`[Bridge] Cannot create connector — bridge-connector.cjs failed to load`);
+    return null;
+  }
   const relayUrl = bridgeConfig.relayUrl || CANONICAL_RELAY_URL;
   const projectName = bridgeConfig.projectName || "";
+  console.log(`[Bridge] Creating connector: relay=${relayUrl} project=${projectName}`);
 
   bridgeConnector = createConnector({
     relayUrl,
@@ -143,7 +169,10 @@ function connectToBridgeRelay() {
     bridgeConnector.disconnect();
   }
   createBridgeConnector();
-  bridgeConnector.connect();
+  if (bridgeConnector) {
+    bridgeConnector.connect();
+    console.log(`[Bridge] connect() called — waiting for relay handshake...`);
+  }
 }
 
 const previewProcesses = new Map();
