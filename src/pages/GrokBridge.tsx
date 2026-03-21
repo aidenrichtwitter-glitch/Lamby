@@ -658,7 +658,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
   const isLevelUnlocked = useCallback((levelId: number): boolean => {
     if (levelId === 0) return true;
     const prevLevel = levelPassHistory[levelId - 1];
-    return (prevLevel?.passes ?? 0) >= 2;
+    return (prevLevel?.passes ?? 0) >= 1;
   }, [levelPassHistory]);
 
   const runGrokBrowse = useCallback(async () => {
