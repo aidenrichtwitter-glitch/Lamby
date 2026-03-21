@@ -980,6 +980,16 @@ process.on("unhandledRejection", (reason) => {
   console.error(`[Lamby Local] Unhandled rejection: ${reason}`);
 });
 
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.log(`[Lamby Local] Port ${PORT} already in use (Electron main.js likely started it)`);
+    console.log(`[Lamby Local] Starting bridge connector only (no HTTP server)...`);
+    setTimeout(() => connectToBridgeRelay(), 1000);
+  } else {
+    console.error(`[Lamby Local] Server error: ${err.message}`);
+  }
+});
+
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`[Lamby Local] Server running on port ${PORT}`);
   console.log(`[Lamby Local] No authentication — relay URL is the secret`);
