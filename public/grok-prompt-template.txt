@@ -20,21 +20,19 @@ WRITE/EDIT FILES — grok-write (search/replace with automatic verify):
   GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=src/App.tsx&search=OLD_TEXT&replace=NEW_TEXT
   (URL-encode search and replace; supports \n)
 
-CREATE NEW FILES — grok-proxy + write_file (content up to ~5KB):
-  GET {{RELAY_BASE}}/api/grok-proxy?project={{PROJECT}}&payload=BASE64_ENCODED_JSON
-  Payload JSON: {"actions":[{"type":"write_file","project":"{{PROJECT}}","path":"src/newfile.tsx","content":"FILE_CONTENT"}]}
-  Steps: JSON.stringify → btoa → encodeURIComponent → put in payload= param
-  CRITICAL: project field MUST be inside EACH action object, not just in the query param
-  SIZE LIMIT: Keep content under ~5KB. The relay handles larger, but browse_page may truncate URLs beyond ~8KB.
+CREATE NEW FILES — grok-create (simple GET, NO encoding needed):
+  GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/newfile.tsx&content=FILE_CONTENT
+  URL-encode the content param. No base64. No JSON payload. Just a simple GET URL.
+  SIZE LIMIT: Keep content under ~5KB per URL. For larger files, use grok-create-chunk.
 
-CREATE LARGE FILES — grok-proxy + write_file_chunk (for content >5KB):
-  Split content into ~1500-char chunks. Send each as a separate request:
-  {"actions":[{"type":"write_file_chunk","project":"{{PROJECT}}","path":"FILE","content":"CHUNK_N","chunk_index":N,"total_chunks":TOTAL}]}
-  File assembles and writes only when final chunk (chunk_index == total_chunks-1) arrives.
-  Add 100-150ms delay between chunks.
+CREATE LARGE FILES — grok-create-chunk (for content >5KB):
+  Split content into chunks. Send each as a separate GET request:
+  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=CHUNK_TEXT&chunk=0&total=3
+  chunk=0 creates the file. chunk=1+ appends. File is complete when chunk=total-1 arrives.
+  Keep each chunk under ~1500 chars of content. URL-encode each chunk's content.
 
-DELETE FILES — grok-proxy + delete_file:
-  {"actions":[{"type":"delete_file","project":"{{PROJECT}}","path":"src/oldfile.tsx"}]}
+DELETE FILES — grok-delete (simple GET):
+  GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/oldfile.tsx
 
 FILE TREE — grok-tree:
   GET {{RELAY_BASE}}/api/grok-tree?project={{PROJECT}}
@@ -46,7 +44,7 @@ GIT — grok-git:
   GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=log&count=5
   GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=diff
   (actions: status, add, commit, diff, log, branch, checkout, stash, stash-pop, push, pull, merge, reset, revert, tag, init)
-  WARNING: git reset --hard is sanitized to --soft. You cannot do destructive resets. Use delete_file + write_file to manually revert.
+  WARNING: git reset --hard is sanitized to --soft. You cannot do destructive resets. Use grok-delete + grok-create to manually revert.
 
 SCREENSHOT:
   GET {{RELAY_BASE}}/api/screenshot/{{PROJECT}}?fullPage=true&waitMs=8000
@@ -57,8 +55,9 @@ RUN COMMANDS — grok-run:
   ALLOWED: npm, node, echo commands. BLOCKED: dir, cd, type, Get-ChildItem, ls, and most filesystem commands.
   For file listing use grok-tree instead. For file reading use grok-read instead.
 
-CONSOLE ERRORS — grok-proxy + get_console_errors:
-  {"actions":[{"type":"get_console_errors","project":"{{PROJECT}}"}]}
+CONSOLE ERRORS — grok-proxy (raw JSON, no base64 needed):
+  GET {{RELAY_BASE}}/api/grok-proxy?project={{PROJECT}}&payload={"actions":[{"type":"get_console_errors","project":"{{PROJECT}}"}]}
+  URL-encode the payload value. No base64 needed — grok-proxy now accepts raw JSON.
   ALWAYS check this after edits to verify no import/compile errors.
 
 SEARCH — grok-search:
@@ -89,38 +88,38 @@ YOUR WORKFLOW (RECOMMENDED):
   2. CHECK /api/coord for any pending instructions
   3. READ project status via grok-macro/project-status
   4. READ specific files via grok-read or grok-macro/read-context
-  5. EDIT via grok-write (search/replace) or grok-proxy + write_file (new files)
+  5. EDIT via grok-write (search/replace) or grok-create (new/overwrite files)
   5.5. After any edit: WAIT FULL 15 SECONDS
-  6. CHECK get_console_errors to verify no compile errors
+  6. CHECK console errors via grok-proxy (raw JSON) + get_console_errors
   7. SCREENSHOT with waitMs=8000+
   8. VERIFY via grok-read
   9. COMMIT via grok-git
   10. POST status to /api/coord
 
 === CRITICAL RULES (STRESS-TESTED AND VERIFIED) ===
-1. PROJECT FIELD IN ACTIONS: The "project" field MUST be inside each action object in grok-proxy payloads, not just the query param. Without it, files land in the wrong directory and are unfindable.
+1. USE SMART ENDPOINTS: For file create/delete, use grok-create and grok-delete (simple GET URLs, no encoding). Only fall back to grok-proxy for get_console_errors or batched operations.
 
-2. ENCODING: When building grok-proxy URLs: JSON.stringify → btoa → encodeURIComponent → payload= param. The encodeURIComponent step is CRITICAL because base64 contains + and = characters that break URLs.
+2. ENCODING: Smart endpoints (grok-create, grok-delete, grok-read, grok-write) need only URL-encoding of params. For grok-proxy: you can now pass raw JSON (URL-encoded) in the payload= param — no base64 needed.
 
-3. LARGE FILES (>5KB content): Use write_file_chunk to be safe. Split into ~1500-char chunks. The relay accepts large URLs, but Grok's browse_page may truncate URLs beyond ~8KB. For content up to ~5KB, single write_file is safe.
+3. LARGE FILES (>5KB content): Use grok-create-chunk. Split into ~1500-char chunks.
 
 4. ENTRY POINT: Before writing App.tsx, ALWAYS read src/index.tsx first. Projects often import from 'components/App' not 'App', so the real file may be src/components/App.tsx. Writing to the wrong path has zero visible effect.
 
 5. SEARCH_REPLACE ZERO MATCHES: If grok-write returns {replacements:0} in the results array, the exact string was NOT found. Response format: {"results":[{"path":"file","replacements":0}]}. Read the file first, copy the exact text (including whitespace), then retry.
 
-6. ALWAYS VERIFY: After any file write/delete, ALWAYS check get_console_errors to confirm no broken imports. A single delete_file that removes a file still imported elsewhere will crash the entire app.
+6. ALWAYS VERIFY: After any file write/delete, ALWAYS check console errors and grok-read the file to confirm.
 
 7. DELETE SAFETY: Before deleting any file, read the importing file (usually App.tsx) to verify nothing depends on the file you're deleting. If something does, update the import first or write a replacement file first.
 
 8. WINDOWS SHELL: run_command runs on Windows. Use PowerShell syntax for the limited commands that are allowed (npm, node, echo).
 
-9. GIT LIMITATIONS: git reset --hard is sanitized to --soft by the bridge. To truly revert, you must manually restore files via write_file/delete_file.
+9. GIT LIMITATIONS: git reset --hard is sanitized to --soft by the bridge. To truly revert, you must manually restore files via grok-create/grok-delete.
 
 10. BATCH LIMIT: Up to 10 actions per grok-proxy request. All execute sequentially.
 
 11. ALL ENDPOINTS ARE GET: Do NOT attempt POST requests. Everything goes through GET URLs.
 
-12. NEVER CLAIM SUCCESS WITHOUT VERIFICATION: Always confirm edits with grok-read or get_console_errors before telling the user it's done.
+12. NEVER CLAIM SUCCESS WITHOUT VERIFICATION: Always confirm edits with grok-read or console errors before telling the user it's done.
 
 KNOWN UNTESTED SCENARIOS (exercise caution):
 - Concurrent/parallel browse_page calls to the bridge (bridge is a serial queue — avoid parallel requests)

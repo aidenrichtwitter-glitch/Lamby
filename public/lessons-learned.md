@@ -4,6 +4,20 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 16: Smart endpoints eliminate encoding failures
+**Date:** 2026-03-21
+**Context:** After 5 consecutive Phase 3 failures where every grok-proxy write_file call returned "payload must be valid base64-encoded JSON"
+**Problem:** Grok could never reliably perform the `JSON.stringify → btoa → encodeURIComponent` encoding chain. Every Phase 3 run failed at the file creation step because the base64 encoding was wrong, truncated, or malformed. The bridge reported "payload must be valid base64-encoded JSON" on every attempt.
+**Fix:** Deployed three new smart bridge endpoints that bypass encoding entirely:
+  - `grok-create` — `GET /api/grok-create?project=X&path=Y&content=Z` — creates/overwrites a file. Content is URL-encoded (no base64, no JSON payload).
+  - `grok-create-chunk` — `GET /api/grok-create-chunk?project=X&path=Y&content=Z&chunk=0&total=3` — chunked file creation for files >5KB.
+  - `grok-delete` — `GET /api/grok-delete?project=X&path=Y` — deletes a file.
+  Additionally, `grok-proxy` now accepts raw URL-encoded JSON (not just base64) as a fallback.
+  All three endpoints confirmed PASS in bridge diag.
+**Impact:** All prompt templates, level files, and `buildSandboxApiSection` updated to use `grok-create`/`grok-create-chunk`/`grok-delete` instead of `grok-proxy + write_file/delete_file`. The base64 encoding instructions are removed from file operation docs. grok-proxy is now only needed for `get_console_errors` and batched operations, and even those can use raw JSON instead of base64.
+
+---
+
 ## Lesson 15: Phase 1-2 retest confirms write_file is 100% reliable
 **Date:** 2026-03-21
 **Context:** Phase 1-2 retest — running the exact same workflow Grok should follow, through the bridge

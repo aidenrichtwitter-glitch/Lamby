@@ -8,10 +8,10 @@ This is the full stress test. You will:
 - Verify everything compiles
 - Commit to git
 
-CRITICAL APPROACH — USE write_file FOR EVERYTHING:
-For ALL file writes (new AND existing), use grok-proxy + write_file to overwrite the entire file.
+CRITICAL APPROACH — USE grok-create FOR EVERYTHING:
+For ALL file writes (new AND existing), use grok-create to overwrite the entire file.
 Do NOT use grok-write (search/replace) — it is fragile and has failed 4 times in previous runs.
-For existing files: grok-read the file → modify the content → write_file the entire modified content.
+For existing files: grok-read the file → modify the content → grok-create the entire modified content.
 
 STEPS:
 
@@ -31,37 +31,38 @@ STEPS:
    → Note exact NAV_ITEMS array contents and all imports
    → Post to coord: "L3-S3: [N] nav items, imports [list]"
 
-4. CREATE METRICS PAGE: Use grok-proxy + write_file to create src/pages/Metrics.tsx
+4. CREATE METRICS PAGE: Use grok-create to create src/pages/Metrics.tsx
+   GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=URL_ENCODED_CONTENT
    The file should be a real React component with:
    - At least 3 metric cards (bridge latency, uptime, requests)
    - useState hooks for interactivity
    - Proper TypeScript types
    - Dark mode support via CSS classes
    - At least 80 lines of real code (not placeholder/lorem ipsum)
-   USE SINGLE write_file (not write_file_chunk) — keep under 5KB.
-   → Post to coord: "L3-S4: Metrics.tsx write_file sent ([N] chars)"
+   Keep content under ~5KB. For larger files, use grok-create-chunk.
+   → Post to coord: "L3-S4: Metrics.tsx grok-create sent ([N] chars)"
 
 5. VERIFY METRICS: Call grok-tree AND grok-read for src/pages/Metrics.tsx
    → BOTH must confirm the file exists with correct content
    → Post to coord: "L3-S5: Metrics.tsx verified, [N] chars, tree [present]"
    → If MISSING or EMPTY: STOP. Post failure. Retry step 4. Do NOT continue.
 
-6. UPDATE APP ROUTING: grok-read the App file → add Metrics import + route → write_file entire file
-   → Post to coord: "L3-S6: App.tsx write_file sent (added Metrics import + route)"
+6. UPDATE APP ROUTING: grok-read the App file → add Metrics import + route → grok-create entire file
+   → Post to coord: "L3-S6: App.tsx grok-create sent (added Metrics import + route)"
 
 7. VERIFY APP: grok-read App file → confirm Metrics import AND route entry present
    → Post to coord: "L3-S7: App.tsx verified, Metrics import [yes/no], route [yes/no]"
    → If either missing: STOP. Read the file again, fix, rewrite. Do NOT continue.
 
-8. UPDATE NAVIGATION: grok-read Navigation.tsx → add metrics nav item to NAV_ITEMS → write_file
+8. UPDATE NAVIGATION: grok-read Navigation.tsx → add metrics nav item to NAV_ITEMS → grok-create
    CRITICAL: Check for duplicate imports. Do NOT add an import that already exists.
-   → Post to coord: "L3-S8: Navigation.tsx write_file sent (added metrics nav)"
+   → Post to coord: "L3-S8: Navigation.tsx grok-create sent (added metrics nav)"
 
 9. VERIFY NAVIGATION: grok-read Navigation.tsx → confirm metrics in NAV_ITEMS, no duplicate imports
    → Post to coord: "L3-S9: Navigation.tsx verified, metrics nav [yes/no], duplicates [yes/no]"
    → If nav item missing or duplicates found: Fix and rewrite.
 
-10. CONSOLE CHECK: Use grok-proxy + get_console_errors
+10. CONSOLE CHECK: Use grok-proxy (raw JSON) + get_console_errors
     → Post to coord: "L3-S10: console [clean/N errors]"
     → If errors: Fix them before continuing. Do NOT commit with errors.
 

@@ -1,10 +1,10 @@
 === LEVEL 2: READ-MODIFY-WRITE TEST ===
 === OBJECTIVE: Read an existing file, make a small change, write it back, verify ===
 
-You will modify ONE existing file using the read → modify → write_file pattern.
+You will modify ONE existing file using the read → modify → grok-create pattern.
 This tests the most important skill: safely editing existing code.
 
-IMPORTANT: Do NOT use grok-write (search/replace) for this test. Use write_file to overwrite the entire file.
+IMPORTANT: Do NOT use grok-write (search/replace) for this test. Use grok-create to overwrite the entire file.
 This is the reliable approach that has been stress-tested and confirmed working.
 
 STEPS (do them in order, post to coord after each):
@@ -24,10 +24,11 @@ STEPS (do them in order, post to coord after each):
    Keep ALL existing code exactly as-is. Only add those 2 comment lines at the top.
    → Post to coord: "L2-S3: content modified, adding 2-line comment header"
 
-4. WRITE IT BACK: Use grok-proxy + write_file to overwrite src/pages/Dashboard.tsx with the modified content.
+4. WRITE IT BACK: Use grok-create to overwrite src/pages/Dashboard.tsx with the modified content.
    CRITICAL: The content must include the ENTIRE original file plus your 2-line comment.
    Do NOT send just the comment — send the WHOLE file.
-   → Post to coord: "L2-S4: write_file sent for Dashboard.tsx, [N] chars"
+   URL: {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/pages/Dashboard.tsx&content=URL_ENCODED_FULL_CONTENT
+   → Post to coord: "L2-S4: grok-create sent for Dashboard.tsx, [N] chars"
 
 5. VERIFY CONTENT: Call /api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
    → Confirm the file starts with your "// Bridge Test L2:" comment
@@ -35,11 +36,11 @@ STEPS (do them in order, post to coord after each):
    → Post to coord: "L2-S5: Dashboard.tsx verified, comment present, original code intact"
    → If the comment is missing: Post failure, re-read, and retry steps 3-5
 
-6. CONSOLE CHECK: Use grok-proxy + get_console_errors
+6. CONSOLE CHECK: Use grok-proxy (raw JSON) + get_console_errors
    → Post to coord: "L2-S6: console [clean/errors]"
    → If errors: The modification broke something. Read the error, fix the file, retry.
 
-7. RESTORE ORIGINAL: Use grok-proxy + write_file to write back the ORIGINAL content from step 2
+7. RESTORE ORIGINAL: Use grok-create to write back the ORIGINAL content from step 2
    (without the comment lines). This leaves the project clean.
    → Post to coord: "L2-S7: Dashboard.tsx restored to original content"
 

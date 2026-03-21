@@ -366,7 +366,21 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `  GET ${relayBase}/api/grok-write?project=${proj}&path=src/App.tsx&search=OLD_TEXT&replace=NEW_TEXT\n`;
   section += `  Auto-reads the file back to verify the edit landed. Returns verified content.\n`;
   section += `  URL-encode the search and replace values. Supports newlines (\\n) and special chars.\n`;
-  section += `  For large edits (>2KB), use grok-proxy write_file or write_file_chunk instead.\n\n`;
+  section += `  For large edits (>2KB), use grok-create to overwrite the entire file instead.\n\n`;
+
+  section += `CREATE NEW FILES — grok-create (simple GET, NO encoding needed):\n`;
+  section += `  GET ${relayBase}/api/grok-create?project=${proj}&path=src/newfile.tsx&content=FILE_CONTENT\n`;
+  section += `  URL-encode the content param. No base64. No JSON payload. Just a simple GET URL.\n`;
+  section += `  SIZE LIMIT: Keep content under ~5KB per URL. For larger files, use grok-create-chunk.\n\n`;
+
+  section += `CREATE LARGE FILES — grok-create-chunk (for content >5KB):\n`;
+  section += `  Split content into chunks. Send each as a separate GET request:\n`;
+  section += `  GET ${relayBase}/api/grok-create-chunk?project=${proj}&path=FILE&content=CHUNK_TEXT&chunk=0&total=3\n`;
+  section += `  chunk=0 creates the file. chunk=1+ appends. File is complete when chunk=total-1 arrives.\n`;
+  section += `  Keep each chunk under ~1500 chars of content. URL-encode each chunk's content.\n\n`;
+
+  section += `DELETE FILES — grok-delete (simple GET):\n`;
+  section += `  GET ${relayBase}/api/grok-delete?project=${proj}&path=src/oldfile.tsx\n\n`;
 
   if (editBaseUrl) {
     section += `EDIT FILES — grok-edit (legacy, no auto-verify):\n`;
@@ -454,21 +468,18 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `  Never claim a change happened unless you saw {"success":true}.\n\n`;
 
   if (proxyBaseUrl) {
-    section += `LEGACY: grok-proxy for multi-action chains (read + edit + run in one call):\n`;
-    section += `  Use this ONLY when you need batched actions in one request. Prefer the smart endpoints above.\n`;
-    section += `  1. Build actions JSON:  { "actions": [ ...action objects... ] }\n`;
-    section += `  2. Base64-encode that JSON string\n`;
-    section += `  3. Browse:  ${proxyBaseUrl}?project=${proj}&payload=BASE64_ENCODED_ACTIONS\n\n`;
+    section += `LEGACY/FALLBACK: grok-proxy for batched actions and console errors:\n`;
+    section += `  Use this for get_console_errors or when you need multiple actions in one request. Prefer grok-create/grok-delete above for file ops.\n`;
+    section += `  grok-proxy now accepts raw JSON (URL-encoded) — no base64 needed:\n`;
+    section += `  Browse:  ${proxyBaseUrl}?project=${proj}&payload=URL_ENCODED_JSON\n\n`;
     section += `  Each action needs "type" and "project": "${proj}". Max 50 per request.\n`;
-    section += `  Keep payloads under ~6000 chars of JSON before encoding. Use search_replace over write_file for large files.\n\n`;
-    section += `  FILE OPERATIONS:\n`;
+    section += `  CONSOLE ERRORS (primary use case for grok-proxy):\n`;
+    section += `    { "actions": [{ "type": "get_console_errors", "project": "${proj}" }] }\n\n`;
+    section += `  FILE OPERATIONS (prefer grok-create/grok-delete instead):\n`;
     section += `    { type: "list_tree", project: "${proj}" }  → full file tree\n`;
     section += `    { type: "read_file", project: "${proj}", path: "src/App.tsx" }  → file content\n`;
-    section += `    { type: "write_file", project: "${proj}", path: "src/App.tsx", content: "..." }  → overwrite file (FULL content required, keep under 2KB)\n`;
-    section += `    { type: "write_file_chunk", project: "${proj}", path: "src/App.tsx", content: "...", chunk_index: 0, total_chunks: 3 }  → chunked write for files > 2KB\n`;
-    section += `      LARGE FILE RULE: For content > 2KB, split into ~1500-char chunks. chunk_index=0 creates/overwrites, 1+ appends.\n`;
-    section += `    { type: "create_file", project: "${proj}", path: "src/new.ts", content: "..." }\n`;
-    section += `    { type: "delete_file", project: "${proj}", path: "src/old.ts" }\n`;
+    section += `    { type: "write_file", project: "${proj}", path: "src/App.tsx", content: "..." }  → overwrite file (prefer grok-create)\n`;
+    section += `    { type: "delete_file", project: "${proj}", path: "src/old.ts" }  → delete file (prefer grok-delete)\n`;
     section += `    { type: "search_replace", project: "${proj}", path: "src/App.tsx", search: "oldText", replace: "newText" }\n`;
     section += `  SEARCH:\n`;
     section += `    { type: "grep", project: "${proj}", pattern: "TODO" }\n`;
@@ -498,19 +509,20 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `  2. CHECK /api/coord for any pending instructions or notes\n`;
   section += `  3. READ project status via grok-macro/project-status (tree + pkg + git + preview in 1 call)\n`;
   section += `  4. READ specific files via grok-read or grok-macro/read-context\n`;
-  section += `  5. EDIT via grok-write (auto-verify) or grok-edit (for replaceAll)\n`;
+  section += `  5. EDIT via grok-write (auto-verify), grok-create (new/overwrite files), or grok-delete\n`;
   section += `  5.5. After any edit: WAIT FULL 15 SECONDS for Vite dev server and preview to stabilize\n`;
-  section += `  6. SCREENSHOT via ${relayBase}/api/screenshot/${proj}?fullPage=true&waitMs=8000\n`;
-  section += `  7. VERIFY via grok-read or snapshot\n`;
-  section += `  8. COMMIT via grok-git?action=add&files=. then grok-git?action=commit&message=...\n`;
-  section += `  9. POST status to /api/coord for feedback: ?note=Done: updated styles&from=grok\n\n`;
+  section += `  6. CHECK console errors via grok-proxy (raw JSON) + get_console_errors\n`;
+  section += `  7. SCREENSHOT via ${relayBase}/api/screenshot/${proj}?fullPage=true&waitMs=8000\n`;
+  section += `  8. VERIFY via grok-read\n`;
+  section += `  9. COMMIT via grok-git?action=add&files=. then grok-git?action=commit&message=...\n`;
+  section += `  10. POST status to /api/coord for feedback: ?note=Done: updated styles&from=grok\n\n`;
 
   section += `IMPORTANT RULES:\n`;
   section += `  - ALWAYS use browse_page on these URLs to make changes. Do NOT just show code in your response.\n`;
   section += `  - ALL endpoints are GET-based. Do NOT attempt POST requests.\n`;
-  section += `  - Prefer smart endpoints (grok-read, grok-write, grok-tree, etc.) over grok-proxy — they're simpler and don't need base64.\n`;
+  section += `  - Prefer smart endpoints (grok-read, grok-write, grok-create, grok-delete, grok-tree) over grok-proxy — they're simpler and don't need any encoding beyond URL-encoding.\n`;
   section += `  - Browse the snapshot or use grok-macro/project-status FIRST to understand the current state before making changes.\n`;
-  section += `  - Prefer grok-edit for single-file edits (simpler, faster). Use grok-proxy for multi-step operations.\n`;
+  section += `  - For creating/overwriting files: use grok-create (simple GET). For editing: use grok-write. For deleting: use grok-delete. Only use grok-proxy for console errors or batched operations.\n`;
   section += `  - After making visual changes, take a screenshot_preview and share the screenshotUrl with the user.\n`;
   section += `  - ENFORCE PATIENCE: Wait 15 seconds after every edit before screenshot or next action. Never work faster than the computer can respond.\n`;
   section += `  - Never claim a change happened unless you saw {"success":true}.\n`;

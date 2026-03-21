@@ -13,7 +13,7 @@ STEPS (do them in order, post to coord after each):
    → Post to coord: "L1-S2: tree read, BridgeTest.tsx [missing/already exists]"
    → If it already exists, skip to step 7 (delete it first is NOT allowed — just read and report)
 
-3. CREATE FILE: Use grok-proxy + write_file to create src/pages/BridgeTest.tsx with this exact content:
+3. CREATE FILE: Use grok-create to create src/pages/BridgeTest.tsx with this exact content:
 
 import { useState } from 'react';
 
@@ -32,9 +32,9 @@ export default function BridgeTest() {
   );
 }
 
-   ENCODING REMINDER: JSON.stringify the actions → btoa → encodeURIComponent → payload= param
-   The "project" field MUST be inside the action object.
-   → Post to coord: "L1-S3: write_file sent for BridgeTest.tsx"
+   URL: {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/pages/BridgeTest.tsx&content=URL_ENCODED_CONTENT
+   URL-encode the file content. No base64, no JSON payload needed.
+   → Post to coord: "L1-S3: grok-create sent for BridgeTest.tsx"
 
 4. VERIFY TREE: Call /api/grok-tree?project={{PROJECT}}
    → Confirm src/pages/BridgeTest.tsx appears in the tree
@@ -46,7 +46,7 @@ export default function BridgeTest() {
    → Post to coord: "L1-S5: grok-read shows [N] chars, content verified"
    → If empty or wrong content: Post failure and retry step 3
 
-6. CONSOLE CHECK: Use grok-proxy + get_console_errors to check for compile errors
+6. CONSOLE CHECK: Use grok-proxy (raw JSON) + get_console_errors to check for compile errors
    → Post to coord: "L1-S6: console [clean/errors: details]"
 
 7. FINAL: Post to coord: "L1 COMPLETE: BridgeTest.tsx created and verified. [N] chars on disk."

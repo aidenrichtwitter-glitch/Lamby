@@ -29,7 +29,7 @@ STEPS (post to coord after each):
 3. DESIGN PLAN: Before writing any code, post your design plan to coord:
    → Post to coord: "L4-S3: Settings plan: [brief description of layout/sections/approach]"
 
-4. CREATE SETTINGS PAGE: Use grok-proxy + write_file to create src/pages/Settings.tsx
+4. CREATE SETTINGS PAGE: Use grok-create to create src/pages/Settings.tsx
    Requirements:
    - Must be a real, working React component (not a placeholder)
    - Must match the app's existing style and patterns
@@ -42,19 +42,19 @@ STEPS (post to coord after each):
 5. VERIFY SETTINGS: grok-tree + grok-read
    → Post to coord: "L4-S5: Settings.tsx verified, [N] chars"
 
-6. UPDATE APP ROUTING: Read → modify → write_file entire App file
+6. UPDATE APP ROUTING: Read → modify → grok-create entire App file
    → Post to coord: "L4-S6: App.tsx updated with Settings route"
 
 7. VERIFY APP: grok-read → confirm Settings import + route
    → Post to coord: "L4-S7: App.tsx verified"
 
-8. UPDATE NAVIGATION: Read → modify → write_file Navigation.tsx (add Settings nav item with Settings icon)
+8. UPDATE NAVIGATION: Read → modify → grok-create Navigation.tsx (add Settings nav item with Settings icon)
    → Post to coord: "L4-S8: Navigation.tsx updated with Settings nav"
 
 9. VERIFY NAVIGATION: grok-read → confirm settings nav item, no duplicates
    → Post to coord: "L4-S9: Nav verified"
 
-10. CONSOLE CHECK: get_console_errors
+10. CONSOLE CHECK: grok-proxy (raw JSON) + get_console_errors
     → Post to coord: "L4-S10: console [clean/errors]"
 
 11. SCREENSHOT: /api/screenshot with waitMs=10000
