@@ -97,6 +97,25 @@ YOUR WORKFLOW (RECOMMENDED):
   9. COMMIT via grok-git
   10. POST status to /api/coord
 
+=== PROGRESS REPORTING VIA /api/coord (MANDATORY) ===
+You MUST post progress notes to /api/coord at EACH major milestone during your work.
+The user monitors coord to see what you're doing in real time — don't wait until the end.
+
+POST a coord note at each of these checkpoints:
+  - After discovery (step 1-3): "Discovery complete: bridge live, project has X pages, entry point is Y"
+  - After reading files (step 4): "Read complete: App.tsx has N pages, Navigation has N nav items, [any issues found]"
+  - After EACH file create/edit (step 5): "Created src/pages/Metrics.tsx (N chars)" or "Updated App.tsx: added Metrics import + route — verified via grok-read"
+  - After console error check (step 6): "Console errors: clean" or "Console errors: [describe errors]"
+  - After screenshot (step 7): "Screenshot taken, changes visible"
+  - After git commit (step 9): "Git committed: [hash] [message]" or "Git commit FAILED: [reason]"
+  - Final summary (step 10): "TASK COMPLETE: [summary of all changes made and verified]"
+
+HOW TO POST: GET /api/coord?note=YOUR_MESSAGE&from=grok
+  - Keep notes concise (1-2 sentences)
+  - Include specific details (file names, char counts, commit hashes)
+  - If something FAILS, post that too — "grok-write on App.tsx returned 0 replacements, retrying with write_file"
+  - POST ONLY ONCE per milestone — do NOT call the coord endpoint multiple times with the same message
+
 === CRITICAL RULES (STRESS-TESTED AND VERIFIED) ===
 1. PROJECT FIELD IN ACTIONS: The "project" field MUST be inside each action object in grok-proxy payloads, not just the query param. Without it, files land in the wrong directory and are unfindable.
 

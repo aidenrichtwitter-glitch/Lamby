@@ -4,6 +4,31 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 8: Grok posts duplicate coord notes
+**Date:** 2026-03-21
+**Context:** Phase 3 run 3 — Grok posting final status to /api/coord
+**Problem:** Grok called the coord endpoint 12+ times with the exact same message. Likely caused by browse_page retrying or Grok re-calling the URL when the response was slow. The coord endpoint doesn't deduplicate.
+**Fix:** Added explicit instruction: "POST ONLY ONCE per milestone — do NOT call the coord endpoint multiple times with the same message."
+
+---
+
+## Lesson 7: Grok should post progress to coord mid-task, not just at the end
+**Date:** 2026-03-21
+**Context:** Phase 3 — user has no visibility into what Grok is doing during a long autonomous run
+**Problem:** Grok only posted to /api/coord at the very end of the task. The user has no way to monitor progress or catch failures early. If something goes wrong mid-run, the user only finds out after Grok finishes and claims success.
+**Fix:** Added "Progress Reporting via /api/coord (MANDATORY)" section to the prompt with specific checkpoints: after discovery, after each file edit, after console checks, after screenshot, after git commit. Each note should be concise with specific details (file names, sizes, commit hashes).
+
+---
+
+## Lesson 6: The verification protocol works — Phase 3 succeeded on third attempt
+**Date:** 2026-03-21
+**Context:** Phase 3 run 3 — first run with the mandatory verification rules
+**Problem:** Previous two runs failed because Grok ignored grok-write return values and hallucinated verification. After adding Rules A–E to the prompt, Grok successfully: created Metrics.tsx via write_file_chunk, overwrote App.tsx and Navigation.tsx via write_file (not search/replace), verified each edit via grok-read, committed to git (hash confirmed), and posted to coord.
+**Fix:** N/A — this validates that the verification protocol works. Key factor: telling Grok to use write_file (whole-file overwrite) instead of grok-write (search/replace) for critical edits eliminated the whitespace mismatch problem entirely.
+**Impact:** Confirms write_file > grok-write for reliability. Prompt structure validated.
+
+---
+
 ## Lesson 5: Prefer write_file over grok-write for critical edits
 **Date:** 2026-03-21
 **Context:** Phase 3 stress tests — Grok editing App.tsx and Navigation.tsx
