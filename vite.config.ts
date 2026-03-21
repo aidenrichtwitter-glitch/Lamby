@@ -4286,6 +4286,155 @@ function projectManagementPlugin(): Plugin {
         }
       });
 
+      server.middlewares.use("/api/grok-browse", async (req, res) => {
+        if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
+        try {
+          const body = JSON.parse(await readBody(req));
+          const { prompt, model, project, saveToFile } = body;
+
+          if (!prompt) {
+            res.statusCode = 400; res.end(JSON.stringify({ error: "prompt required" })); return;
+          }
+
+          const fs2 = await import("fs");
+          let apiKey = process.env.XAI_API || process.env.XAI_API_KEY || "";
+          if (!apiKey) {
+            try {
+              const settingsPath = path.resolve(process.env.HOME || "~", ".guardian-ai", "settings.json");
+              const settings = JSON.parse(fs2.readFileSync(settingsPath, "utf-8"));
+              apiKey = settings.grokApiKey || "";
+            } catch {}
+          }
+          if (!apiKey) { res.statusCode = 400; res.end(JSON.stringify({ error: "XAI API key not configured" })); return; }
+
+          const devRelayUrl = REPLIT_DEV_DOMAIN ? `https://${REPLIT_DEV_DOMAIN}` : "";
+          const relayUrl = devRelayUrl || "https://bridge-relay.replit.app";
+          const useModel = model || "grok-4-0709";
+
+          if (/grok-3/i.test(useModel)) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ error: "grok-3 variants are banned. Only grok-4 allowed." }));
+            return;
+          }
+
+          const relayDomain = new URL(relayUrl).hostname;
+
+          const SAFE_SAVE_DIR = "public/stress-test-phase123";
+          let safeSavePath: string | null = null;
+          if (saveToFile) {
+            const sanitized = String(saveToFile).replace(/\.\./g, "").replace(/^\//, "");
+            if (!sanitized.startsWith(SAFE_SAVE_DIR)) {
+              res.statusCode = 400; res.end(JSON.stringify({ error: `saveToFile must be under ${SAFE_SAVE_DIR}/` })); return;
+            }
+            safeSavePath = path.resolve(process.cwd(), sanitized);
+          }
+
+          res.setHeader("Content-Type", "text/event-stream");
+          res.setHeader("Cache-Control", "no-cache");
+          res.setHeader("Connection", "keep-alive");
+          res.setHeader("Access-Control-Allow-Origin", "*");
+
+          const abortController = new AbortController();
+          req.on("close", () => { abortController.abort(); });
+
+          const sendSSE = (event: string, data: any) => {
+            if (res.destroyed) return;
+            try { res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`); } catch {}
+          };
+
+          const filledPrompt = prompt
+            .replace(/\{\{RELAY_BASE\}\}/g, relayUrl)
+            .replace(/\{\{PROJECT\}\}/g, project || "groks-app");
+
+          sendSSE("status", { phase: "calling-grok-with-web-search", model: useModel, relayDomain });
+
+          const xaiBody: any = {
+            model: useModel,
+            input: [
+              { role: "user", content: filledPrompt },
+            ],
+            tools: [
+              {
+                type: "web_search",
+                filters: { allowed_domains: [relayDomain] },
+              },
+            ],
+          };
+
+          const xaiResp = await fetch("https://api.x.ai/v1/responses", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+            body: JSON.stringify(xaiBody),
+            signal: abortController.signal,
+          });
+
+          if (!xaiResp.ok) {
+            const errText = await xaiResp.text();
+            sendSSE("error", { error: `xAI API error ${xaiResp.status}: ${errText}` });
+            res.end();
+            return;
+          }
+
+          const xaiData = await xaiResp.json();
+
+          const output = xaiData.output || [];
+          const toolCalls: any[] = [];
+          let finalText = "";
+
+          for (const item of output) {
+            if (item.type === "web_search_call") {
+              toolCalls.push({ type: "web_search_call", id: item.id, status: item.status });
+              sendSSE("tool_call", { type: "web_search_call", id: item.id, status: item.status });
+            } else if (item.type === "message") {
+              if (item.content) {
+                for (const part of item.content) {
+                  if (part.type === "output_text" || part.text) {
+                    finalText += part.text || "";
+                  }
+                }
+              }
+            }
+          }
+
+          sendSSE("text", { content: finalText });
+
+          const fullResult = {
+            model: useModel,
+            responseId: xaiData.id,
+            output: xaiData.output,
+            usage: xaiData.usage,
+            serverSideToolUsage: xaiData.server_side_tool_usage,
+            toolCalls,
+            finalText,
+            timestamp: new Date().toISOString(),
+          };
+
+          if (safeSavePath) {
+            try {
+              const saveDir = path.dirname(safeSavePath);
+              if (!fs2.existsSync(saveDir)) fs2.mkdirSync(saveDir, { recursive: true });
+              fs2.writeFileSync(safeSavePath, JSON.stringify(fullResult, null, 2));
+              sendSSE("saved", { path: saveToFile });
+            } catch (saveErr: any) {
+              sendSSE("save_error", { error: saveErr.message });
+            }
+          }
+
+          sendSSE("done", { usage: xaiData.usage, serverSideToolUsage: xaiData.server_side_tool_usage });
+          res.end();
+        } catch (err: any) {
+          if (!res.headersSent) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ error: err.message }));
+          } else {
+            try {
+              res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+              res.end();
+            } catch {}
+          }
+        }
+      });
+
       server.middlewares.use("/api/grok-fix", async (req, res) => {
         if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
         try {

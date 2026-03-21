@@ -207,7 +207,18 @@ The agent MUST NOT use grok-3-mini, grok-3, or any grok-3-* model for ANY purpos
 - **Bridge relay endpoints** (`server/bridge-relay.cjs`): `/api/grok-proxy` (GET, base64 payload), `/api/grok-edit` (GET, query params, supports `searchB64`/`replaceB64` for HTML content), `/api/grok-interact` (GET, browser interaction wrapper), `/api/commands` (command discovery), `/api/screenshot/:key/:project` (direct screenshot), `/api/grok` (discovery)
 - **`write_file_chunk`** (`server/sandbox-dispatcher.cjs`): Chunked file writes for files > 2KB. `chunk_index=0` creates/overwrites, subsequent chunks append. Required for large files that exceed URL length limits in grok-proxy.
 - **production.cjs mirrors bridge-relay.cjs**: All relay endpoints (grok-proxy, grok-edit, grok-interact, screenshot, commands, grok discovery) are mirrored in `server/production.cjs` for deployed environments.
-- **Why not browse_page**: Grok's built-in `browse_page` tool HTML-encodes `&` as `&amp;` in URLs (breaking query params) and has ~20s internal timeout (screenshots take 15-25s). Function calling bypasses both issues.
+- **Why not browse_page (for function-calling mode)**: Grok's built-in `browse_page` tool HTML-encodes `&` as `&amp;` in URLs (breaking query params) and has ~20s internal timeout (screenshots take 15-25s). Function calling bypasses both issues.
+
+## Browse-Page via API (Responses API + web_search)
+- **Endpoint**: `POST /api/grok-browse` in `vite.config.ts`
+- **How it works**: Uses xAI Responses API with built-in `web_search` tool (which includes `browse_page` as a server-side sub-tool). Grok-4 uses `browse_page` internally to call bridge endpoints — the same mechanism as when a user pastes the prompt into grok.com.
+- **Domain restriction**: Uses `allowed_domains` filter to restrict browsing to only the bridge relay domain
+- **Key xAI docs reference**: `browse_page` is under `SERVER_SIDE_TOOL_WEB_SEARCH` category along with `web_search` and `web_search_with_snippets` (see https://docs.x.ai/developers/tools/tool-usage-details)
+- **SSE events**: `status`, `tool_call`, `text`, `saved`, `done`, `error`
+- **Request body**: `{ prompt, model?, project?, bridgeRelayUrl?, saveToFile? }`
+- **UI**: "Run via API" button in the ClipboardExtractor toolbar — sends the prompt template to Grok-4, Grok browses the bridge endpoints server-side, results streamed back via SSE
+- **Advantage over function-calling**: No client-side loop needed — xAI handles all browse_page calls internally. Simpler, and matches the grok.com user experience exactly.
+- **Trade-off vs function-calling**: browse_page has the `&amp;` encoding issue and ~20s timeout per call. For heavy editing (many search/replace ops), function-calling mode (`/api/grok-responses`) may be more reliable.
 
 ## Auto-Error-Recovery System
 - **Error Detection**: Global `window.onerror` + `unhandledrejection` + React ErrorBoundary catch all browser errors

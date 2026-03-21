@@ -600,6 +600,85 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
   const [ollamaError, setOllamaError] = useState<string | null>(null);
   const [ollamaResult, setOllamaResult] = useState<string | null>(null);
   const [detectedGithubUrls, setDetectedGithubUrls] = useState<{ owner: string; repo: string; fullUrl: string }[]>([]);
+  const [browseRunning, setBrowseRunning] = useState(false);
+  const [browseEvents, setBrowseEvents] = useState<{ event: string; data: any; ts: number }[]>([]);
+  const [showBrowseResults, setShowBrowseResults] = useState(false);
+  const browseAbortRef = useRef<AbortController | null>(null);
+
+  const runGrokBrowse = useCallback(async () => {
+    if (browseRunning) return;
+    setBrowseRunning(true);
+    setBrowseEvents([]);
+    setShowBrowseResults(true);
+    const controller = new AbortController();
+    browseAbortRef.current = controller;
+
+    try {
+      let promptTemplate = projectContext;
+      if (!promptTemplate) {
+        const resp = await fetch('/grok-prompt-template.txt');
+        promptTemplate = await resp.text();
+      }
+
+      const task = userTask.trim() || 'Read the project file tree and take a screenshot to confirm the bridge is working.';
+      promptTemplate = promptTemplate.replace(/\{\{TASK\}\}/g, task);
+
+      const response = await fetch('/api/grok-browse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: promptTemplate,
+          model: 'grok-4-0709',
+          project: activeProject || 'groks-app',
+          saveToFile: `public/stress-test-phase123/phase3-browse-${Date.now()}.json`,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        setBrowseEvents(prev => [...prev, { event: 'error', data: { error: errText }, ts: Date.now() }]);
+        setBrowseRunning(false);
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop() || '';
+          for (const part of parts) {
+            let eventName = 'data';
+            let dataStr = '';
+            for (const line of part.split('\n')) {
+              if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+              else if (line.startsWith('data: ')) dataStr = line.slice(6);
+            }
+            if (dataStr) {
+              try {
+                const data = JSON.parse(dataStr);
+                setBrowseEvents(prev => [...prev, { event: eventName, data, ts: Date.now() }]);
+              } catch {}
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        setBrowseEvents(prev => [...prev, { event: 'error', data: { error: err.message }, ts: Date.now() }]);
+      }
+    } finally {
+      setBrowseRunning(false);
+      browseAbortRef.current = null;
+    }
+  }, [browseRunning, projectContext, userTask, activeProject]);
+
   const pasteRef = useRef<HTMLTextAreaElement>(null);
   const extractorContentRef = useRef<HTMLDivElement>(null);
   const prevProjectKeyRef = useRef(currentProjectKey);
@@ -947,7 +1026,42 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           >
             <FileCode className="w-3 h-3" /> Template{hasCustomTemplate ? ' ✓' : ''}
           </button>
+          <button
+            onClick={browseRunning ? () => { browseAbortRef.current?.abort(); } : runGrokBrowse}
+            data-testid="button-run-grok-browse"
+            className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] transition-colors border shrink-0 whitespace-nowrap ${browseRunning ? 'bg-red-500/15 text-red-400 border-red-500/30 hover:bg-red-500/25' : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'}`}
+            title={browseRunning ? 'Stop the running API call' : 'Send prompt to Grok-4 via Responses API with web_search/browse_page — Grok will actually call bridge endpoints'}
+          >
+            {browseRunning ? <><X className="w-3 h-3" /> Stop</> : <><Zap className="w-3 h-3" /> Run via API</>}
+          </button>
+          {browseEvents.length > 0 && !showBrowseResults && (
+            <button
+              onClick={() => setShowBrowseResults(true)}
+              data-testid="button-show-browse-results"
+              className="flex items-center gap-1 px-1.5 py-1 rounded text-[9px] bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25 transition-colors shrink-0"
+            >
+              <Eye className="w-3 h-3" /> Results ({browseEvents.length})
+            </button>
+          )}
         </div>
+        {showBrowseResults && browseEvents.length > 0 && (
+          <div className="mt-2 rounded border border-border/30 bg-[hsl(220_20%_10%)] max-h-[300px] overflow-y-auto p-2">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[9px] text-muted-foreground font-medium">
+                Grok-4 API Run {browseRunning ? '(running...)' : '(complete)'}
+              </span>
+              <button onClick={() => setShowBrowseResults(false)} className="text-muted-foreground/50 hover:text-foreground">
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            {browseEvents.map((ev, i) => (
+              <div key={i} className={`text-[9px] font-mono py-0.5 px-1 rounded mb-0.5 ${ev.event === 'error' || ev.event === 'save_error' ? 'bg-red-500/10 text-red-400' : ev.event === 'text' ? 'bg-emerald-500/10 text-emerald-300' : ev.event === 'done' || ev.event === 'saved' ? 'bg-blue-500/10 text-blue-300' : 'bg-secondary/20 text-muted-foreground'}`}>
+                <span className="text-muted-foreground/50">[{ev.event}]</span>{' '}
+                {ev.event === 'text' ? (ev.data.content?.slice(0, 500) || '(empty)') : JSON.stringify(ev.data).slice(0, 300)}
+              </div>
+            ))}
+          </div>
+        )}
         {(detectedDeps.dependencies.length > 0 || detectedDeps.devDependencies.length > 0) && (
           depsError ? (
             <span className="text-[9px] text-red-400 ml-1 flex items-center gap-1 px-2 py-1 rounded bg-red-500/10 border border-red-500/30" data-testid="text-deps-error">
