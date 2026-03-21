@@ -4,6 +4,25 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 22: grok-create fails silently when content exceeds browse_page URL length limit
+**Date:** 2026-03-21
+**Context:** Grok repeatedly reports grok-create "not working" for Metrics.tsx (4000+ char component).
+**Root cause:** browse_page has an internal URL length limit (~2048-4096 chars). A 4000-char JSX component URL-encodes to ~7000 chars, making the full URL ~7100 chars — far exceeding the limit. The URL gets truncated or rejected before it reaches the relay.
+**Evidence:** grok-create works perfectly from curl with any content size. The endpoint itself is fine. The issue is exclusively browse_page's URL handling.
+**URL length math:**
+- Base URL (relay + endpoint + project + path): ~150 chars
+- JSX content expands ~1.74x when URL-encoded (quotes, angle brackets, spaces, newlines all encode)
+- 1000 raw chars → ~1890 total URL ✅ (under 2048)
+- 1500 raw chars → ~2760 total URL ⚠️ (exceeds 2048)
+- 4000 raw chars → ~7110 total URL ❌ (far exceeds all limits)
+**Fix:** For components > 1000 chars of content, MUST use grok-create-chunk:
+- Split into chunks of ~800 raw chars each (each URL stays under ~1550 chars total)
+- chunk=0 creates the file, chunk=1+ appends
+- After final chunk, verify with grok-read
+**Rule:** NEVER use grok-create for content > 1000 chars. ALWAYS use grok-create-chunk with ~800-char chunks. This is a hard browse_page limitation, not a relay issue.
+
+---
+
 ## Lesson 21: L3 multi-agent parallel execution causes triple corruption
 **Date:** 2026-03-21
 **Context:** L3 "passed" per coord notes but post-test inspection revealed 3 critical issues that the multi-agent system missed.

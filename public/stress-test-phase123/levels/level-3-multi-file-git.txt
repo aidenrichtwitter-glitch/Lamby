@@ -46,8 +46,15 @@ STEPS (do them in order, post to coord after each):
    → Activity icon IS already imported — do NOT add it again
    → Post to coord: "L3-S3: Nav read, Activity already imported"
 
-4. CREATE METRICS PAGE: Use grok-create to create src/pages/Metrics.tsx
-   GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=URL_ENCODED_CONTENT
+4. CREATE METRICS PAGE: You MUST use grok-create-chunk (NOT grok-create) because the component
+   will be >1000 chars and browse_page has a URL length limit (~2048 chars) that truncates large URLs.
+
+   Split your Metrics.tsx into 4-5 chunks of ~800 raw chars each. Send each chunk as:
+   GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=CHUNK_TEXT&chunk=N&total=TOTAL
+   - chunk=0 creates the file. chunk=1+ appends. File is complete when chunk=total-1 arrives.
+   - URL-encode each chunk's content.
+   - Keep each chunk's ENCODED content under ~1500 chars so the full URL stays under ~2000 chars.
+
    The file MUST have:
    - Named export: export const Metrics: React.FC = () => { ... }
    - Default export: export default Metrics
@@ -56,8 +63,9 @@ STEPS (do them in order, post to coord after each):
    - TypeScript types (interface MetricCard)
    - Dark mode support (dark: classes)
    - At least 80 lines of real code
-   Keep content under ~4KB to avoid truncation.
-   → Post to coord: "L3-S4: Metrics.tsx created"
+
+   DO NOT use grok-create (single URL) for this — it WILL fail because the URL is too long.
+   → Post to coord: "L3-S4: Metrics.tsx chunks sent"
 
 5. VERIFY METRICS: Call grok-read for src/pages/Metrics.tsx
    → Confirm the first line is "import React"

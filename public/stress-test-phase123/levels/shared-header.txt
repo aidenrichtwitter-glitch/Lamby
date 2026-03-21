@@ -20,17 +20,19 @@ WRITE/EDIT FILES — grok-write (search/replace with automatic verify):
   GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=src/App.tsx&search=OLD_TEXT&replace=NEW_TEXT
   (URL-encode search and replace; supports \n)
 
-CREATE NEW FILES — grok-create (simple GET, NO encoding needed):
+CREATE NEW FILES — grok-create (simple GET, for SMALL files only):
   GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/newfile.tsx&content=FILE_CONTENT
   URL-encode the content param. No base64. No JSON payload. Just a simple GET URL.
-  SIZE LIMIT: Keep content under ~5KB per URL. For larger files, use grok-create-chunk.
+  *** URL LENGTH LIMIT: browse_page truncates URLs over ~2048 chars. ***
+  *** For content > 1000 chars (raw), you MUST use grok-create-chunk instead. ***
+  *** grok-create with large content WILL FAIL SILENTLY via browse_page. ***
 
-CREATE LARGE FILES — grok-create-chunk (for content >5KB):
+CREATE FILES — grok-create-chunk (USE THIS for any content > 1000 chars):
   Split content into chunks. Send each as a separate GET request:
   GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=CHUNK_TEXT&chunk=0&total=3
   chunk=0 creates the file. chunk=1+ appends. File is complete when chunk=total-1 arrives.
-  Keep each chunk under ~1500 chars of content. URL-encode each chunk's content.
-  AFTER the final chunk: IMMEDIATELY grok-read the file AND grok-tree to verify it exists and has content.
+  Keep each chunk under ~800 chars of RAW content (~1400 chars URL-encoded) so the full URL stays under 2000 chars.
+  AFTER the final chunk: IMMEDIATELY grok-read the file to verify it exists and has correct content.
 
 DELETE FILES — grok-delete (simple GET):
   GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/oldfile.tsx
@@ -88,7 +90,7 @@ DIAGNOSTICS — diag:
 
 2. ENCODING: Smart endpoints (grok-create, grok-delete, grok-read, grok-write) need only URL-encoding of params. For grok-proxy: you can now pass raw JSON (URL-encoded) in the payload= param — no base64 needed.
 
-3. LARGE FILES (>5KB content): Use grok-create-chunk. Split into ~1500-char chunks.
+3. CONTENT > 1000 CHARS: Use grok-create-chunk. Split into ~800-char raw chunks. grok-create will FAIL SILENTLY for large content because browse_page has a URL length limit (~2048 chars).
 
 4. ENTRY POINT: Before writing App.tsx, ALWAYS read src/index.tsx first to find the real App component path.
 
