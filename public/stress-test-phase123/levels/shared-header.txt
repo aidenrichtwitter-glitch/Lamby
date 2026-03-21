@@ -115,6 +115,13 @@ RULE C — CHECK git commit RESPONSE: If "nothing to commit", your edits were no
 RULE D — DO NOT HALLUCINATE VERIFICATION: Only claim "verified" if you ACTUALLY called grok-read.
 RULE E — PREFER grok-create OVER grok-write FOR SMALL FILES: Read → modify → grok-create the whole file back.
 
+=== GLOBAL STOP RULES (MANDATORY — READ FIRST) ===
+1. MAXIMUM browse_page CALLS: You have a limit of 20 browse_page calls per test level. Count them. If you reach 20, STOP immediately and post "STOPPED: browse_page limit reached" to coord.
+2. MAXIMUM RETRIES: If any single step fails 2 times, do NOT retry again. Post the failure and move to the next step.
+3. ONCE YOU POST THE FINAL COORD NOTE: You are DONE. Do NOT make any more browse_page calls. The test is OVER.
+4. DO NOT LOOP: Never go back to an earlier step after completing a later step. Steps are sequential and one-way.
+5. POST COORD NOTES EXACTLY AS SPECIFIED: Use the exact text shown in the level instructions. Do NOT add variable data (char counts, timestamps) unless the template says [N]. This ensures deduplication works.
+
 === COORD REPORTING (MANDATORY) ===
 YOU MUST POST TO COORD AFTER EVERY SINGLE STEP. Not just discovery. EVERY step.
 Each coord post is a LOG ENTRY the user reads in real time.
@@ -127,6 +134,7 @@ RULES:
   - If a step FAILS, post the failure with details.
   - Keep each note SHORT (under 200 chars). URL-encode the text.
   - Do NOT batch multiple steps into one coord post.
+  - Use the EXACT note text from the level instructions. Do NOT vary it.
 === END SHARED HEADER ===
 
 Project name: {{PROJECT}}

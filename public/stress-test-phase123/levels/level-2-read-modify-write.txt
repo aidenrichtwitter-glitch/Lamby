@@ -5,72 +5,82 @@ You will modify ONE existing file using the read → modify → grok-create patt
 This tests the most important skill: safely editing existing code.
 
 IMPORTANT: Do NOT use grok-write (search/replace) for this test. Use grok-create to overwrite the entire file.
-This is the reliable approach that has been stress-tested and confirmed working.
+
+CRITICAL STOP RULES (READ THESE FIRST):
+- You have a MAXIMUM of 15 browse_page calls for this entire test. If you exceed 15, STOP immediately.
+- Once you post the FINAL coord note, you are DONE. Do NOT make any more browse_page calls.
+- Do NOT retry steps after the restore. If restore succeeds, the test is DONE.
+- Do NOT loop back to earlier steps after reaching step 7.
+- If grok-create fails 2 times, use grok-write (search/replace) as a fallback. Do NOT retry grok-create more than 2 times.
 
 STEPS (do them in order, post to coord after each):
 
 1. DISCOVERY: Call /api/diag?project={{PROJECT}}
-   → Post to coord: "L2-S1: diag OK, relay online"
+   → Post to coord EXACTLY: "L2-S1: diag OK, relay online"
 
 2. READ THE TARGET FILE: Call /api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
    → Study the content carefully. Note the EXACT char count and line count.
-   → Post to coord: "L2-S2: Dashboard.tsx read OK, [N] chars, [N] lines"
-   IMPORTANT: Remember this exact char count — you will use it to verify the restore later.
+   → Post to coord EXACTLY: "L2-S2: read OK, [N] chars"
+   IMPORTANT: Remember this exact char count — you will use it to verify the restore.
 
-3. MODIFY THE CONTENT: In your response, take the ENTIRE file content from step 2.
+3. MODIFY THE CONTENT: Take the ENTIRE file content from step 2.
    Add this comment block at the very top of the file (before any imports):
-   // Bridge Test L2: Modified by Grok-4 at {{TIMESTAMP}}
+   // Bridge Test L2: Modified by Grok-4
    // This comment proves read-modify-write works correctly.
 
    Keep ALL existing code exactly as-is. Only add those 2 comment lines at the top.
-   → Post to coord: "L2-S3: content modified, adding 2-line comment header"
+   → Post to coord EXACTLY: "L2-S3: modified, comment added"
 
 4. WRITE IT BACK: Use grok-create to overwrite src/pages/Dashboard.tsx with the modified content.
    CRITICAL: The content must include the ENTIRE original file plus your 2-line comment.
    Do NOT send just the comment — send the WHOLE file.
    URL: {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/pages/Dashboard.tsx&content=URL_ENCODED_FULL_CONTENT
-   → Post to coord: "L2-S4: grok-create sent for Dashboard.tsx, [N] chars"
+   → Post to coord EXACTLY: "L2-S4: grok-create sent"
+   → If grok-create fails: Try ONE more time. If it fails again, use grok-write as fallback.
 
 5. VERIFY CONTENT: Call /api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
-   → Confirm the file starts with your "// Bridge Test L2:" comment
-   → Confirm the rest of the file is unchanged from step 2
-   → Post to coord: "L2-S5: Dashboard.tsx verified, comment present, original code intact"
-   → If the comment is missing: Post failure, re-read, and retry steps 3-5
+   → Confirm the file starts with "// Bridge Test L2:"
+   → Confirm the original code is still present
+   → Post to coord EXACTLY: "L2-S5: verified, comment present"
+   → If the comment is missing after 2 retries: Post "L2-S5: FAILED, moving to restore" and skip to step 7.
+   DO NOT retry more than 2 times. Move on.
 
 6. CONSOLE CHECK: Use grok-proxy (raw JSON) + get_console_errors
-   → Post to coord: "L2-S6: console [clean/errors]"
-   → If errors: The modification broke something. Read the error, fix the file, retry.
+   → Post to coord EXACTLY: "L2-S6: console clean"
+   → If errors: Post "L2-S6: console has errors" and continue to step 7.
 
-7. RESTORE ORIGINAL VIA GIT: Use grok-git to restore Dashboard.tsx to its committed state.
-   This is MORE RELIABLE than trying to re-write the original content manually.
+7. RESTORE ORIGINAL VIA GIT: Use grok-run to restore Dashboard.tsx to its committed state.
    Call: {{RELAY_BASE}}/api/grok-run?project={{PROJECT}}&cmd=git%20checkout%20HEAD%20--%20src/pages/Dashboard.tsx
    This restores the file to its exact state from the last git commit — guaranteed clean.
-   Do NOT try to restore by re-writing the file content via grok-create. Use git.
-   → Post to coord: "L2-S7: Dashboard.tsx restored via git checkout HEAD"
+   Do NOT try to restore by re-writing the file content via grok-create. ONLY use git checkout.
+   → Post to coord EXACTLY: "L2-S7: restored via git checkout"
+
+   *** AFTER THIS STEP: NO MORE FILE WRITES. DO NOT CALL grok-create OR grok-write AGAIN. ***
 
 8. VERIFY RESTORE: Call /api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
    → Confirm the comment lines are GONE (file should NOT start with "//")
-   → Confirm the char count matches the EXACT count from step 2
-   → If char count doesn't match or comments are still present, the restore FAILED.
-     In that case, re-run step 7 (git checkout) and re-verify.
-   → Post to coord: "L2-S8: restore verified, [N] chars matches original [N] chars, no comment lines"
+   → Confirm the char count matches the count from step 2
+   → Post to coord EXACTLY: "L2-S8: restore verified, [N] chars"
+   → If restore failed: Run step 7 ONE more time, then verify again. Do NOT loop.
 
-9. FINAL: Post to coord: "L2 COMPLETE: Read-modify-write cycle succeeded. File modified, verified, and restored via git checkout."
+9. FINAL: Post to coord EXACTLY: "L2 COMPLETE: PASS" or "L2 COMPLETE: FAIL - [reason]"
+
+   *** TEST IS NOW DONE. STOP. DO NOT MAKE ANY MORE BROWSE_PAGE CALLS. ***
+   *** DO NOT RETRY ANY STEPS. DO NOT WRITE ANY MORE FILES. YOU ARE FINISHED. ***
 
 === PASS CRITERIA ===
 - All coord notes posted (L2-S1 through L2-S8 + final)
 - Step 5 verification shows the comment was added correctly
 - Step 6 console check is clean
-- Step 8 verification shows the file was restored to its EXACT original state (matching char count from S2)
+- Step 8 verification shows the file was restored to its EXACT original state
 - No other files were modified
-- No git commit was made (git checkout just reverts working tree changes)
+- No git commit was made
 
 === FAIL CONDITIONS ===
 - Dashboard.tsx content corrupted (missing code, truncated, garbled)
-- Comment not present after write
-- Original code not intact after modification
-- File not properly restored in step 7 (char count mismatch)
-- Comment lines still present after restore
+- Comment not present after write (after 2 retries)
+- File not properly restored in step 7
 - Console errors after modification
 - Any other file modified
 - Coord notes missing
+- MORE THAN 15 browse_page calls used (indicates infinite loop — automatic FAIL)

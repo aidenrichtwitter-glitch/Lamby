@@ -4,6 +4,24 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 19: Grok multi-agent retries cause infinite loops — must add hard stop rules
+**Date:** 2026-03-21
+**Context:** L2 test completed but Grok's multi-agent system (Lucas/Harper) continued firing browse_page calls indefinitely, overwriting Dashboard.tsx continuously.
+**Problem:** After the L2 test posted "L2 COMPLETE", the multi-agent system kept retrying earlier steps in parallel. Dashboard.tsx was being rewritten every few seconds with different content (96, 138, 309, 427, 551 chars observed in rapid succession). The coord board accumulated 20+ notes per minute. The file was never stable because writes never stopped.
+**Root causes:**
+- No browse_page call limit in the prompt
+- No hard stop after posting the FINAL coord note
+- No "do NOT loop back to earlier steps" instruction
+- Coord dedup bypassed because Grok varied note text each retry (e.g., "430 chars" vs "551 chars" vs "~400 chars")
+**Fix:** Added to shared header:
+1. Global STOP RULES section: max 20 browse_page calls per level, max 2 retries per step, no looping back, test is DONE after final note
+2. L2 prompt now has "STOP — NO MORE FILE WRITES" after step 7
+3. Coord notes use EXACT fixed text (no variable char counts in notes) for dedup compatibility
+4. Explicit "DO NOT MAKE ANY MORE BROWSE_PAGE CALLS" after final step
+**Rule:** Every level prompt MUST include a browse_page limit, a retry cap, and a hard stop instruction after the final coord note. Without these, Grok's multi-agent system will loop indefinitely.
+
+---
+
 ## Lesson 18: smartDecode on relay fixes double-encoding from browse_page
 **Date:** 2026-03-21
 **Context:** L2 tests showed grok-create failing because Grok's browse_page tool URL-encodes the entire URL, including content that's already URL-encoded — causing double-encoding (e.g., `/` → `%2F` → `%252F`).

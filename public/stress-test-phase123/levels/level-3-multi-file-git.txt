@@ -8,6 +8,12 @@ This is the full stress test. You will:
 - Verify everything compiles
 - Commit to git
 
+CRITICAL STOP RULES (READ THESE FIRST):
+- You have a MAXIMUM of 30 browse_page calls for this entire test. If you exceed 30, STOP immediately.
+- Once you post the FINAL coord note (L3 REVIEW), you are DONE. Do NOT make any more browse_page calls.
+- Do NOT retry any step more than 2 times. If it fails twice, post the failure and move on.
+- Do NOT loop back to earlier steps after completing later ones.
+
 CRITICAL APPROACH — CHOOSE THE RIGHT TOOL:
 - For CREATING new files (Metrics.tsx): Use grok-create. URL-encode the content.
   If the file is large (>5KB), use grok-create-chunk to split it.
@@ -119,3 +125,7 @@ STEPS:
 - Duplicate imports in Navigation.tsx
 - Coord notes missing
 - Review stage shows failures but "PASS" is claimed
+- MORE THAN 30 browse_page calls used (indicates infinite loop — automatic FAIL)
+
+*** AFTER POSTING THE FINAL REVIEW NOTE: TEST IS DONE. STOP. ***
+*** DO NOT MAKE ANY MORE BROWSE_PAGE CALLS. DO NOT RETRY ANY STEPS. ***
