@@ -134,6 +134,52 @@ The Bridge Relay is a **completely separate Replit application** — it is NOT p
 - **How it works**: Clients (desktop or browser) connect via WebSocket to the relay. The relay forwards snapshot/sandbox requests between Grok (via HTTP API) and the connected client. The client responds with local project data.
 - **Key rule**: This app's Vite dev server and the relay are unrelated servers. Never confuse API calls to this app's backend (`/api/...` relative URLs) with API calls to the relay (`https://<relay-host>/api/...` absolute URLs).
 
+## Grok Bridge Workflow — THE CORE FLOW
+This is the primary way the user works with Grok to make code changes:
+1. **User clicks "Copy Context"** in Lamby → prompt is copied to clipboard (contains bridge API instructions + project name + task)
+2. **User pastes into Grok** on grok.com
+3. **Grok reads the prompt**, sees the bridge endpoint URLs, uses its `browse_page` tool to call them
+4. **Bridge relay forwards** requests to user's desktop Lamby app via WebSocket
+5. **Changes happen** on the user's local project files
+
+**This app does NOT call Grok's API to make bridge changes.** Grok does the work itself through `browse_page` hitting the bridge URLs. This app just generates the prompt.
+
+### Prompt Template
+- **File**: `public/grok-prompt-template.txt` — the editable prompt that gets sent to Grok
+- **Placeholders**: `{{PROJECT}}` (project name), `{{RELAY_BASE}}` (relay URL), `{{TASK}}` (user's current task)
+- `buildProjectContext()` in GrokBridge.tsx reads this file when bridge is online; falls back to auto-generated context when offline
+- **Custom override**: Users can set a custom template via the "Template" button (stored in localStorage as `lamby-prompt-template`)
+- **To edit the prompt**: Just edit `public/grok-prompt-template.txt` directly. No code changes needed.
+
+### Smart Bridge Endpoints (12 endpoints, all GET-based, no encoding needed)
+These replaced the old base64-encoded `grok-proxy` system. All live on the relay at `{{RELAY_BASE}}/api/`:
+- **`grok-read`** — Read files. Params: `project`, `path` (single) or `files` (comma-separated)
+- **`grok-write`** — Edit files with auto-verify. Params: `project`, `path`, `search`, `replace` (URL-encoded)
+- **`grok-tree`** — File tree. Params: `project`, optional `filter`
+- **`grok-git`** — 16 git actions. Params: `project`, `action` (status/add/commit/diff/log/branch/checkout/stash/stash-pop/push/pull/merge/reset/revert/tag/init), plus `files`, `message`, `count`, `branch` as needed
+- **`grok-process`** — Process management. Params: `project`, `action` (list/start/stop/kill/restart/ports/env), `cmd`, `pid`
+- **`grok-search`** — Text/regex/symbol search. Params: `project`, `q`, optional `type=symbol`
+- **`grok-run`** — Run shell commands. Params: `project`, `cmd`
+- **`grok-macro/project-status`** — Combo: tree + package.json + git status + preview URL in 1 call
+- **`grok-macro/read-context`** — Combo: file content + imports analysis in 1 call
+- **`screenshot/:project`** — Fast screenshot. Params: `fullPage`, `waitMs`
+- **`grok-interact`** — Browser interaction. Params: `project`, `action` (click/type/select/evaluate/runFunction/waitFor), `selector`, `text`, etc.
+- **`coord`** — Agent coordination message board. Params: `note`, `from`, `clear`
+- **`diag`** — Self-diagnostic. Returns connection status, latency, endpoint pass/fail, readyUrls
+
+### xAI API Key
+- **Env var**: `XAI_API` — used for evolution cycles and function calling mode, NOT for the bridge workflow
+- The bridge workflow is Grok on grok.com using `browse_page`, not API calls from this app
+- API endpoint: `https://api.x.ai/v1/chat/completions`
+- Models: `grok-3-mini` (fast), `grok-4` (full power)
+
+### Known Bridge Bugs
+- **`grok-read` multi-file**: Returns only 1 result regardless of file count
+- **`grok-tree` filter**: Leaks non-matching directory entries
+- **`grok-run` nested quotes**: Get shell-mangled
+- **`grok-git` no action**: Silently defaults to status
+- **`grok-quality` / `grok-deps`**: 5s+ response time, freeze WebSocket — avoid in normal use
+
 ## Function Calling (Grok ↔ Bridge Relay)
 - **Endpoint**: `POST /api/grok-responses` in `vite.config.ts` — handles full xAI Responses API loop with function calling
 - **Flow**: Client sends messages → server calls xAI `/v1/responses` with 10 function tools → when Grok returns `function_call`, server executes it against the bridge relay → feeds result back as `function_call_output` → loops until Grok returns final text
