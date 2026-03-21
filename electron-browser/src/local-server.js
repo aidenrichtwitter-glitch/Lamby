@@ -51,7 +51,7 @@ try {
 
 
 const USER_DATA_DIR = _USER_DATA;
-const PROJECTS_DIR = path.join(USER_DATA_DIR, "projects");
+const PROJECTS_DIR = process.env.PROJECT_DIR || path.join(USER_DATA_DIR, "projects");
 const BRIDGE_CONFIG_PATH = path.join(USER_DATA_DIR, "bridge-config.json");
 const PORT = parseInt(process.env.LAMBY_PORT || "4999", 10);
 

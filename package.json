@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "electron:dev": "concurrently --kill-others --names vite,electron,bridge \"vite --host 0.0.0.0 --port 5000\" \"wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 npx electron .\" \"wait-on http://localhost:5000 && cd electron-browser && node src/local-server.js\"",
+    "electron:dev": "concurrently --kill-others --names vite,electron,bridge \"vite --host 0.0.0.0 --port 5000\" \"wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 npx electron .\" \"wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 PROJECT_DIR=../projects node src/local-server.js\"",
     "electron:build": "vite build && cd electron-browser && npm run build",
     "electron:package-win": "vite build && node -e \"const fs=require('fs');const p=require('path');function cpR(s,d){fs.mkdirSync(d,{recursive:true});for(const f of fs.readdirSync(s)){const sp=p.join(s,f),dp=p.join(d,f);fs.statSync(sp).isDirectory()?cpR(sp,dp):fs.copyFileSync(sp,dp)}}cpR('dist','electron-browser/dist')\" && cd electron-browser && npm install && npx --yes electron-builder@latest --win --x64",
     "electron:package-linux": "vite build && node -e \"const fs=require('fs');const p=require('path');function cpR(s,d){fs.mkdirSync(d,{recursive:true});for(const f of fs.readdirSync(s)){const sp=p.join(s,f),dp=p.join(d,f);fs.statSync(sp).isDirectory()?cpR(sp,dp):fs.copyFileSync(sp,dp)}}cpR('dist','electron-browser/dist')\" && cd electron-browser && npm install && npx --yes electron-builder@latest --linux"
