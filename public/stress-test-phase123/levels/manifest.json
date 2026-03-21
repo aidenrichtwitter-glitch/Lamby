@@ -14,7 +14,7 @@
       "id": 1,
       "name": "Single Write",
       "file": "level-1-single-write.txt",
-      "description": "Create one new file via write_file and verify it",
+      "description": "Create one new file via grok-create and verify it",
       "icon": "file-plus",
       "color": "green",
       "passCriteria": "BridgeTest.tsx created, verified via tree+read, console clean",

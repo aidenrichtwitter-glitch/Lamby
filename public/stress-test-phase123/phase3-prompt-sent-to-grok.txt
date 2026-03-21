@@ -128,7 +128,7 @@ REQUIRED COORD POSTS (one per step, DO NOT SKIP ANY):
 
 CRITICAL COORD RULES:
   - Post ONCE per step. If you already posted for step 5, do NOT post for step 5 again.
-  - If a step FAILS, post the failure: "STEP 5 FAILED: Metrics.tsx missing after write_file, retrying"
+  - If a step FAILS, post the failure: "STEP 5 FAILED: Metrics.tsx missing after grok-create, retrying"
   - Keep each note SHORT (under 200 chars). The note goes in a URL query param.
   - URL-encode the note text (spaces as %20 or +, special chars encoded).
   - Do NOT batch multiple steps into one coord post. One post per step.
