@@ -4065,9 +4065,6 @@ const GrokBridge: React.FC = () => {
             if (relayRes && relayRes.ok) {
               try { relayData = await relayRes.json(); } catch {}
             }
-            if (relayData?.mode) {
-              setBridgeMode(relayData.mode === 'production' ? 'production' : 'dev');
-            }
             if (relayData?.devRelayUrl) setServerDevRelayUrl(relayData.devRelayUrl);
             if (data?.devRelayUrl && !relayData?.devRelayUrl) setServerDevRelayUrl(data.devRelayUrl);
             if (relayData && relayData.status === 'connected' && relayData.relayUrl) {
@@ -5529,18 +5526,18 @@ const GrokBridge: React.FC = () => {
                     <div className="flex items-center gap-1" data-testid="bridge-mode-toggle">
                       <button
                         data-testid="button-mode-dev"
-                        onClick={async () => {
-                          const devUrl = serverDevRelayUrl || `wss://${window.location.host}`;
+                        onClick={() => {
                           setBridgeMode('dev');
                           try { localStorage.setItem('lamby-bridge-mode', 'dev'); } catch {}
-                          try {
-                            await fetch('/api/bridge-connector-switch', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ relayUrl: devUrl, key: snapshotUrl?.match(/key=([^&]+)/)?.[1] || '' }),
-                            });
-                            setStatusMessage('Switched to Dev relay');
-                          } catch (e: any) { setStatusMessage(`Switch failed: ${e.message}`); }
+                          const devUrl = serverDevRelayUrl || `wss://${window.location.host}`;
+                          const key = snapshotUrl?.match(/key=([^&]+)/)?.[1] || '';
+                          if (devUrl && key) {
+                            const base = devUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
+                            setExternalSnapshotUrl(`${base}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
+                            setExternalCommandEndpoint(`${base}/api/sandbox/execute?key=${key}`);
+                            setBridgeRelayUrl(devUrl);
+                          }
+                          setStatusMessage('Showing Dev relay URLs');
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
                           bridgeMode === 'dev'
@@ -5552,18 +5549,17 @@ const GrokBridge: React.FC = () => {
                       </button>
                       <button
                         data-testid="button-mode-production"
-                        onClick={async () => {
+                        onClick={() => {
                           const prodUrl = 'wss://bridge-relay.replit.app';
                           setBridgeMode('production');
                           try { localStorage.setItem('lamby-bridge-mode', 'production'); } catch {}
-                          try {
-                            await fetch('/api/bridge-connector-switch', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ relayUrl: prodUrl, key: snapshotUrl?.match(/key=([^&]+)/)?.[1] || '' }),
-                            });
-                            setStatusMessage('Switched to Production relay');
-                          } catch (e: any) { setStatusMessage(`Switch failed: ${e.message}`); }
+                          const key = snapshotUrl?.match(/key=([^&]+)/)?.[1] || '';
+                          if (key) {
+                            setExternalSnapshotUrl(`https://bridge-relay.replit.app/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
+                            setExternalCommandEndpoint(`https://bridge-relay.replit.app/api/sandbox/execute?key=${key}`);
+                            setBridgeRelayUrl(prodUrl);
+                          }
+                          setStatusMessage('Showing Production relay URLs');
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
                           bridgeMode === 'production'

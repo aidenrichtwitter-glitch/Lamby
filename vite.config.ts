@@ -5282,29 +5282,19 @@ function projectManagementPlugin(): Plugin {
         bridgeRelayKey = crypto.randomBytes(16).toString("hex");
       }
 
-      const { createConnector } = _require("./server/bridge-connector.cjs");
-      const BRIDGE_RELAY_URL = process.env.BRIDGE_RELAY_URL || "wss://bridge-relay.replit.app";
-      const bridgeConnector = createConnector({
-        relayUrl: BRIDGE_RELAY_URL,
-        bridgeKey: bridgeRelayKey,
-        snapshotKey,
-        projectName: "",
-        projectDir: process.cwd(),
-        previewPort: "5000",
-      });
-
       let _sandboxWssRef: any = null;
-      bridgeConnector.onRelayLog = (logEntry: any) => {
-        if (_sandboxWssRef) {
-          const fwd = JSON.stringify({ type: "relay-log", level: logEntry.level, message: logEntry.message, ts: logEntry.ts || Date.now() });
-          _sandboxWssRef.clients.forEach((c: any) => { try { if (c.readyState === 1) c.send(fwd); } catch {} });
-        }
-      };
 
-      // Do NOT auto-connect: the server already IS the relay via bridge-relay.cjs.
-      // Connecting outbound as a "desktop" client to bridge-relay.replit.app
-      // fights with the user's real desktop connector. Only connect if
-      // explicitly toggled via /api/bridge-connector-switch.
+      function getBridgeRelayStatus() {
+        let connectedCount = 0;
+        let firstConnectedKey = "";
+        for (const [key, client] of bridgeClients) {
+          if (client.ws && client.ws.readyState === 1) {
+            connectedCount++;
+            if (!firstConnectedKey) firstConnectedKey = key;
+          }
+        }
+        return { connectedCount, firstConnectedKey };
+      }
 
       function gatherConsoleLogs(projectName: string) {
         const result: { previews: any[]; message?: string } = { previews: [] };
@@ -5326,53 +5316,36 @@ function projectManagementPlugin(): Plugin {
         return result;
       }
 
-      const allowedRelayUrls = new Set([
-        "wss://bridge-relay.replit.app",
-        `wss://${process.env.REPLIT_DEV_DOMAIN || "localhost:5000"}`,
-      ]);
-      server.middlewares.use("/api/bridge-connector-switch", async (req, res) => {
-        if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
-        let body = "";
-        req.on("data", (chunk: any) => { body += chunk; });
-        req.on("end", () => {
-          try {
-            const { relayUrl, key } = JSON.parse(body);
-            if (!relayUrl) { res.statusCode = 400; res.end(JSON.stringify({ error: "relayUrl required" })); return; }
-            if (key !== snapshotKey) { res.statusCode = 403; res.end(JSON.stringify({ error: "Invalid key" })); return; }
-            if (!allowedRelayUrls.has(relayUrl)) { res.statusCode = 403; res.end(JSON.stringify({ error: "Relay URL not in allowlist" })); return; }
-            bridgeConnector.reconnect(relayUrl);
-            res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ success: true, relayUrl }));
-          } catch (err: any) {
-            res.statusCode = 400;
-            res.end(JSON.stringify({ error: err.message }));
-          }
-        });
-      });
-
       server.middlewares.use("/api/bridge-relay-status", async (req, res) => {
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
         res.setHeader("Content-Type", "application/json");
-        const status = bridgeConnector.getStatus();
+        const relay = getBridgeRelayStatus();
+        const devRelayUrl = REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "";
+        const prodRelayUrl = "wss://bridge-relay.replit.app";
         res.end(JSON.stringify({
-          status: status.status,
-          relayUrl: status.relayUrl,
-          snapshotKey: status.snapshotKey,
-          mode: status.mode,
-          devRelayUrl: REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "",
+          status: relay.connectedCount > 0 ? "connected" : "disconnected",
+          connectedClients: relay.connectedCount,
+          relayUrl: devRelayUrl || prodRelayUrl,
+          snapshotKey,
+          devRelayUrl,
+          prodRelayUrl,
         }));
       });
 
       server.middlewares.use("/api/bridge-status", async (req, res) => {
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
         res.setHeader("Content-Type", "application/json");
-        const status = bridgeConnector.getStatus();
+        const relay = getBridgeRelayStatus();
+        const devRelayUrl = REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "";
+        const prodRelayUrl = "wss://bridge-relay.replit.app";
         res.end(JSON.stringify({
-          status: status.status,
-          relayUrl: status.relayUrl,
-          bridgeKey: status.bridgeKey,
-          key: status.snapshotKey,
-          mode: status.mode,
+          status: relay.connectedCount > 0 ? "connected" : "disconnected",
+          connectedClients: relay.connectedCount,
+          relayUrl: devRelayUrl || prodRelayUrl,
+          bridgeKey: relay.firstConnectedKey ? relay.firstConnectedKey.substring(0, 8) + "..." : "",
+          key: snapshotKey,
+          devRelayUrl,
+          prodRelayUrl,
         }));
       });
 

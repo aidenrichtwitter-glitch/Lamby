@@ -17,7 +17,7 @@ const pendingSandboxRelayRequests = new Map();
 const pendingConsoleLogRequests = new Map();
 const sandboxAuditLog = [];
 
-const { createConnector } = require("./bridge-connector.cjs");
+
 const lambyConfigPath = path.resolve(__dirname, "..", ".lamby-keys.json");
 let prodBridgeKey;
 try {
@@ -30,17 +30,17 @@ try {
 } catch {
   prodBridgeKey = crypto.randomBytes(16).toString("hex");
 }
-const prodConnector = createConnector({
-  relayUrl: process.env.BRIDGE_RELAY_URL || "wss://bridge-relay.replit.app",
-  bridgeKey: prodBridgeKey,
-  snapshotKey,
-  projectName: "",
-  projectDir: path.resolve(__dirname, ".."),
-  previewPort: String(PORT),
-});
-// Do NOT auto-connect: the server already IS the relay via bridge-relay.cjs.
-// Auto-connecting as a "desktop" client fights with the user's real desktop connector.
-// Only connect if explicitly toggled via /api/bridge-connector-switch.
+function getProdBridgeRelayStatus() {
+  let connectedCount = 0;
+  let firstConnectedKey = "";
+  for (const [key, client] of bridgeClients) {
+    if (client.ws && client.ws.readyState === 1) {
+      connectedCount++;
+      if (!firstConnectedKey) firstConnectedKey = key;
+    }
+  }
+  return { connectedCount, firstConnectedKey };
+}
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -314,60 +314,42 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, { error: "Invalid key" }, 403);
       return;
     }
+    const relay = getProdBridgeRelayStatus();
     const clients = Array.from(bridgeClients.entries()).map(([key, c]) => ({
       key: key.substring(0, 8) + "...",
       snapshotKey: c.snapshotKey.substring(0, 8) + "...",
       connected: c.alive,
       lastPing: c.lastPing,
     }));
-    const connectorStatus = prodConnector ? prodConnector.getStatus() : null;
+    const rdDomain = process.env.REPLIT_DEV_DOMAIN || "";
+    const devRelayUrl = rdDomain ? `wss://${rdDomain}` : "";
+    const prodRelayUrl = "wss://bridge-relay.replit.app";
     sendJson(res, {
+      status: relay.connectedCount > 0 ? "connected" : "disconnected",
       connectedClients: clients.length,
       clients,
-      connector: connectorStatus ? { status: connectorStatus.status, relayUrl: connectorStatus.relayUrl, mode: connectorStatus.mode } : null,
-      bridgeKey: connectorStatus ? connectorStatus.bridgeKey : undefined,
+      bridgeKey: relay.firstConnectedKey ? relay.firstConnectedKey.substring(0, 8) + "..." : "",
       key: snapshotKey,
-      mode: connectorStatus ? connectorStatus.mode : undefined,
+      devRelayUrl,
+      prodRelayUrl,
     });
     return;
   }
 
   if (pathname === "/api/bridge-relay-status") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
-    const connectorStatus = prodConnector ? prodConnector.getStatus() : { status: "disconnected", relayUrl: "", snapshotKey, mode: "production" };
-    const REPLIT_DEV_DOMAIN = process.env.REPLIT_DEV_DOMAIN || "";
+    const relay = getProdBridgeRelayStatus();
+    const rdDomain2 = process.env.REPLIT_DEV_DOMAIN || "";
+    const devRelayUrl = rdDomain2 ? `wss://${rdDomain2}` : "";
+    const prodRelayUrl = "wss://bridge-relay.replit.app";
     sendJson(res, {
-      status: connectorStatus.status,
-      relayUrl: connectorStatus.relayUrl,
-      snapshotKey: connectorStatus.snapshotKey || snapshotKey,
-      mode: connectorStatus.mode,
-      devRelayUrl: REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "",
+      status: relay.connectedCount > 0 ? "connected" : "disconnected",
+      connectedClients: relay.connectedCount,
+      relayUrl: prodRelayUrl,
+      snapshotKey,
+      devRelayUrl,
+      prodRelayUrl,
     });
-    return;
-  }
-
-  if (pathname === "/api/bridge-connector-switch") {
-    if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
-    try {
-      const body = JSON.parse(await readBody(req));
-      const relayUrl = body.relayUrl;
-      const providedKey = body.key;
-      if (!relayUrl) { sendJson(res, { error: "relayUrl required" }, 400); return; }
-      if (!isValidKey(providedKey)) { sendJson(res, { error: "Invalid key" }, 403); return; }
-      const allowedUrls = new Set([
-        "wss://bridge-relay.replit.app",
-        `wss://${process.env.REPLIT_DEV_DOMAIN || "localhost:" + PORT}`,
-      ]);
-      if (!allowedUrls.has(relayUrl)) { sendJson(res, { error: "Relay URL not in allowlist" }, 403); return; }
-      if (prodConnector) {
-        prodConnector.reconnect(relayUrl);
-        sendJson(res, { success: true, relayUrl });
-      } else {
-        sendJson(res, { error: "Connector not initialized" }, 500);
-      }
-    } catch (err) {
-      sendJson(res, { error: err.message }, 400);
-    }
     return;
   }
 
