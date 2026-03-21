@@ -1,6 +1,6 @@
 "use strict";
-const WebSocket = require("ws");
 const net    = require("net");
+const tls    = require("tls");
 const crypto = require("crypto");
 const fs     = require("fs");
 const path   = require("path");
@@ -22,6 +22,7 @@ function createConnector(config) {
   let _lastScreenshotUrl = "";
   let _lastConnectedAt = 0;
   let _destroyed       = false;
+  const RECONNECT_DELAY = 5000;
   const GRACE_PERIOD_MS = 30000;
 
   const runningProcs  = new Map();
@@ -49,9 +50,50 @@ function createConnector(config) {
     console.log(`${ts} ${tag} ${msg}`);
   }
 
+  function wsEncodeFrame(data) {
+    const payload = Buffer.from(data, "utf-8");
+    const len = payload.length;
+    const mask = crypto.randomBytes(4);
+    let header;
+    if (len < 126) {
+      header = Buffer.alloc(6); header[0] = 0x81; header[1] = 0x80 | len; mask.copy(header, 2);
+    } else if (len < 65536) {
+      header = Buffer.alloc(8); header[0] = 0x81; header[1] = 0x80 | 126; header.writeUInt16BE(len, 2); mask.copy(header, 4);
+    } else {
+      header = Buffer.alloc(14); header[0] = 0x81; header[1] = 0x80 | 127; header.writeBigUInt64BE(BigInt(len), 2); mask.copy(header, 10);
+    }
+    const masked = Buffer.alloc(len);
+    for (let i = 0; i < len; i++) masked[i] = payload[i] ^ mask[i % 4];
+    return Buffer.concat([header, masked]);
+  }
+
+  function wsDecodeFrame(buf) {
+    if (buf.length < 2) return { data: null, bytesConsumed: 0, opcode: 0 };
+    const opcode = buf[0] & 0x0f;
+    const masked = (buf[1] & 0x80) !== 0;
+    let payloadLen = buf[1] & 0x7f;
+    let offset = 2;
+    if (payloadLen === 126) {
+      if (buf.length < 4) return { data: null, bytesConsumed: 0, opcode };
+      payloadLen = buf.readUInt16BE(2); offset = 4;
+    } else if (payloadLen === 127) {
+      if (buf.length < 10) return { data: null, bytesConsumed: 0, opcode };
+      payloadLen = Number(buf.readBigUInt64BE(2)); offset = 10;
+    }
+    if (masked) {
+      if (buf.length < offset + 4 + payloadLen) return { data: null, bytesConsumed: 0, opcode };
+      const m = buf.slice(offset, offset + 4); offset += 4;
+      const p = Buffer.alloc(payloadLen);
+      for (let i = 0; i < payloadLen; i++) p[i] = buf[offset + i] ^ m[i % 4];
+      return { data: p.toString("utf-8"), opcode, bytesConsumed: offset + payloadLen };
+    }
+    if (buf.length < offset + payloadLen) return { data: null, bytesConsumed: 0, opcode };
+    return { data: buf.slice(offset, offset + payloadLen).toString("utf-8"), opcode, bytesConsumed: offset + payloadLen };
+  }
+
   function send(obj) {
-    if (!_socket || _socket.readyState !== WebSocket.OPEN) return false;
-    try { _socket.send(JSON.stringify(obj)); return true; } catch { return false; }
+    if (!_socket || !_connected) return false;
+    try { _socket.write(wsEncodeFrame(JSON.stringify(obj))); return true; } catch { return false; }
   }
 
   function scanProjectDirs() {
@@ -1699,42 +1741,80 @@ function createConnector(config) {
 
   function doConnect() {
     if (_destroyed) return;
-    if (_socket) { try { _socket.close(); } catch {} _socket = null; }
+    if (_socket) { try { _socket.destroy(); } catch {} _socket = null; }
     _connected = false;
     if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
 
-    const base = _currentRelayUrl.replace(/\/$/, "");
-    const wsUrl = `${base}/bridge-ws?project=${encodeURIComponent(projectName || "default")}`;
-    log("info", `Connecting to ${wsUrl}...`);
+    let parsedUrl;
+    try { parsedUrl = new URL(_currentRelayUrl); } catch { log("error", `Invalid relay URL: ${_currentRelayUrl}`); return; }
 
-    const ws = new WebSocket(wsUrl);
-    _socket = ws;
+    const host = parsedUrl.hostname;
+    const isSecure = parsedUrl.protocol === "wss:" || parsedUrl.protocol === "https:";
+    const port = parsedUrl.port ? parseInt(parsedUrl.port) : (isSecure ? 443 : 80);
+    const wsKey = crypto.randomBytes(16).toString("base64");
+    const wsPath = `/bridge-ws?project=${encodeURIComponent(projectName || "default")}`;
+    const upgradeReq = [
+      `GET ${wsPath} HTTP/1.1`,
+      `Host: ${host}`,
+      `Upgrade: websocket`,
+      `Connection: Upgrade`,
+      `Sec-WebSocket-Key: ${wsKey}`,
+      `Sec-WebSocket-Version: 13`,
+      `User-Agent: LambyBridgeConnector/2.0`,
+      `\r\n`,
+    ].join("\r\n");
 
-    ws.on("open", () => {
-      _connected = true;
-      _lastConnectedAt = Date.now();
-      log("info", `Connected to relay`);
-      if (_onStatusChange) _onStatusChange("connected");
-      _pingInterval = setInterval(() => { if (_connected) send({ type: "ping", ts: Date.now() }); }, 15000);
+    log("info", `Connecting to ${_currentRelayUrl}...`);
+    const connectOpts = { host, port, servername: host };
+    const sock = isSecure ? tls.connect(connectOpts) : net.connect(connectOpts);
+    let upgraded = false;
+    let rxBuf = Buffer.alloc(0);
+    let disconnectFired = false;
+
+    const doUpgrade = () => { if (!upgraded) sock.write(upgradeReq); };
+    if (isSecure) sock.on("secureConnect", doUpgrade); else sock.on("connect", doUpgrade);
+
+    sock.on("data", (chunk) => {
+      rxBuf = Buffer.concat([rxBuf, chunk]);
+      if (!upgraded) {
+        const sepIdx = rxBuf.indexOf("\r\n\r\n");
+        if (sepIdx === -1) return;
+        const headerStr = rxBuf.slice(0, sepIdx).toString();
+        rxBuf = rxBuf.slice(sepIdx + 4);
+        if (!headerStr.includes("101")) { log("error", `WS upgrade rejected: ${headerStr.split("\r\n")[0]}`); sock.destroy(); return; }
+        upgraded = true; _connected = true; _socket = sock; _lastConnectedAt = Date.now();
+        log("info", `Connected to relay at ${host}`);
+        if (_onStatusChange) _onStatusChange("connected");
+        clearInterval(_pingInterval);
+        _pingInterval = setInterval(() => { if (_connected) send({ type: "ping", ts: Date.now() }); }, 15000);
+      }
+      while (rxBuf.length > 0) {
+        const { data, opcode, bytesConsumed } = wsDecodeFrame(rxBuf);
+        if (data === null) break;
+        rxBuf = rxBuf.slice(bytesConsumed);
+        if (opcode === 0x8) { sock.end(); return; }
+        if (opcode === 0x9) { send({ type: "pong" }); continue; }
+        if (data) onMessage(data).catch(e => log("error", `Handler error: ${e.message}`));
+      }
     });
 
-    ws.on("message", (data) => {
-      onMessage(data.toString()).catch(e => log("error", `Handler error: ${e.message}`));
-    });
-
-    ws.on("close", () => {
+    const onDisconnect = () => {
+      if (disconnectFired) return;
+      disconnectFired = true;
+      sock.removeAllListeners();
+      try { sock.destroy(); } catch {}
       clearInterval(_pingInterval); _pingInterval = null;
       _connected = false; _socket = null;
       if (_onStatusChange) _onStatusChange("disconnected");
       if (!_destroyed) {
-        log("warn", "Disconnected, reconnecting in 5s...");
-        setTimeout(() => doConnect(), 5000);
+        log("warn", `Disconnected. Reconnecting in ${RECONNECT_DELAY / 1000}s...`);
+        setTimeout(() => doConnect(), RECONNECT_DELAY);
       }
-    });
-
-    ws.on("error", (e) => {
-      log("error", `Socket error: ${e.message}`);
-    });
+    };
+    sock.on("close",   () => onDisconnect());
+    sock.on("error",   (e) => { log("error", `Socket error: ${e.message}`); onDisconnect(); });
+    sock.on("timeout", () => onDisconnect());
+    sock.setTimeout(90000);
   }
 
   return {
@@ -1747,7 +1827,7 @@ function createConnector(config) {
     disconnect() {
       _destroyed = true;
       if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
-      if (_socket) { try { _socket.close(); } catch {} _socket = null; }
+      if (_socket) { try { _socket.destroy(); } catch {} _socket = null; }
       _connected = false;
       if (_onStatusChange) _onStatusChange("disconnected");
     },
