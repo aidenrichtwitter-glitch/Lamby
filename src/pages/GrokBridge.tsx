@@ -252,6 +252,9 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
   const isElectronEnv = typeof window !== 'undefined' && (window as any).process?.type === 'renderer';
   try {
     let relayData: any = null;
+    let savedMode: string | null = null;
+    try { savedMode = localStorage.getItem('lamby-bridge-mode'); } catch {}
+
     if (isElectronEnv) {
       try {
         const statusRes = await fetch('http://localhost:4999/api/bridge-status').catch(() => null);
@@ -269,26 +272,30 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
       relayData = relayRes?.ok ? await relayRes.json().catch(() => null) : null;
     }
 
-    let savedMode: string | null = null;
-    try { savedMode = localStorage.getItem('lamby-bridge-mode'); } catch {}
-
-    let relayBase = '';
-    if (savedMode === 'dev' && relayData?.devRelayUrl) {
-      relayBase = relayData.devRelayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
-    } else if (savedMode === 'production' && relayData?.prodRelayUrl) {
-      relayBase = relayData.prodRelayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
-    } else if (relayData?.relayUrl) {
-      relayBase = relayData.relayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
-    }
-
-    if (relayBase) {
-      const online = relayData?.status === 'connected' || (relayData?.connectedClients > 0);
+    if (savedMode === 'production' && relayData?.prodRelayUrl) {
+      const relayBase = relayData.prodRelayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
+      const statusCheck = await fetch(`${relayBase}/api/bridge-status`).catch(() => null);
+      const statusData = statusCheck?.ok ? await statusCheck.json().catch(() => null) : null;
+      const online = statusData?.connectedClients > 0 || statusData?.status === 'connected';
       return {
         snapUrl: `${relayBase}/api/snapshot/${project || 'PROJECT_NAME'}`,
         cmdUrl: `${relayBase}/api/sandbox/execute`,
         proxyUrl: `${relayBase}/api/grok-proxy`,
         editUrl: `${relayBase}/api/grok-edit`,
         online,
+      };
+    }
+
+    const origin = isElectronEnv
+      ? (relayData?.devRelayUrl ? relayData.devRelayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '') : 'http://localhost:4999')
+      : (typeof window !== 'undefined' ? window.location.origin : '');
+    if (origin) {
+      return {
+        snapUrl: `${origin}/api/snapshot/${project || 'PROJECT_NAME'}`,
+        cmdUrl: `${origin}/api/sandbox/execute`,
+        proxyUrl: `${origin}/api/grok-proxy`,
+        editUrl: `${origin}/api/grok-edit`,
+        online: true,
       };
     }
   } catch {}
@@ -4005,31 +4012,31 @@ const GrokBridge: React.FC = () => {
       let savedMode: string | null = null;
       try { savedMode = localStorage.getItem('lamby-bridge-mode'); } catch {}
 
-      let relayUrl = '';
-      if (savedMode === 'dev' && relayData?.devRelayUrl) {
-        relayUrl = relayData.devRelayUrl;
-      } else if (savedMode === 'production' && relayData?.prodRelayUrl) {
-        relayUrl = relayData.prodRelayUrl;
-      } else if (relayData?.relayUrl) {
-        relayUrl = relayData.relayUrl;
-      }
-
-      if (relayUrl) {
-        const relayBase = relayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
-        setBridgeRelayUrl(relayUrl);
-        setBridgeRelayInput(relayUrl);
-        setSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
-        setCommandEndpoint(`${relayBase}/api/sandbox/execute`);
-        setExternalSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
-        setExternalCommandEndpoint(`${relayBase}/api/sandbox/execute`);
-        setBridgeStatus(relayData?.status === 'connected' ? 'connected' : relayData?.connectedClients > 0 ? 'connected' : 'disconnected');
+      if (savedMode === 'production' && relayData?.prodRelayUrl) {
+        const prodBase = relayData.prodRelayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
+        setBridgeRelayUrl(relayData.prodRelayUrl);
+        setBridgeRelayInput(relayData.prodRelayUrl);
+        setSnapshotUrl(`${prodBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+        setCommandEndpoint(`${prodBase}/api/sandbox/execute`);
+        setExternalSnapshotUrl(`${prodBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+        setExternalCommandEndpoint(`${prodBase}/api/sandbox/execute`);
+        try {
+          const statusCheck = await fetch(`${prodBase}/api/bridge-status`).catch(() => null);
+          const statusData = statusCheck?.ok ? await statusCheck.json().catch(() => null) : null;
+          setBridgeStatus(statusData?.connectedClients > 0 ? 'connected' : 'disconnected');
+        } catch {
+          setBridgeStatus('disconnected');
+        }
       } else {
         const serverBase = isElectron ? 'http://localhost:4999' : window.location.origin;
+        const devRelayUrl = relayData?.devRelayUrl || `wss://${window.location.host}`;
+        setBridgeRelayUrl(devRelayUrl);
+        setBridgeRelayInput(devRelayUrl);
         setSnapshotUrl(`${serverBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
         setCommandEndpoint(`${serverBase}/api/sandbox/execute`);
-        setExternalSnapshotUrl('');
-        setExternalCommandEndpoint('');
-        setBridgeStatus('web-mode');
+        setExternalSnapshotUrl(`${serverBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+        setExternalCommandEndpoint(`${serverBase}/api/sandbox/execute`);
+        setBridgeStatus('connected');
       }
     }
     fetchSnapshotInfo();
@@ -5471,21 +5478,8 @@ const GrokBridge: React.FC = () => {
                           setBridgeRelayUrl(devUrl);
                           setExternalSnapshotUrl(`${base}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
                           setExternalCommandEndpoint(`${base}/api/sandbox/execute`);
-                          setStatusMessage('Checking Dev relay...');
-                          try {
-                            const statusRes = await fetch(`${base}/api/bridge-status`).catch(() => null);
-                            const statusData = statusRes?.ok ? await statusRes.json().catch(() => null) : null;
-                            if (statusData?.status === 'connected' || statusData?.connectedClients > 0) {
-                              setBridgeStatus('connected');
-                              setStatusMessage(`Dev relay: Connected (${statusData.connectedClients || 1} client${(statusData.connectedClients || 1) > 1 ? 's' : ''})`);
-                            } else {
-                              setBridgeStatus('disconnected');
-                              setStatusMessage('Dev relay: No desktop connector connected');
-                            }
-                          } catch {
-                            setBridgeStatus('disconnected');
-                            setStatusMessage('Dev relay: Could not reach');
-                          }
+                          setBridgeStatus('connected');
+                          setStatusMessage('Dev relay: Connected (local server)');
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
                           bridgeMode === 'dev'
