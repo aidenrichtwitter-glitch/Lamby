@@ -4,6 +4,32 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 21: L3 multi-agent parallel execution causes triple corruption
+**Date:** 2026-03-21
+**Context:** L3 "passed" per coord notes but post-test inspection revealed 3 critical issues that the multi-agent system missed.
+**What went wrong:**
+1. **App.tsx truncated to 31 chars** (`import React, { useState } from`) — grok-create for the PAGES map update failed mid-write, truncating the file. The summarizer couldn't detect this because it confused JSON response length with file content length.
+2. **Navigation.tsx got 10 duplicate metrics entries** — Grok's multi-agent system (Lucas/Harper) each independently fired grok-write to add the metrics nav item. grok-write search/replace matched once per call, but 10 agents called it in parallel. Result: 10 identical `{ id: 'metrics', label: 'Metrics', icon: Activity }` entries.
+3. **Dashboard.tsx committed with L2 comment header** — the L2 retry loop's corruption (406 chars with `// Bridge Test L2:` header) persisted and was included in the L3 commit.
+**What I did to make it work (manual reference run):**
+1. Reverted to pre-L3 state: `git checkout 7ba0736 -- src/components/App.tsx src/components/Navigation.tsx src/pages/Dashboard.tsx`
+2. Created Metrics.tsx via grok-create (3808 chars, 102 lines) — worked first time
+3. Updated App.tsx: grok-write for import worked, but grok-write for PAGES map failed (0 replacements — whitespace mismatch). Used grok-create with full updated file instead (948 chars) — worked.
+4. Updated Navigation.tsx: grok-write search/replace for NAV_ITEMS worked — added exactly 1 metrics entry (Activity icon already imported)
+5. Console check: 0 errors
+6. Git add + commit: 125 insertions, 4 files changed — clean
+7. Reverted everything back to clean baseline for Grok's next run
+**Key findings:**
+- **grok-write is unreliable for PAGES map updates** — whitespace/indent matching fails silently (0 replacements). For small files (<2KB), grok-create with full content is more reliable.
+- **Multi-agent parallel grok-write causes duplicates** — the same search text matches in parallel calls before any has completed, so all succeed. Must add "DO NOT call grok-write more than ONCE per file" rule.
+- **Verification after grok-write is essential** — must read the file back and check for exactly 1 occurrence of the added text.
+**Prompt fixes needed:**
+1. L3 prompt should say: "If grok-write returns 0 replacements, fall back to grok-create with the full updated file"
+2. L3 prompt should say: "After updating Navigation.tsx, verify EXACTLY 1 metrics entry exists. If more than 1, STOP and report."
+3. L3 prompt should say: "Check Dashboard.tsx is clean (no comment headers) before committing"
+
+---
+
 ## Lesson 20: browse_page summarizer confuses JSON API response with file content
 **Date:** 2026-03-21
 **Context:** L2 PASSED, but Grok's agents noted unreliable content extraction during grok-read verification.

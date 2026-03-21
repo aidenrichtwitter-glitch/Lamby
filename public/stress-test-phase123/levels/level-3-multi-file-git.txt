@@ -2,130 +2,145 @@
 === OBJECTIVE: Create a new page, wire it into routing and navigation, commit to git ===
 
 This is the full stress test. You will:
-- Create a brand new page component
-- Add it to the app's routing
-- Add it to the navigation menu
+- Create a brand new page component (Metrics.tsx)
+- Add it to the app's routing (App.tsx PAGES map)
+- Add it to the navigation menu (Navigation.tsx NAV_ITEMS)
 - Verify everything compiles
 - Commit to git
 
 CRITICAL STOP RULES (READ THESE FIRST):
-- You have a MAXIMUM of 30 browse_page calls for this entire test. If you exceed 30, STOP immediately.
+- You have a MAXIMUM of 25 browse_page calls for this entire test. If you exceed 25, STOP immediately.
 - Once you post the FINAL coord note (L3 REVIEW), you are DONE. Do NOT make any more browse_page calls.
 - Do NOT retry any step more than 2 times. If it fails twice, post the failure and move on.
 - Do NOT loop back to earlier steps after completing later ones.
+- Each grok-write call should be made EXACTLY ONCE per file. Do NOT call grok-write on the same file multiple times for the same change.
 
-CRITICAL APPROACH — CHOOSE THE RIGHT TOOL:
+CRITICAL APPROACH — WHAT WORKS (TESTED AND VERIFIED):
 - For CREATING new files (Metrics.tsx): Use grok-create. URL-encode the content.
-  If the file is large (>5KB), use grok-create-chunk to split it.
-- For EDITING existing files (App.tsx, Navigation.tsx): Use grok-write (search/replace).
-  grok-write sends only the small search/replace strings — avoids full-file encoding issues.
+  If the file is large (>5KB), use grok-create-chunk.
+- For EDITING existing files: Try grok-write (search/replace) FIRST.
   URL: {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=FILE&search=OLD_TEXT&replace=NEW_TEXT
-  URL-encode the search and replace values. grok-write auto-verifies the edit landed.
-- Do NOT use grok-create to overwrite existing files unless absolutely necessary.
-  grok-create with full file content causes double-encoding issues with browse_page.
+  IMPORTANT: If grok-write returns {replacements: 0}, the search text did not match.
+  FALLBACK: For small files (<2KB like App.tsx), read the file, modify it in memory, and use grok-create to write the whole updated file. This is MORE RELIABLE than retrying grok-write.
+- NEVER call grok-write more than ONCE for the same change on the same file. Multi-agent parallel calls cause duplicate entries.
+- Activity icon is ALREADY imported in Navigation.tsx. Do NOT add a duplicate import.
 
-STEPS:
+STEPS (do them in order, post to coord after each):
 
 0. CLEANUP: Call /api/grok-git?project={{PROJECT}}&action=status
-   → If dirty, investigate. Do NOT delete files — deletions get committed later.
-   → Post to coord: "L3-S0: git [clean/dirty], [details]"
+   → If dirty, investigate. Do NOT delete files unless they are test artifacts.
+   → Post to coord: "L3-S0: git clean" or "L3-S0: git dirty, [details]"
 
 1. READ TREE: Call /api/grok-tree?project={{PROJECT}}
-   → Post to coord: "L3-S1: [N] files, Metrics.tsx [present/missing]"
+   → Post to coord: "L3-S1: tree read"
 
-2. READ ENTRY POINT: Call /api/grok-read?project={{PROJECT}}&path=src/index.tsx
-   → Find the real App import path (e.g., './components/App' or './App')
-   → Then read that App file
-   → Post to coord: "L3-S2: App at [path], [N] page routes"
+2. READ APP FILE: Call /api/grok-read?project={{PROJECT}}&path=src/components/App.tsx
+   → Study it carefully. Note:
+   - The exact import lines (e.g., "import Settings from '../pages/Settings'")
+   - The PAGES map entries (e.g., "settings: Settings")
+   - These are the patterns you will match for search/replace
+   → Post to coord: "L3-S2: App read"
 
-3. READ NAVIGATION: Call /api/grok-read for Navigation.tsx (check path from tree)
-   → Note exact NAV_ITEMS array contents and all imports
-   → Post to coord: "L3-S3: [N] nav items, imports [list]"
+3. READ NAVIGATION: Call /api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
+   → Note the exact NAV_ITEMS array and which icons are ALREADY imported
+   → Activity icon IS already imported — do NOT add it again
+   → Post to coord: "L3-S3: Nav read, Activity already imported"
 
 4. CREATE METRICS PAGE: Use grok-create to create src/pages/Metrics.tsx
    GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=URL_ENCODED_CONTENT
-   The file should be a real React component with:
+   The file MUST have:
+   - Named export: export const Metrics: React.FC = () => { ... }
+   - Default export: export default Metrics
    - At least 3 metric cards (bridge latency, uptime, requests)
-   - useState hooks for interactivity
-   - Proper TypeScript types
-   - Dark mode support via CSS classes
-   - At least 80 lines of real code (not placeholder/lorem ipsum)
-   Keep content under ~5KB. For larger files, use grok-create-chunk.
-   → Post to coord: "L3-S4: Metrics.tsx grok-create sent ([N] chars)"
+   - useState and useEffect hooks
+   - TypeScript types (interface MetricCard)
+   - Dark mode support (dark: classes)
+   - At least 80 lines of real code
+   Keep content under ~4KB to avoid truncation.
+   → Post to coord: "L3-S4: Metrics.tsx created"
 
-5. VERIFY METRICS: Call grok-tree AND grok-read for src/pages/Metrics.tsx
-   → BOTH must confirm the file exists with correct content
-   → Post to coord: "L3-S5: Metrics.tsx verified, [N] chars, tree [present]"
-   → If MISSING or EMPTY: STOP. Post failure. Retry step 4. Do NOT continue.
+5. VERIFY METRICS: Call grok-read for src/pages/Metrics.tsx
+   → Confirm the first line is "import React"
+   → Confirm it has "export const Metrics" and "export default Metrics"
+   → Post to coord: "L3-S5: Metrics.tsx verified"
+   → If MISSING or EMPTY: Retry step 4 ONCE. If still missing, post failure and stop.
 
-6. UPDATE APP ROUTING: Use grok-write (search/replace) to add the Metrics import and route.
-   First, grok-read the App file to find the exact text to search for.
-   Then use two grok-write calls:
-   a) Add import: search for the last existing page import line → replace with that line + new Metrics import
-   b) Add route: search for the last existing Route element → replace with that Route + new Metrics Route
-   → Post to coord: "L3-S6: App.tsx grok-write sent (added Metrics import + route)"
+6. UPDATE APP.TSX — APPROACH THAT WORKS:
+   Read App.tsx first. Then you have TWO options:
 
-7. VERIFY APP: grok-read App file → confirm Metrics import AND route entry present
-   → Post to coord: "L3-S7: App.tsx verified, Metrics import [yes/no], route [yes/no]"
-   → If either missing: STOP. Read the file again, fix, rewrite. Do NOT continue.
+   OPTION A (preferred for App.tsx — it's small ~920 chars):
+   Read the full file, add the import line and PAGES entry in your memory, then grok-create the entire updated file.
+   - Add after the last import: import { Metrics } from '../pages/Metrics'
+   - Add to PAGES map: metrics: Metrics (with comma after the previous entry)
 
-8. UPDATE NAVIGATION: Use grok-write (search/replace) to add the metrics nav item.
-   First, grok-read Navigation.tsx to find the exact NAV_ITEMS array entries.
-   Then use grok-write: search for the last existing nav item entry → replace with that entry + new Metrics entry.
-   CRITICAL: Check for duplicate imports. Do NOT add an import that already exists.
-   → Post to coord: "L3-S8: Navigation.tsx grok-write sent (added metrics nav)"
+   OPTION B (grok-write — may fail on whitespace):
+   a) grok-write: search="import Settings from '../pages/Settings'" replace="import Settings from '../pages/Settings'\nimport { Metrics } from '../pages/Metrics'"
+   b) grok-write: search="settings: Settings" replace="settings: Settings,\n  metrics: Metrics"
+   If either returns 0 replacements, fall back to OPTION A.
 
-9. VERIFY NAVIGATION: grok-read Navigation.tsx → confirm metrics in NAV_ITEMS, no duplicate imports
-   → Post to coord: "L3-S9: Navigation.tsx verified, metrics nav [yes/no], duplicates [yes/no]"
-   → If nav item missing or duplicates found: Fix and rewrite.
+   → Post to coord: "L3-S6: App.tsx updated"
+
+7. VERIFY APP: grok-read App.tsx
+   → Confirm "import { Metrics }" is present
+   → Confirm "metrics: Metrics" is present in the PAGES map
+   → Confirm the file is >900 chars (if truncated to <100 chars, the write failed — restore and retry)
+   → Post to coord: "L3-S7: App.tsx verified, import yes, route yes"
+   → If EITHER missing: Read the file, fix it with grok-create, verify again. Do NOT continue without both.
+
+8. UPDATE NAVIGATION: Use grok-write to add ONE metrics nav item.
+   Search for the LAST nav item: "{ id: 'settings', label: 'Settings', icon: Settings }"
+   Replace with: "{ id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }"
+   DO NOT add an import for Activity — it is ALREADY imported.
+   DO NOT call grok-write more than ONCE for this change.
+   → Post to coord: "L3-S8: Navigation.tsx updated"
+
+9. VERIFY NAVIGATION: grok-read Navigation.tsx
+   → Count how many times "'metrics'" appears. Must be EXACTLY 1.
+   → If more than 1: The edit was duplicated. Read the file, remove duplicates with grok-create, verify again.
+   → Confirm no duplicate Activity imports
+   → Post to coord: "L3-S9: Nav verified, metrics entries: 1"
 
 10. CONSOLE CHECK: Use grok-proxy (raw JSON) + get_console_errors
-    → Post to coord: "L3-S10: console [clean/N errors]"
+    → Post to coord: "L3-S10: console clean" or "L3-S10: console errors: [details]"
     → If errors: Fix them before continuing. Do NOT commit with errors.
 
-11. SCREENSHOT: Call /api/screenshot/{{PROJECT}}?fullPage=true&waitMs=10000
-    → Post to coord: "L3-S11: screenshot taken"
+11. PRE-COMMIT SANITY CHECK (IMPORTANT):
+    → grok-read Dashboard.tsx — confirm it does NOT start with "//" (no stale L2 comment headers)
+    → If Dashboard.tsx is corrupted, restore it: grok-run cmd=git%20checkout%20HEAD%20--%20src/pages/Dashboard.tsx
+    → grok-git status — confirm at least these files are modified: App.tsx, Navigation.tsx, Metrics.tsx
+    → Post to coord: "L3-S11: pre-commit OK" or "L3-S11: pre-commit PROBLEM: [details]"
 
-12. PRE-COMMIT CHECK: grok-tree must show Metrics.tsx. grok-git status must show all 3 files.
-    → Post to coord: "L3-S12: pre-commit [OK/PROBLEM: details]"
-    → If ANY expected file missing from status: DO NOT COMMIT. Fix first.
+12. GIT ADD: /api/grok-git?project={{PROJECT}}&action=add&args=.
+    → Post to coord: "L3-S12: git add done"
 
-13. GIT ADD: /api/grok-git?project={{PROJECT}}&action=add&args=.
-    → Post to coord: "L3-S13: git add completed"
-
-14. GIT COMMIT: /api/grok-git?project={{PROJECT}}&action=commit&message=Level 3: Add Metrics page with routing and navigation
+13. GIT COMMIT: /api/grok-git?project={{PROJECT}}&action=commit&message=L3:%20Add%20Metrics%20page%20with%20routing%20and%20navigation
     → CHECK the response. If "nothing to commit": something went wrong.
-    → Post to coord: "L3-S14: committed [hash] / FAILED: [reason]"
+    → Post to coord: "L3-S13: committed [hash]" or "L3-S13: FAILED: [reason]"
 
-15. VERIFY COMMIT: grok-git log&count=3 → confirm hash. grok-git diff HEAD~1..HEAD --stat → confirm adds.
-    → Post to coord: "L3-S15: commit verified, [N] files changed, [N] insertions"
-    → If the diff shows only deletions: THE COMMIT IS WRONG. Report immediately.
+14. VERIFY COMMIT: grok-git log&count=3 → confirm hash is present
+    → Post to coord: "L3-S14: commit verified"
 
-=== REVIEW STAGE (MANDATORY) ===
-16. Re-read src/pages/Metrics.tsx — paste first 5 lines to prove it exists
-17. Re-read App file — confirm Metrics import + route
-18. Re-read Navigation.tsx — confirm metrics nav item, no duplicate imports
-19. Check git diff stat — confirm the commit ADDS files
-20. Check console errors — confirm zero errors
-21. Post to coord: "L3 REVIEW: [PASS/FAIL] — Metrics [present/missing], App [updated/unchanged], Nav [updated/unchanged], diff [adds/deletes], console [clean/errors]"
+15. FINAL REVIEW: Post to coord:
+    "L3 REVIEW: [PASS/FAIL] — Metrics [present/missing], App [updated/unchanged], Nav [updated/unchanged], console [clean/errors]"
+
+    *** TEST IS NOW DONE. STOP. DO NOT MAKE ANY MORE BROWSE_PAGE CALLS. ***
+    *** DO NOT RETRY ANY STEPS. DO NOT WRITE ANY MORE FILES. YOU ARE FINISHED. ***
 
 === PASS CRITERIA ===
-- All coord notes posted (L3-S0 through L3-S15 + review)
-- Metrics.tsx exists with real component code (80+ lines)
-- App routing includes Metrics import and route
-- Navigation includes metrics nav item, no duplicate imports
+- All coord notes posted (L3-S0 through L3-S14 + review)
+- Metrics.tsx exists with real component code (80+ lines, named + default exports)
+- App.tsx has Metrics import AND metrics entry in PAGES map
+- Navigation.tsx has EXACTLY 1 metrics nav item, no duplicate imports
 - Console is clean
-- Git commit exists with correct files (insertions, not just deletions)
-- Review stage confirms all checks pass
+- Dashboard.tsx is clean (no comment headers)
+- Git commit exists with insertions (not just deletions)
 
 === FAIL CONDITIONS ===
 - Any file missing or unchanged after write
+- App.tsx truncated (<100 chars = truncation failure)
+- Navigation.tsx has >1 metrics entry (= duplicate from parallel grok-write)
+- Dashboard.tsx has comment headers (= stale L2 corruption)
 - Git commit contains only deletions
 - Console errors after edits
-- Duplicate imports in Navigation.tsx
 - Coord notes missing
-- Review stage shows failures but "PASS" is claimed
-- MORE THAN 30 browse_page calls used (indicates infinite loop — automatic FAIL)
-
-*** AFTER POSTING THE FINAL REVIEW NOTE: TEST IS DONE. STOP. ***
-*** DO NOT MAKE ANY MORE BROWSE_PAGE CALLS. DO NOT RETRY ANY STEPS. ***
+- MORE THAN 25 browse_page calls used (indicates infinite loop — automatic FAIL)
