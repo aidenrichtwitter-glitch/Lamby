@@ -1,0 +1,28 @@
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:dev
+
+> guardian-ai@1.0.0 electron:dev
+> concurrently --kill-others "vite --host 0.0.0.0 --port 5000" "wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 npx electron ."
+
+[0] [Lamby] Snapshot key: 92781fb690e47d110da1458cbe03ac9a (hardcoded, use /api/snapshot-key from localhost to retrieve)
+[0] 00:47:02 [Bridge]       Project scan: found 27 dirs under "C:\Users\Aiden\Desktop\guardian-ai" → [audio-file-player-+-visualizer, duckstation, reactjs-vite-tailwindcss-boilerplate, landing-page, main-copy-1773868763513, efflux-tracker, musicalizr, react-canva, pokemon-react-js-and-three-js, r3f-audio-visualizer, mario, attached_assets, dist, docs, lamby, Grok-Desktop, vite_react_shadcn_ts, path, projects, public, scripts, server, src, src-tauri, supabase, test, tests]
+[0]
+[0]   VITE v5.4.19  ready in 231 ms
+[0]
+[0]   ➜  Local:   http://localhost:5000/
+[0]   ➜  Network: http://192.168.1.182:5000/
+[1]
+[1] Grok Desktop: GPU acceleration enabled
+[0] [Preview] Starting groks-app with: npx vite --host 0.0.0.0 --port 5168
+[0] [Preview] Using local binary for groks-app: C:\Users\Aiden\Desktop\guardian-ai\projects\groks-app\node_modules\.bin\vite.cmd
+[0] (node:24664) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+[0] (Use `node --trace-deprecation ...` to show where the warning was created)
+[0] [Preview:groks-app] Port 5168 is in use, trying another one...
+[0] [Preview:groks-app] Port 5169 is in use, trying another one...
+[0] [Preview:groks-app] VITE v5.4.21  ready in 386 ms
+[0] [Preview:groks-app] ➜  Local:   http://localhost:5170/
+[0]   ➜  Network: http://192.168.1.182:5170/
+[0] 00:47:11 [Bridge WARN]  Downgrading wss:// to ws:// for localhost connection (wss://localhost:5000)
+[0] 00:47:11 [Bridge]       Connecting to wss://localhost:5000...
+[0] [Bridge Relay] Desktop client connected (key: 6a266168..., connId: 21bca660)
+[0] 00:47:11 [Bridge]       Connected to relay at localhost
