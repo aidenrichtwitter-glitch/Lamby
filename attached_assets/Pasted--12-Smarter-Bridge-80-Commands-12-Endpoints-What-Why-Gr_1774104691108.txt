@@ -1,0 +1,147 @@
+#12 - Smarter Bridge — 80+ Commands → 12 Endpoints
+
+What & Why
+
+Grok currently has to know 80+ action type names, base64-encode every payload, and chain 3-5 calls to verify results. This task adds 12 named GET endpoints that consolidate related action types — not by deleting anything but by providing a simpler addressing scheme at the relay layer. The underlying dispatcher is untouched. The existing grok-proxy stays as-is, so every individual action type remains directly reachable as a fallback.
+
+Nothing is lost. Grok keeps full access to every action type:
+
+New combined endpoints expose each sub-operation individually via ?action= params
+grok-proxy (unchanged) still accepts any action type via base64 payload
+grok-super?describe=TEXT lets Grok describe any job in plain English and Grok-3-mini plans the exact action sequence
+Consolidation map
+
+New endpoint	Absorbs	Reduction
+/api/grok-git?action=	git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_stash_pop, git_push, git_pull, git_merge, git_reset, git_revert, git_tag, git_init	16 → 1
+/api/grok-process?action=	start_process, start_process_named, kill_process, list_processes, monitor_process, get_process_logs, stop_all_processes, restart_dev_server	8 → 1
+/api/grok-search?q=&type=	grep, grep_advanced, search_files, symbol_search, find_usages	5 → 1
+/api/grok-quality?checks=	type_check, lint_and_fix, format_files (run in parallel)	3 → 1
+/api/grok-deps?action=	install_deps, add_dependency, remove_dependency	3 → 1
+/api/grok-tree	list_tree, list_tree_filtered	2 → 1
+/api/grok-read	read_file, read_multiple_files	2 → 1
+/api/grok-write	search_replace, apply_patch + auto-verifies afterward	2 → 1 + bonus
+/api/grok-run	run_command, run_command_advanced, build_with_flags	3 → 1
+/api/grok-super?describe=	Wraps super_command as a GET — Grok-3-mini plans any job from plain English	covers all remaining types
+/api/grok-macro/project-status	tree + package.json read + git_status + get_preview_url (parallel)	4 calls → 1
+/api/grok-macro/read-context	read_file + extract_imports + read_multiple_files (batch)	3-10 calls → 1
+Remaining raw-proxy types (too specialized to genericize, still usable via grok-proxy or grok-super): generate_component, generate_page, deploy_preview, migrate_framework, accessibility_audit, security_scan, import_project, set_env_var, get_env_vars, set_tailwind_config, set_next_config, update_package_json, manage_scripts, component_tree, bundle_analyzer, network_monitor, react_profiler, visual_diff, record_video, super_command, and others.
+
+Complete parameter contracts (verified against dispatcher source)
+
+/api/grok-git?project=P&action=ACTION[&params]
+
+All 16 git types individually reachable:
+
+?action=	Dispatcher type	Additional params
+status	git_status	—
+add	git_add	files (default: .)
+commit	git_commit	message (default: auto-commit)
+diff	git_diff	args
+log	git_log	count (default: 10)
+branch	git_branch	name (optional; omit to list)
+checkout	git_checkout	ref (default: main)
+stash	git_stash	args
+stash-pop	git_stash_pop	—
+push	git_push	remote (default: origin), branch
+pull	git_pull	remote (default: origin), branch
+merge	git_merge	branch (required)
+reset	git_reset	mode (hard/soft), ref (default: HEAD)
+revert	git_revert	commit (required)
+tag	git_tag	name (required), message
+init	git_init	—
+/api/grok-process?project=P&action=ACTION[&params]
+
+All 8 process types individually reachable:
+
+?action=	Dispatcher type	Additional params
+start	start_process	cmd (required), name, env
+start-named	start_process_named	name (required), cmd (required)
+stop	kill_process	name (required)
+list	list_processes	—
+monitor	monitor_process	name (required)
+logs	get_process_logs	name (required)
+stop-all	stop_all_processes	—
+restart	restart_dev_server	name (optional)
+/api/grok-search?project=P&q=QUERY[&type=TYPE&path=DIR]
+
+?type=	Dispatcher type	Notes
+text (default)	grep	fast text match
+symbol	symbol_search	functions, classes, exports
+file	search_files	filename search
+usages	find_usages	where a symbol is used
+/api/grok-quality?project=P[&checks=type,lint,format]
+
+Runs selected checks in parallel, merges all results into one response. Defaults to all three if no ?checks= provided.
+
+/api/grok-deps?project=P&action=install|add|remove[&pkg=NAME]
+
+?action=	Dispatcher type	pkg param
+install	install_deps	not used
+add	add_dependency	required
+remove	remove_dependency	required
+/api/grok-read?project=P&path=FILE[&files=F1,F2]
+
+Single file or comma-separated list. Routes to read_file or read_multiple_files.
+
+/api/grok-write?project=P&path=FILE&search=OLD&replace=NEW
+
+Dispatches search_replace, then immediately fires a read_file roundtrip and returns both the edit result and the verified current content in one response.
+
+/api/grok-tree?project=P[&filter=src]
+
+Routes to list_tree or list_tree_filtered. Strips node_modules, dist, .git, build, __pycache__.
+
+/api/grok-run?project=P&cmd=COMMAND[&flags=F]
+
+Routes to run_command. If flags param present, routes to run_command_advanced.
+
+/api/grok-super?project=P&describe=TEXT
+
+Wraps the existing super_command dispatcher action as a plain GET endpoint. Passes describe as the description field. Requires XAI_API env var to be set on the desktop side.
+
+Utility endpoints
+
+/api/diag[?project=P]
+
+Runs a live list_tree roundtrip, times it. Returns: relay health, desktop connected (yes/no + project name), roundtrip latency, pass/fail table of all new endpoints, readyUrls block with pre-built URLs using the connected project. Graceful degradation if no desktop.
+
+/api/coord[?note=TEXT&from=SOURCE&clear=1]
+
+50-entry in-memory ring buffer. GET with no params → last 20 notes. ?note=TEXT&from=SOURCE → append. ?clear=1 → clear.
+
+_bridge metadata block on every new response
+
+{ "_bridge": { "connected": true, "project": "groks-app", "ts": 1234567890,
+  "readyUrls": { "read": "...", "write": "...", "tree": "...", "git": "...",
+    "process": "...", "search": "...", "run": "...", "diag": "..." } } }
+Updated discovery docs
+
+/api/grok and /api/grok-chat-prompt rewritten to lead with the 12 combined endpoints and their param contracts. Feature grok-super prominently. Raw proxy demoted to a short "specialized fallback" section. Fix all URL ?/& syntax. Include live examples with connected project name.
+
+Out of scope
+
+Changes to any file other than index.js
+Modifying lamby-app/, bridge-connector.cjs, or sandbox-dispatcher.cjs
+Removing any existing dispatcher action types from the proxy
+Changing existing grok-edit, grok-proxy, grok-interact endpoints
+Authentication / key enforcement
+The snapshot-key path traversal bug (desktop-side issue)
+Build tasks
+
+File + run endpoints — /api/grok-read, /api/grok-write (with auto-verify), /api/grok-tree, /api/grok-run. Follow the waitForClient + makeRelayPromise pattern from grok-edit. All include _bridge metadata.
+Git + process endpoints — /api/grok-git dispatches to the correct dispatcher type for each ?action= value, threading all params from the table above. /api/grok-process similarly. Both include _bridge metadata.
+Search + quality + deps endpoints — /api/grok-search, /api/grok-quality (fans out in parallel), /api/grok-deps. All include _bridge metadata.
+Super + macros + utility — /api/grok-super wraps super_command as GET. /api/grok-macro/project-status fans out 4 parallel actions. /api/grok-macro/read-context reads + parses imports + batch reads. /api/diag. /api/coord.
+Rewrite discovery docs — /api/grok and /api/grok-chat-prompt: lead with the 12 shortcuts + full param tables, feature grok-super, fix URL syntax, live examples. Demote raw proxy types to a short fallback section.
+Relevant files
+
+index.js:2310-2563 — existing grok-edit (WS roundtrip pattern)
+index.js:2564-2703 — existing grok-proxy (action dispatch pattern)
+index.js:1297-1779 — /api/grok docs (full rewrite, task 5)
+index.js:1780-1931 — /api/grok-chat-prompt (full rewrite, task 5)
+index.js:233-275 — findBridgeClient, makeRelayPromise, waitForClient helpers
+lamby-app/server/sandbox-dispatcher.cjs:483-512 — shared git switch block (9 types)
+lamby-app/server/sandbox-dispatcher.cjs:958-998 — git_push, git_pull, git_merge (separate cases)
+lamby-app/server/sandbox-dispatcher.cjs:2138-2185 — git_stash_pop, git_reset, git_revert, git_tag
+lamby-app/server/sandbox-dispatcher.cjs:536-565 — start_process, kill_process, list_processes
+lamby-app/server/sandbox-dispatcher.cjs:2797 — super_command (reference)

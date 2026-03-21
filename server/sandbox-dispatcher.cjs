@@ -272,22 +272,50 @@ async function _fastMethod4_PersistentPuppeteer(outputPath, opts) {
   return null;
 }
 
+function _fastMethod5_ColdstartPuppeteer(outputPath, opts) {
+  const puppeteerPath = findPuppeteerPath();
+  if (!puppeteerPath) return null;
+  const chromePath = getChromiumPath();
+  const targetUrl = (opts && opts.url) || "about:blank";
+  const vw = (opts && opts.width) || 1280;
+  const vh = (opts && opts.height) || 720;
+  const waitMs = (opts && opts.waitMs) || 0;
+  const fullPage = !!(opts && opts.fullPage);
+  const pupReq = JSON.stringify(puppeteerPath);
+  const script = `const pup=require(${pupReq});(async()=>{const b=await pup.launch({headless:"new",args:["--no-sandbox","--disable-gpu","--disable-dev-shm-usage"],executablePath:process.env.PUPPETEER_CHROMIUM_PATH||undefined});const p=await b.newPage();await p.setViewport({width:${vw},height:${vh}});await p.goto(${JSON.stringify(targetUrl)},{waitUntil:"networkidle0",timeout:15000}).catch(()=>{});${waitMs > 0 ? `await new Promise(r=>setTimeout(r,${waitMs}));` : ""}await p.screenshot({path:${JSON.stringify(outputPath)},fullPage:${fullPage}});await b.close()})()`;
+  try {
+    const env = Object.assign({}, process.env);
+    if (chromePath) env.PUPPETEER_CHROMIUM_PATH = chromePath;
+    childProcess.execFileSync("node", ["-e", script], { timeout: 45000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env });
+    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 100) {
+      return { captured: true, method: "puppeteer-coldstart" };
+    }
+  } catch {}
+  return null;
+}
+
 async function fastScreenshot(outputPath, opts) {
   const t0 = Date.now();
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const needsUrl = opts && opts.url && opts.url !== "about:blank";
 
-  const r1 = await _fastMethod1_ScreenshotDesktop(outputPath);
-  if (r1) { r1.ms = Date.now() - t0; return r1; }
+  if (!needsUrl) {
+    const r1 = await _fastMethod1_ScreenshotDesktop(outputPath);
+    if (r1) { r1.ms = Date.now() - t0; return r1; }
 
-  const r2 = _fastMethod2_PowerShell(outputPath);
-  if (r2) { r2.ms = Date.now() - t0; return r2; }
+    const r2 = _fastMethod2_PowerShell(outputPath);
+    if (r2) { r2.ms = Date.now() - t0; return r2; }
+  }
 
   const r3 = await _fastMethod3_CDPConnect(outputPath, opts);
   if (r3) { r3.ms = Date.now() - t0; return r3; }
 
   const r4 = await _fastMethod4_PersistentPuppeteer(outputPath, opts);
   if (r4) { r4.ms = Date.now() - t0; return r4; }
+
+  const r5 = _fastMethod5_ColdstartPuppeteer(outputPath, opts);
+  if (r5) { r5.ms = Date.now() - t0; return r5; }
 
   return null;
 }
@@ -1586,13 +1614,17 @@ async function executeSandboxAction(action, projectsDir, options) {
           if (fastResult && fastResult.captured && fs.existsSync(screenshotPath)) {
             const screenshotRelPath = `_screenshots/${screenshotName}`;
             const upload = await uploadScreenshot(screenshotPath);
-            const fileSize = fs.statSync(screenshotPath).size;
+            const imgData = fs.readFileSync(screenshotPath);
+            const base64 = imgData.toString("base64");
+            const fileSize = imgData.length;
             return { status: "success", type: t, data: {
               url: previewUrl, port: previewPort, captured: true,
               screenshotPath: screenshotRelPath,
               screenshotUrl: upload.uploaded ? upload.url : null,
               uploadError: upload.uploaded ? undefined : upload.reason,
               fileSize,
+              base64: base64.length < 5000000 ? base64 : null,
+              base64Length: base64.length,
               width: viewportW, height: viewportH,
               method: fastResult.method, ms: fastResult.ms
             }};
@@ -1627,13 +1659,17 @@ async function executeSandboxAction(action, projectsDir, options) {
             if (fs.existsSync(screenshotPath)) {
               const screenshotRelPath = `_screenshots/${screenshotName}`;
               const upload = await uploadScreenshot(screenshotPath);
-              const fileSize = fs.statSync(screenshotPath).size;
+              const imgData2 = fs.readFileSync(screenshotPath);
+              const base64_2 = imgData2.toString("base64");
+              const fileSize = imgData2.length;
               resolve({ status: "success", type: t, data: {
                 url: previewUrl, port: previewPort, captured: true,
                 screenshotPath: screenshotRelPath,
                 screenshotUrl: upload.uploaded ? upload.url : null,
                 uploadError: upload.uploaded ? undefined : upload.reason,
                 fileSize,
+                base64: base64_2.length < 5000000 ? base64_2 : null,
+                base64Length: base64_2.length,
                 width: viewportW, height: viewportH,
                 method: "puppeteer-coldstart", ms: Date.now() - spCaptureStart
               }});
