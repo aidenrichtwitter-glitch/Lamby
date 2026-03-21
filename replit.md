@@ -37,8 +37,7 @@ The following files and code sections are PERMANENTLY LOCKED. The agent MUST NOT
 
 **Locked files (do NOT edit):**
 - `server/bridge-connector.cjs` — Desktop connector (raw TLS sockets, wsEncodeFrame, wsDecodeFrame, doConnect, send)
-- `lamby-bridge/desktop-connector.js` — Working standalone connector (source of truth)
-- `lamby-bridge/index.js` — Relay server source
+- `lamby-bridge/index.js` — Relay server source (reference copy)
 
 **Locked code sections (do NOT edit):**
 - `connectToBridge()` function in `src/pages/GrokBridge.tsx` — Browser WebSocket connection
