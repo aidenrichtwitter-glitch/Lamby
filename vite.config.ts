@@ -387,7 +387,7 @@ function projectManagementPlugin(): Plugin {
         res.end(JSON.stringify({ key: snapshotKey, globalKey: snapshotKey, project: requestedProject || null, baseUrl, devRelayUrl: REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "", exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}?key=${snapshotKey}`, commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`, commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, write_file, create_file, delete_file, move_file, copy_file, rename_file, grep, run_command, install_deps, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, search_files, screenshot_preview, browser_interact, interact_preview" }));
       });
 
-      const bridgeClients = new Map<string, { ws: any; snapshotKey: string; lastPing: number }>();
+      const bridgeClients = new Map<string, { ws: any; snapshotKey: string; lastPing: number; connId: string; replaced: boolean }>();
       const pendingRelayRequests = new Map<string, { resolve: (s: string) => void; timer: ReturnType<typeof setTimeout> }>();
 
       server.middlewares.use("/api/snapshot/", async (req, res) => {
@@ -5539,8 +5539,19 @@ function projectManagementPlugin(): Plugin {
         const bridgeWss = new WebSocketServer({ noServer: true });
 
         bridgeWss.on("connection", (ws: any, bridgeKey: string, clientSnapshotKey: string) => {
-          console.log(`[Bridge Relay] Desktop client connected (key: ${bridgeKey.substring(0, 8)}...)`);
-          bridgeClients.set(bridgeKey, { ws, snapshotKey: clientSnapshotKey, lastPing: Date.now() });
+          const connId = crypto.randomUUID();
+          console.log(`[Bridge Relay] Desktop client connected (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)})`);
+
+          const existingClient = bridgeClients.get(bridgeKey);
+          if (existingClient) {
+            console.log(`[Bridge Relay] Replacing stale connection for key ${bridgeKey.substring(0, 8)}... (old connId: ${(existingClient.connId || "?").substring(0, 8)})`);
+            existingClient.replaced = true;
+            try { existingClient.ws.send(JSON.stringify({ type: "connection_replaced", reason: "A newer connection with the same key has connected." })); } catch {}
+            setTimeout(() => { try { existingClient.ws.close(); } catch {} }, 500);
+          }
+
+          const client = { ws, snapshotKey: clientSnapshotKey, lastPing: Date.now(), connId, replaced: false };
+          bridgeClients.set(bridgeKey, client);
 
           ws.on("message", (data: any) => {
             try {
@@ -5560,7 +5571,6 @@ function projectManagementPlugin(): Plugin {
                   pending.resolve(JSON.stringify(msg.result || { error: "Empty sandbox response from desktop." }));
                 }
               } else if (msg.type === "ping") {
-                const client = bridgeClients.get(bridgeKey);
                 if (client) client.lastPing = Date.now();
                 try { ws.send(JSON.stringify({ type: "pong" })); } catch {}
               }
@@ -5568,12 +5578,22 @@ function projectManagementPlugin(): Plugin {
           });
 
           ws.on("close", () => {
-            console.log(`[Bridge Relay] Desktop client disconnected (key: ${bridgeKey.substring(0, 8)}...)`);
-            bridgeClients.delete(bridgeKey);
+            if (client.replaced) {
+              console.log(`[Bridge Relay] Old connection closed (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)}) — already replaced, not removing from map`);
+              return;
+            }
+            console.log(`[Bridge Relay] Desktop client disconnected (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)})`);
+            const current = bridgeClients.get(bridgeKey);
+            if (current && current.connId === connId) {
+              bridgeClients.delete(bridgeKey);
+            }
           });
 
           ws.on("error", () => {
-            bridgeClients.delete(bridgeKey);
+            const current = bridgeClients.get(bridgeKey);
+            if (current && current.connId === connId) {
+              bridgeClients.delete(bridgeKey);
+            }
           });
         });
 

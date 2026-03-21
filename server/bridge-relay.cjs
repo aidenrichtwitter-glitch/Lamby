@@ -119,7 +119,8 @@ function handleWsUpgrade(req, socket, bridgeKey, clientSnapshotKey) {
     console.log(`[Bridge] Replacing stale connection for key ${bridgeKey.substring(0, 8)}... (old connId: ${existingClient.connId.substring(0, 8)})`);
     existingClient.alive = false;
     existingClient.replaced = true;
-    try { existingClient.socket.destroy(); } catch {}
+    try { existingClient.send(JSON.stringify({ type: "connection_replaced", reason: "A newer connection with the same key has connected." })); } catch {}
+    setTimeout(() => { try { existingClient.socket.destroy(); } catch {} }, 500);
   }
 
   console.log(`[Bridge] Desktop connected (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)})`);
