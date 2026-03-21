@@ -1,0 +1,37 @@
+#16 - Smart File Create/Delete Endpoints + grok-proxy Raw JSON Fallback
+What & Why
+Every grok-proxy call fails when Grok can't reliably execute the JSON.stringify → btoa → encodeURIComponent encoding chain. Grok-4 can URL-encode query params correctly (proven by grok-write working every time) but consistently fails at the btoa step.
+
+The fix is three new smart endpoints that accept file content directly as URL-encoded query params — exactly like grok-write does for search/replace. Plus a one-line fallback in grok-proxy that lets Grok pass raw JSON instead of base64 when that's easier.
+
+All changes are in index.js only.
+
+Done looks like
+GET /api/grok-create?project=X&path=Y&content=Z creates or fully overwrites a file without any base64 encoding. URL-encoded content only. Also supports ?contentB64= for URL-safe base64 as an alternative.
+GET /api/grok-create-chunk?project=X&path=Y&content=Z&chunk=0&total=3 writes chunk 0 fresh (write_file) and appends chunks 1+ (append_file), so Grok can build any file size with ~1500-char chunks per GET.
+GET /api/grok-delete?project=X&path=Y deletes a file via delete_file action.
+GET /api/grok-proxy?payload=RAW_JSON accepts raw URL-encoded JSON in addition to base64 — Grok can skip btoa entirely when content is simple.
+grok-chat-prompt updated: grok-create/grok-create-chunk/grok-delete listed in the FILE OPERATIONS block; "LARGE FILES" note updated to reference grok-create-chunk instead of grok-proxy write_file_chunk.
+/api/grok discovery JSON lists all three new endpoints.
+404 route endpoint list includes the three new paths.
+Out of scope
+Relay-side chunk buffering / reassembly (chunks write directly to disk via write_file + append_file in sequence — no server state needed).
+Changes to lamby-app/ (read-only, never touch).
+COMMAND-STATUS.md (these are relay endpoints, not dispatcher actions).
+Tasks
+Add grok-create handler — New if (pathname === "/api/grok-create") block in index.js. Reads ?project, ?path, ?content (URL-decoded automatically by URLSearchParams) or ?contentB64 (URL-safe base64). Dispatches a single write_file action via dispatchRelay. Returns the dispatcher result with _bridge metadata injected. Logs as GROK-CREATE.
+
+Add grok-create-chunk handler — New if (pathname === "/api/grok-create-chunk") block. Reads ?project, ?path, ?content (or ?contentB64), ?chunk (0-indexed int), ?total (total chunk count, informational). Chunk 0 dispatches write_file (creates/overwrites). Chunks 1+ dispatch append_file. Returns {chunk, total, done: chunk === total-1} merged into the dispatcher result.
+
+Add grok-delete handler — New if (pathname === "/api/grok-delete") block. Reads ?project, ?path. Dispatches delete_file action. Returns dispatcher result with _bridge metadata.
+
+grok-proxy raw JSON fallback — In the existing grok-proxy payload decode block, before attempting base64 decode, try JSON.parse(payload) directly. If it succeeds and is a valid object/array, use it. Only fall through to base64 if JSON.parse throws. Log which path was taken.
+
+Update grok-chat-prompt and discovery docs — In the grok-chat-prompt template, add a CREATE / DELETE FILES section between the existing WRITE and FILE TREE sections. Update the LARGE FILES note to reference grok-create-chunk. In the /api/grok discovery handler, add grok-create, grok-create-chunk, grok-delete to the endpoints list. Update the 404 fallback endpoint array too.
+
+Relevant files
+index.js:2671-2792 (grok-proxy handler — raw JSON fallback goes here)
+index.js:2793-2900 (grok-write handler — use as pattern for grok-create)
+index.js:1912-2090 (grok-chat-prompt — template to update)
+index.js:1352-1530 (grok discovery handler — add new endpoints)
+index.js:3435 (404 fallback endpoint list)
