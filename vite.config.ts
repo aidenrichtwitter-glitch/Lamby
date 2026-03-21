@@ -4318,6 +4318,8 @@ function projectManagementPlugin(): Plugin {
           }
 
           const relayDomain = new URL(relayUrl).hostname;
+          const BRIDGE_RELAY_DOMAIN = "35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev";
+          const allowedDomains = [relayDomain, BRIDGE_RELAY_DOMAIN].filter((d, i, a) => a.indexOf(d) === i);
 
           const SAFE_SAVE_DIR = "public/stress-test-phase123";
           let safeSavePath: string | null = null;
@@ -4356,7 +4358,7 @@ function projectManagementPlugin(): Plugin {
             tools: [
               {
                 type: "web_search",
-                filters: { allowed_domains: [relayDomain] },
+                filters: { allowed_domains: allowedDomains },
               },
             ],
           };
