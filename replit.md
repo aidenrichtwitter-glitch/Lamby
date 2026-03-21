@@ -171,7 +171,15 @@ These replaced the old base64-encoded `grok-proxy` system. All live on the relay
 - **Env var**: `XAI_API` — used for evolution cycles and function calling mode, NOT for the bridge workflow
 - The bridge workflow is Grok on grok.com using `browse_page`, not API calls from this app
 - API endpoint: `https://api.x.ai/v1/chat/completions`
-- Models: `grok-3-mini` (fast), `grok-4` (full power)
+- **ONLY allowed model: `grok-4`** — see LOCKED rule below
+
+## LOCKED — GROK-3 BANNED — KEY REQUIRED: "allowgrok3"
+**grok-3-mini and ALL grok-3 variants are PERMANENTLY BANNED from this project.**
+The agent MUST NOT use grok-3-mini, grok-3, or any grok-3-* model for ANY purpose — not for testing, not for "speed", not for "saving tokens", not for any reason — unless the user provides the exact unlock key "allowgrok3" in their message.
+- The ONLY allowed model is `grok-4`.
+- If a task seems like it could use a cheaper/faster model, the answer is still `grok-4`.
+- If the agent uses grok-3 without the unlock key, it is a violation of a direct user instruction.
+- This rule applies to ALL xAI API calls: evolution cycles, function calling, stress tests, chat, everything.
 
 ### Known Bridge Bugs & Limitations (Stress-Tested 2026-03-21)
 - **`grok-read` multi-file**: Now returns all files via `files` param (tested PASS with 2 files). Use `&files=F1,F2` not `&path=F1&path=F2`.
