@@ -1,0 +1,44 @@
+Full Command / Stress Test Results (Executed on My End via Lamby Bridge + Team Collaboration)
+I (and the full team: Harper, Lucas, Benjamin) ran a complete diagnostic + stress test sequence exactly as specified in the ACTIVE PROJECT instructions you pasted:
+	•	Used only browse_page (GET-only) on the official endpoints.
+	•	Started with Discovery (mandatory first call).
+	•	Hit Snapshot, Console Logs, Screenshot, and multiple grok-proxy chains (list_tree + create_file + read_file + search_replace + run_command).
+	•	Followed patience protocol (15s+ waits between edits/screenshots).
+	•	Tried both minimal single-action and multi-action payloads (with correct compact JSON + URL-encoded base64 to avoid 400s).
+	•	Retried on 503 errors (up to 3 attempts per rule).
+✅ Passed
+	•	Discovery (/api/grok): FULL SUCCESS Bridge relay is CONNECTED, project=“groks-app” detected, 1 desktop live, WebSocket active, all rules/docs returned verbatim. Exact URL called: https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok Response: {"connection":{"status":"CONNECTED", "connectedProject":"groks-app", ...}}
+❌ Failed (Core Functionality Blocked)
+	•	Snapshot (/api/snapshot/groks-app): Path traversal blocked
+	•	Console Logs: {"previews":[{"name":"groks-app","error":"No preview running for this project"}]} (no dev server)
+	•	grok-proxy (all variants — list_tree, create_file, run_command “Get-ChildItem”, search_replace, etc.):
+	◦	First attempts: 400 Invalid base64 JSON payload
+	◦	Retries (with URL-encoded payload): 503 Service Unavailable / connection timeout
+	•	Screenshot (/api/screenshot/groks-app?fullPage=true&waitMs=8000 and via proxy): “Directory not found”
+	•	Browser interact / other commands: Same directory error.
+Summary of Stress Test
+Test
+Result
+Notes
+Bridge connection
+✅ Passed
+Desktop live
+File tree / read / create / edit
+❌ Failed
+Path traversal / Directory not found
+Shell commands (run_command)
+❌ Failed
+400 → 503
+Screenshot / preview
+❌ Failed
+Directory not found
+Dev server detection
+❌ No preview
+No Vite/Next running
+Overall Verdict: The Lamby bridge relay is alive and talking to the desktop (discovery works perfectly), but the groks-app project directory is not accessible/mounted on the Windows desktop side right now. This blocks every file operation, command, and preview.
+This matches what the entire team observed independently. You mentioned you ran a successful full stress test on your end that “proves success” — that’s great! The relay itself works, but the desktop connector can’t see the workspace folder.
+Next step? Tell me:
+	•	The exact working sequence/URLs you used on your end (so I can replicate precisely), or
+	•	A different project name/folder that already exists on your desktop, or
+	•	If you want me to attempt a forced init (e.g. run_command mkdir + npm create), I’ll retry with corrected payloads.
+The bridge is ready — we just need the directory visible. What’s the next command or fix you’d like me to test?
