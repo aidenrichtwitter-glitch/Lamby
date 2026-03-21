@@ -36,46 +36,36 @@ STEPS (do them in order, post to coord after each):
 
 0. CLEANUP — ENSURE CLEAN BASELINE (REQUIRED BEFORE EVERY L3 RUN):
    This step removes any leftover state from a previous L3 run so the test is idempotent.
+   Uses git checkout file restore to revert files to their last committed state.
 
    a) CHECK for stale Metrics.tsx:
       GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/pages/Metrics.tsx
       → If it exists (status: success), DELETE it:
         GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/pages/Metrics.tsx
 
-   b) CHECK App.tsx for stale Metrics references:
-      GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/App.tsx
-      → If the content contains "Metrics", you must remove it:
-        - Remove the "import { Metrics }" line
-        - Remove the "metrics: Metrics" entry from the PAGES map
-        - Write the cleaned file back with grok-create (NOT grok-write — Windows \r\n issue)
-        GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/components/App.tsx&content=CLEANED_CONTENT
+   b) RESTORE App.tsx to last committed version (removes any stale Metrics references):
+      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/components/App.tsx
+      This restores App.tsx from HEAD — undoes any uncommitted edits instantly.
 
-   c) CHECK Navigation.tsx for stale metrics entries:
-      GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
-      → If the content contains "'metrics'", you must remove it:
-        - Remove any lines containing "id: 'metrics'" from the NAV_ITEMS array
-        - Do NOT remove the Activity icon import (it's used by other items too)
-        - Write the cleaned file back. Nav is large (~4200 chars), so use grok-create-chunk.
+   c) RESTORE Navigation.tsx to last committed version (removes any stale metrics nav entries):
+      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/components/Navigation.tsx
 
-   d) CHECK Dashboard.tsx is clean:
-      GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
-      → If it starts with "//" (stale L2 comment header), restore it:
-        GET {{RELAY_BASE}}/api/grok-run?project={{PROJECT}}&command=git%20checkout%20HEAD%20--%20src/pages/Dashboard.tsx
+   d) RESTORE Dashboard.tsx (removes any stale L2 comment headers):
+      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/pages/Dashboard.tsx
 
-   e) GIT CLEANUP: If any files were changed in cleanup steps a-d:
-      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=add&args=.
-      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=commit&message=L3-cleanup:%20remove%20stale%20artifacts
-      (If "nothing to commit", that's fine — means it was already clean)
-
-   f) VERIFY CLEAN STATE:
+   e) GIT STATUS — verify clean:
       GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=status
-      → Should show "nothing to commit, working tree clean" (or only untracked files that aren't ours)
+      → Should show clean working tree. If Metrics.tsx still shows as untracked from a previous committed run,
+        the delete in step (a) already handled it.
+      → If still dirty, do:
+        GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=add&args=.
+        GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=commit&message=L3-cleanup:%20remove%20stale%20artifacts
 
-   g) CONSOLE CHECK after cleanup:
+   f) CONSOLE CHECK after cleanup:
       GET {{RELAY_BASE}}/api/grok-proxy?project={{PROJECT}}&payload={"actions":[{"type":"get_console_errors","project":"{{PROJECT}}"}]}
-      → Must be 0 errors. If errors exist, fix them before proceeding.
+      → Must be 0 errors. If errors exist after restore, something else is wrong — post failure and STOP.
 
-   → Post to coord: "L3-S0: cleanup done, baseline clean" or "L3-S0: cleanup done, had to remove [stale files]"
+   → Post to coord: "L3-S0: cleanup done, baseline clean" or "L3-S0: cleanup done, had to remove stale files"
    → If cleanup fails, post: "L3-S0: cleanup FAILED: [details]" and STOP.
 
 1. READ TREE: Call /api/grok-tree?project={{PROJECT}}
@@ -164,7 +154,8 @@ STEPS (do them in order, post to coord after each):
 
 11. PRE-COMMIT SANITY CHECK (IMPORTANT):
     → grok-read Dashboard.tsx — confirm it does NOT start with "//" (no stale L2 comment headers)
-    → If Dashboard.tsx is corrupted, restore it: grok-run command=git%20checkout%20HEAD%20--%20src/pages/Dashboard.tsx
+    → If Dashboard.tsx is corrupted, restore it:
+      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/pages/Dashboard.tsx
     → grok-git status — confirm at least these files are modified/new: App.tsx, Navigation.tsx, Metrics.tsx
     → Post to coord: "L3-S11: pre-commit OK" or "L3-S11: pre-commit PROBLEM: [details]"
 

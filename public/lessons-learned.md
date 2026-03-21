@@ -4,6 +4,16 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 24: Use grok-git checkout paths for cleanup — not manual file rewrites
+**Date:** 2026-03-21
+**Context:** L3 cleanup step told Grok to read files, strip stale content, then grok-create them back. Grok couldn't do this reliably — content manipulation in-flight is error-prone.
+**Root cause:** The bridge's `git_checkout` only supported branch switching (`?ref=main`), not file restoration (`git checkout HEAD -- filepath`).
+**Fix:** Added 3 checkout modes to the relay: `?action=checkout&ref=BRANCH` (branch switch), `?action=checkout&paths=file1,file2` (file restore from HEAD), `?action=checkout&args=RAW_GIT_ARGS` (pass-through).
+**Impact:** Cleanup is now trivial: `grok-git?action=checkout&paths=src/components/App.tsx` instantly restores to last committed version. No need to read → edit → rewrite files.
+**Rule:** For cleanup/restore, always use `grok-git checkout paths` instead of manual file manipulation.
+
+---
+
 ## Lesson 23: Windows line endings (\r) cause grok-write search/replace to fail silently
 **Date:** 2026-03-21
 **Context:** L3 test — grok-write to add `metrics: Metrics` to App.tsx PAGES map returned 0 replacements.

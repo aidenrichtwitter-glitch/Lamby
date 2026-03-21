@@ -396,13 +396,18 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `GIT — grok-git (16 actions via one endpoint):\n`;
   section += `  GET ${relayBase}/api/grok-git?project=${proj}&action=ACTION\n`;
   section += `  Actions: status, add, commit, diff, log, branch, checkout, stash, stash-pop, push, pull, merge, reset, revert, tag, init\n`;
-  section += `  Extra params: files (for add), message (for commit), count (for log), branch (for checkout/merge)\n`;
+  section += `  Extra params: files (for add), message (for commit), count (for log), ref/paths/args (for checkout)\n`;
   section += `  Examples:\n`;
   section += `    ?project=${proj}&action=status\n`;
   section += `    ?project=${proj}&action=add&files=.\n`;
   section += `    ?project=${proj}&action=commit&message=fix: update styles\n`;
   section += `    ?project=${proj}&action=log&count=5\n`;
-  section += `    ?project=${proj}&action=diff\n\n`;
+  section += `    ?project=${proj}&action=diff\n`;
+  section += `  GIT CHECKOUT — 3 modes:\n`;
+  section += `    Branch switch:    ?action=checkout&ref=main\n`;
+  section += `    File restore:     ?action=checkout&paths=src/App.tsx,src/other.tsx  (from HEAD; add &ref=HASH for specific commit)\n`;
+  section += `    Raw pass-through: ?action=checkout&args=HEAD%20--%20src/App.tsx\n`;
+  section += `    USE FILE RESTORE for cleanup: restores any file to its last-committed version instantly.\n\n`;
 
   section += `PROCESSES — grok-process:\n`;
   section += `  GET ${relayBase}/api/grok-process?project=${proj}&action=list\n`;

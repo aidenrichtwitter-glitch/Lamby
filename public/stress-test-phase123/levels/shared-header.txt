@@ -49,6 +49,12 @@ GIT — grok-git:
   (actions: status, add, commit, diff, log, branch, checkout, stash, stash-pop, push, pull, merge, reset, revert, tag, init)
   WARNING: git reset --hard is sanitized to --soft. You cannot do destructive resets.
 
+  GIT CHECKOUT — 3 modes:
+    Branch switch:   ?action=checkout&ref=main
+    File restore:    ?action=checkout&paths=src/App.tsx,src/other.tsx  (restores files from HEAD; add &ref=HASH for specific commit)
+    Raw pass-through: ?action=checkout&args=HEAD%20--%20src/App.tsx
+    USE FILE RESTORE for cleanup: restores any file to its last-committed version without needing grok-create.
+
 SCREENSHOT:
   GET {{RELAY_BASE}}/api/screenshot/{{PROJECT}}?fullPage=true&waitMs=8000
 
