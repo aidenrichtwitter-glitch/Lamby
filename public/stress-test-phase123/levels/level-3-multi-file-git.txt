@@ -8,10 +8,15 @@ This is the full stress test. You will:
 - Verify everything compiles
 - Commit to git
 
-CRITICAL APPROACH — USE grok-create FOR EVERYTHING:
-For ALL file writes (new AND existing), use grok-create to overwrite the entire file.
-Do NOT use grok-write (search/replace) — it is fragile and has failed 4 times in previous runs.
-For existing files: grok-read the file → modify the content → grok-create the entire modified content.
+CRITICAL APPROACH — CHOOSE THE RIGHT TOOL:
+- For CREATING new files (Metrics.tsx): Use grok-create. URL-encode the content.
+  If the file is large (>5KB), use grok-create-chunk to split it.
+- For EDITING existing files (App.tsx, Navigation.tsx): Use grok-write (search/replace).
+  grok-write sends only the small search/replace strings — avoids full-file encoding issues.
+  URL: {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=FILE&search=OLD_TEXT&replace=NEW_TEXT
+  URL-encode the search and replace values. grok-write auto-verifies the edit landed.
+- Do NOT use grok-create to overwrite existing files unless absolutely necessary.
+  grok-create with full file content causes double-encoding issues with browse_page.
 
 STEPS:
 
@@ -47,16 +52,22 @@ STEPS:
    → Post to coord: "L3-S5: Metrics.tsx verified, [N] chars, tree [present]"
    → If MISSING or EMPTY: STOP. Post failure. Retry step 4. Do NOT continue.
 
-6. UPDATE APP ROUTING: grok-read the App file → add Metrics import + route → grok-create entire file
-   → Post to coord: "L3-S6: App.tsx grok-create sent (added Metrics import + route)"
+6. UPDATE APP ROUTING: Use grok-write (search/replace) to add the Metrics import and route.
+   First, grok-read the App file to find the exact text to search for.
+   Then use two grok-write calls:
+   a) Add import: search for the last existing page import line → replace with that line + new Metrics import
+   b) Add route: search for the last existing Route element → replace with that Route + new Metrics Route
+   → Post to coord: "L3-S6: App.tsx grok-write sent (added Metrics import + route)"
 
 7. VERIFY APP: grok-read App file → confirm Metrics import AND route entry present
    → Post to coord: "L3-S7: App.tsx verified, Metrics import [yes/no], route [yes/no]"
    → If either missing: STOP. Read the file again, fix, rewrite. Do NOT continue.
 
-8. UPDATE NAVIGATION: grok-read Navigation.tsx → add metrics nav item to NAV_ITEMS → grok-create
+8. UPDATE NAVIGATION: Use grok-write (search/replace) to add the metrics nav item.
+   First, grok-read Navigation.tsx to find the exact NAV_ITEMS array entries.
+   Then use grok-write: search for the last existing nav item entry → replace with that entry + new Metrics entry.
    CRITICAL: Check for duplicate imports. Do NOT add an import that already exists.
-   → Post to coord: "L3-S8: Navigation.tsx grok-create sent (added metrics nav)"
+   → Post to coord: "L3-S8: Navigation.tsx grok-write sent (added metrics nav)"
 
 9. VERIFY NAVIGATION: grok-read Navigation.tsx → confirm metrics in NAV_ITEMS, no duplicate imports
    → Post to coord: "L3-S9: Navigation.tsx verified, metrics nav [yes/no], duplicates [yes/no]"
