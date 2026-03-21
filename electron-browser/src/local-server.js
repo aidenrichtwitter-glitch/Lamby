@@ -878,9 +878,15 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/bridge-status") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     const status = bridgeConnector ? bridgeConnector.getStatus() : { status: "disconnected" };
+    const currentRelay = status.relayUrl || bridgeConfig.relayUrl || "";
+    const DEV_RELAY = "wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev";
+    const PROD_RELAY = "wss://bridge-relay.replit.app";
     sendJson(res, {
       status: status.status,
-      relayUrl: status.relayUrl || bridgeConfig.relayUrl || "",
+      relayUrl: currentRelay,
+      devRelayUrl: DEV_RELAY,
+      prodRelayUrl: PROD_RELAY,
+      connectedClients: status.status === "connected" ? 1 : 0,
     });
     return;
   }

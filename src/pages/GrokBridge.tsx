@@ -314,7 +314,7 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
 function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, project: string, bridgeOnline = true, proxyUrl = '', editUrl = ''): string {
   if (!snapshotUrl && !cmdEndpoint) return '';
   const proj = project || 'PROJECT_NAME';
-  const consoleLogsUrl = snapshotUrl ? snapshotUrl.replace(/\/api\/snapshot\/[^?]+/, '/api/console-logs') + `&project=${proj}` : '';
+  const consoleLogsUrl = snapshotUrl ? snapshotUrl.replace(/\/api\/snapshot\/[^?]+/, '/api/console-logs') + `?project=${proj}` : '';
   const proxyBaseUrl = proxyUrl || (cmdEndpoint ? cmdEndpoint.replace(/\/api\/sandbox\/execute\b/, '/api/grok-proxy') : '');
   const editBaseUrl = editUrl || (cmdEndpoint ? cmdEndpoint.replace(/\/api\/sandbox\/execute\b/, '/api/grok-edit') : '');
   const grokDocsUrl = snapshotUrl ? snapshotUrl.replace(/\/api\/snapshot\/[^?]+/, '/api/grok') : '';
@@ -350,27 +350,27 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
 
   if (editBaseUrl) {
     section += `PRIMARY EDIT METHOD — grok-edit (simple GET, no base64):\n`;
-    section += `  ${editBaseUrl}&project=${proj}&path=FILE_PATH&search=OLD_TEXT&replace=NEW_TEXT&replaceAll=true\n\n`;
+    section += `  ${editBaseUrl}?project=${proj}&path=FILE_PATH&search=OLD_TEXT&replace=NEW_TEXT&replaceAll=true\n\n`;
     section += `  This is the fastest way to edit files. URL-encode the search and replace values.\n`;
     section += `  For HTML content with special characters, use base64 params instead:\n`;
-    section += `  ${editBaseUrl}&project=${proj}&path=FILE_PATH&searchB64=BASE64_OLD&replaceB64=BASE64_NEW\n`;
+    section += `  ${editBaseUrl}?project=${proj}&path=FILE_PATH&searchB64=BASE64_OLD&replaceB64=BASE64_NEW\n`;
     section += `  Returns: { "success": true, "results": [{ "data": { "replacements": N } }] }\n\n`;
     section += `  EXAMPLE:\n`;
-    section += `  ${editBaseUrl}&project=${proj}&path=index.html&search=text-white&replace=text-purple-300&replaceAll=true\n\n`;
+    section += `  ${editBaseUrl}?project=${proj}&path=index.html&search=text-white&replace=text-purple-300&replaceAll=true\n\n`;
   }
 
   const interactBaseUrl = editBaseUrl ? editBaseUrl.replace('/api/grok-edit', '/api/grok-interact') : '';
   if (interactBaseUrl) {
     section += `BROWSER INTERACTION — grok-interact (simple GET, interact with live preview):\n`;
-    section += `  ${interactBaseUrl}&project=${proj}&action=ACTION&selector=CSS_SELECTOR\n`;
+    section += `  ${interactBaseUrl}?project=${proj}&action=ACTION&selector=CSS_SELECTOR\n`;
     section += `  Actions: click, type, select, evaluate, runFunction, waitFor\n`;
     section += `  Params: selector, text (mapped to value), value, x, y, code (mapped to script), script, functionName, args (JSON array), screenshot=true, waitAfter (ms), timeout (ms)\n`;
     section += `  EXAMPLE (click a button):\n`;
-    section += `  ${interactBaseUrl}&project=${proj}&action=click&selector=%23submit-btn\n`;
+    section += `  ${interactBaseUrl}?project=${proj}&action=click&selector=%23submit-btn\n`;
     section += `  EXAMPLE (type text):\n`;
-    section += `  ${interactBaseUrl}&project=${proj}&action=type&selector=%23input&text=hello+world\n`;
+    section += `  ${interactBaseUrl}?project=${proj}&action=type&selector=%23input&text=hello+world\n`;
     section += `  EXAMPLE (evaluate JS):\n`;
-    section += `  ${interactBaseUrl}&project=${proj}&action=evaluate&code=return+document.title\n\n`;
+    section += `  ${interactBaseUrl}?project=${proj}&action=evaluate&code=return+document.title\n\n`;
   }
 
 
@@ -394,7 +394,7 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `  Use this when you need multiple actions in one request (read files, run commands, git, install deps, etc.).\n`;
     section += `  1. Build actions JSON:  { "actions": [ ...action objects... ] }\n`;
     section += `  2. Base64-encode that JSON string\n`;
-    section += `  3. Browse:  ${proxyBaseUrl}&project=${proj}&payload=BASE64_ENCODED_ACTIONS\n\n`;
+    section += `  3. Browse:  ${proxyBaseUrl}?project=${proj}&payload=BASE64_ENCODED_ACTIONS\n\n`;
     section += `  Each action needs "type" and "project": "${proj}". Max 50 per request.\n`;
     section += `  Keep payloads under ~6000 chars of JSON before encoding. Use search_replace over write_file for large files.\n\n`;
     section += `  FILE OPERATIONS:\n`;
