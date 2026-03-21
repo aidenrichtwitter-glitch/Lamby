@@ -4105,9 +4105,7 @@ const GrokBridge: React.FC = () => {
         setCommandEndpoint(`${devRelayBase}/api/sandbox/execute`);
         setExternalSnapshotUrl(`${devRelayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
         setExternalCommandEndpoint(`${devRelayBase}/api/sandbox/execute`);
-        if (!bridgeWsRef.current || bridgeWsRef.current.readyState !== WebSocket.OPEN) {
-          connectToBridge(devRelayUrl, activeProject || 'default');
-        }
+        setBridgeStatus('connected');
       }
     }
     fetchSnapshotInfo();

@@ -2,6 +2,7 @@ const http = require("http");
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
+const { WebSocketServer } = require("ws");
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
 
@@ -37,164 +38,83 @@ function getFirstAliveClient() {
   return null;
 }
 
-function wsEncodeFrame(data) {
-  const payload = Buffer.from(data, "utf-8");
-  const len = payload.length;
-  let header;
-  if (len < 126) {
-    header = Buffer.alloc(2);
-    header[0] = 0x81;
-    header[1] = len;
-  } else if (len < 65536) {
-    header = Buffer.alloc(4);
-    header[0] = 0x81;
-    header[1] = 126;
-    header.writeUInt16BE(len, 2);
-  } else {
-    header = Buffer.alloc(10);
-    header[0] = 0x81;
-    header[1] = 127;
-    header.writeBigUInt64BE(BigInt(len), 2);
-  }
-  return Buffer.concat([header, payload]);
-}
+const bridgeWss = new WebSocketServer({ noServer: true });
 
-function wsDecodeFrame(buf) {
-  if (buf.length < 2) return { data: null, bytesConsumed: 0 };
-  const opcode = buf[0] & 0x0f;
-  const masked = (buf[1] & 0x80) !== 0;
-  let payloadLen = buf[1] & 0x7f;
-  let offset = 2;
-
-  if (payloadLen === 126) {
-    if (buf.length < 4) return { data: null, bytesConsumed: 0 };
-    payloadLen = buf.readUInt16BE(2);
-    offset = 4;
-  } else if (payloadLen === 127) {
-    if (buf.length < 10) return { data: null, bytesConsumed: 0 };
-    payloadLen = Number(buf.readBigUInt64BE(2));
-    offset = 10;
-  }
-
-  if (masked) {
-    if (buf.length < offset + 4 + payloadLen) return { data: null, bytesConsumed: 0 };
-    const mask = buf.slice(offset, offset + 4);
-    offset += 4;
-    const payload = Buffer.alloc(payloadLen);
-    for (let i = 0; i < payloadLen; i++) {
-      payload[i] = buf[offset + i] ^ mask[i % 4];
-    }
-    return { data: payload.toString("utf-8"), opcode, bytesConsumed: offset + payloadLen };
-  }
-
-  if (buf.length < offset + payloadLen) return { data: null, bytesConsumed: 0 };
-  return { data: buf.slice(offset, offset + payloadLen).toString("utf-8"), opcode, bytesConsumed: offset + payloadLen };
-}
-
-function handleWsUpgrade(req, socket, bridgeKey, clientSnapshotKey) {
-  const acceptKey = crypto
-    .createHash("sha1")
-    .update(req.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-5AB9C04E64DC")
-    .digest("base64");
-
-  socket.write(
-    "HTTP/1.1 101 Switching Protocols\r\n" +
-    "Upgrade: websocket\r\n" +
-    "Connection: Upgrade\r\n" +
-    `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
-    "\r\n"
-  );
-
+bridgeWss.on("connection", (ws, project) => {
   const connId = crypto.randomUUID();
 
-  const existingClient = bridgeClients.get(bridgeKey);
+  const existingClient = bridgeClients.get(project);
   if (existingClient) {
-    console.log(`[Bridge] Replacing stale connection for key ${bridgeKey.substring(0, 8)}... (old connId: ${existingClient.connId.substring(0, 8)})`);
+    console.log(`[Bridge] Replacing stale connection for project ${project} (old connId: ${existingClient.connId.substring(0, 8)})`);
     existingClient.alive = false;
     existingClient.replaced = true;
-    try { existingClient.send(JSON.stringify({ type: "connection_replaced", reason: "A newer connection with the same key has connected." })); } catch {}
-    setTimeout(() => { try { existingClient.socket.destroy(); } catch {} }, 500);
+    try { existingClient.send(JSON.stringify({ type: "connection_replaced" })); } catch {}
+    setTimeout(() => { try { existingClient.ws.close(); } catch {} }, 500);
   }
 
-  console.log(`[Bridge] Desktop connected (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)})`);
+  console.log(`[Bridge] Client connected (project: ${project}, connId: ${connId.substring(0, 8)})`);
 
-  const client = { socket, lastPing: Date.now(), alive: true, connId, replaced: false };
-  bridgeClients.set(bridgeKey, client);
+  const client = { ws, lastPing: Date.now(), alive: true, connId, replaced: false };
+  bridgeClients.set(project, client);
 
   client.send = (data) => {
-    try { socket.write(wsEncodeFrame(data)); } catch {}
+    try { if (ws.readyState === 1) ws.send(data); } catch {}
   };
 
-  let buffer = Buffer.alloc(0);
-
-  socket.on("data", (chunk) => {
-    buffer = Buffer.concat([buffer, chunk]);
-    while (buffer.length > 0) {
-      const { data, opcode, bytesConsumed } = wsDecodeFrame(buffer);
-      if (data === null) break;
-      buffer = buffer.slice(bytesConsumed);
-
-      if (opcode === 0x8) { socket.end(); return; }
-      if (opcode === 0x9) {
-        const pong = Buffer.alloc(2);
-        pong[0] = 0x8a;
-        pong[1] = 0;
-        try { socket.write(pong); } catch {}
-        continue;
-      }
-
-      try {
-        const msg = JSON.parse(data);
-        if (msg.type === "snapshot-response" && msg.requestId) {
-          const pending = pendingRelayRequests.get(msg.requestId);
-          if (pending) {
-            clearTimeout(pending.timer);
-            pendingRelayRequests.delete(msg.requestId);
-            pending.resolve(msg.snapshot || "Error: Empty snapshot response from desktop.");
-          }
-        } else if (msg.type === "sandbox-execute-response" && msg.requestId) {
-          const pending = pendingSandboxRelayRequests.get(msg.requestId);
-          if (pending) {
-            clearTimeout(pending.timer);
-            pendingSandboxRelayRequests.delete(msg.requestId);
-            pending.resolve(JSON.stringify(msg.result || { error: "Empty sandbox response from desktop." }));
-          }
-        } else if (msg.type === "console-logs-response" && msg.requestId) {
-          const pending = pendingConsoleLogRequests.get(msg.requestId);
-          if (pending) {
-            clearTimeout(pending.timer);
-            pendingConsoleLogRequests.delete(msg.requestId);
-            pending.resolve(msg.logs || { error: "Empty console logs response from desktop." });
-          }
-        } else if (msg.type === "ping") {
-          client.lastPing = Date.now();
-          client.send(JSON.stringify({ type: "pong" }));
+  ws.on("message", (data) => {
+    try {
+      const msg = JSON.parse(data.toString());
+      if (msg.type === "snapshot-response" && msg.requestId) {
+        const pending = pendingRelayRequests.get(msg.requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pendingRelayRequests.delete(msg.requestId);
+          pending.resolve(msg.snapshot || "Error: Empty snapshot response from desktop.");
         }
-      } catch {}
-    }
+      } else if (msg.type === "sandbox-execute-response" && msg.requestId) {
+        const pending = pendingSandboxRelayRequests.get(msg.requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pendingSandboxRelayRequests.delete(msg.requestId);
+          pending.resolve(JSON.stringify(msg.result || { error: "Empty sandbox response from desktop." }));
+        }
+      } else if (msg.type === "console-logs-response" && msg.requestId) {
+        const pending = pendingConsoleLogRequests.get(msg.requestId);
+        if (pending) {
+          clearTimeout(pending.timer);
+          pendingConsoleLogRequests.delete(msg.requestId);
+          pending.resolve(msg.logs || { error: "Empty console logs response from desktop." });
+        }
+      } else if (msg.type === "ping") {
+        client.lastPing = Date.now();
+        client.send(JSON.stringify({ type: "pong" }));
+      } else if (msg.type === "pong") {
+        client.lastPing = Date.now();
+      }
+    } catch {}
   });
 
-  socket.on("close", () => {
+  ws.on("close", () => {
     if (client.replaced) {
-      console.log(`[Bridge] Old connection closed (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)}) — already replaced, not removing from map`);
+      console.log(`[Bridge] Old connection closed (project: ${project}, connId: ${connId.substring(0, 8)}) — already replaced`);
       return;
     }
-    console.log(`[Bridge] Desktop disconnected (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)})`);
+    console.log(`[Bridge] Client disconnected (project: ${project}, connId: ${connId.substring(0, 8)})`);
     client.alive = false;
-    const current = bridgeClients.get(bridgeKey);
+    const current = bridgeClients.get(project);
     if (current && current.connId === connId) {
-      bridgeClients.delete(bridgeKey);
+      bridgeClients.delete(project);
     }
   });
 
-  socket.on("error", () => {
+  ws.on("error", () => {
     client.alive = false;
-    const current = bridgeClients.get(bridgeKey);
+    const current = bridgeClients.get(project);
     if (current && current.connId === connId) {
-      bridgeClients.delete(bridgeKey);
+      bridgeClients.delete(project);
     }
   });
-}
+});
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -563,8 +483,10 @@ const server = http.createServer(async (req, res) => {
 server.on("upgrade", (req, socket, head) => {
   const reqUrl = new URL(req.url || "", "http://localhost");
   if (req.url && req.url.startsWith("/bridge-ws")) {
-    const bridgeKey = reqUrl.searchParams.get("key") || crypto.randomUUID();
-    handleWsUpgrade(req, socket, bridgeKey, "");
+    const project = reqUrl.searchParams.get("project") || reqUrl.searchParams.get("key") || "default";
+    bridgeWss.handleUpgrade(req, socket, head, (ws) => {
+      bridgeWss.emit("connection", ws, project);
+    });
     return;
   }
   socket.destroy();
@@ -574,8 +496,8 @@ setInterval(() => {
   const now = Date.now();
   for (const [key, client] of bridgeClients) {
     if (now - client.lastPing > 120000) {
-      console.log(`[Bridge] Pruning stale client (key: ${key.substring(0, 8)}...)`);
-      try { client.socket.destroy(); } catch {}
+      console.log(`[Bridge] Pruning stale client (project: ${key})`);
+      try { client.ws.close(); } catch {}
       bridgeClients.delete(key);
     }
   }
