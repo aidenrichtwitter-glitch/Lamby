@@ -1,0 +1,196 @@
+Microsoft Windows [Version 10.0.26200.8037]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:dev
+
+> guardian-ai@1.0.0 electron:dev
+> concurrently --kill-others --names vite,electron,bridge "vite --host 0.0.0.0 --port 5000" "wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 npx electron ." "wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 PROJECT_DIR=../projects node src/local-server.js"
+
+[vite] [Lamby] No authentication — relay URL is the secret
+[vite]
+[vite]   VITE v5.4.19  ready in 248 ms
+[vite]
+[vite]   ➜  Local:   http://localhost:5000/
+[vite]   ➜  Network: http://192.168.1.182:5000/
+[bridge] [Lamby Local] ====== STARTING ======
+[bridge] [Lamby Local] Node v25.4.0 | PID 15508 | win32
+[bridge] [Lamby Local] CWD: C:\Users\Aiden\Desktop\guardian-ai\electron-browser
+[bridge] [Lamby Local] Log file: C:\Users\Aiden\.guardian-ai\local-server.log
+[bridge] [Lamby Local] Loaded sandbox-dispatcher.cjs OK
+[bridge] [Lamby Local] Bridge config: relay=wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev project=groks-app
+[bridge] [Lamby Local] Loaded bridge-connector.cjs OK
+[bridge] [Lamby Local] Server running on port 4999
+[bridge] [Lamby Local] No authentication — relay URL is the secret
+[bridge] [Lamby Local] Projects dir: ../projects
+[bridge] [Lamby Local] Sandbox API: http://localhost:4999/api/sandbox/execute
+[bridge] [Lamby Local] Bridge relay: wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev
+[electron]
+[electron] Grok Desktop: GPU acceleration enabled
+[bridge] [Bridge] Creating connector: relay=wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev project=groks-app
+[bridge] 04:49:16 [Bridge]       Project scan: found 11 dirs under "../projects" → [audio-file-player-+-visualizer, duckstation, reactjs-vite-tailwindcss-boilerplate, landing-page, main-copy-1773868763513, efflux-tracker, musicalizr, react-canva, pokemon-react-js-and-three-js, r3f-audio-visualizer, mario]
+[bridge] 04:49:16 [Bridge]       Connecting to wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev...
+[bridge] [Bridge] connect() called — waiting for relay handshake...
+[bridge] 04:49:17 [Bridge]       Connected to relay at 35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev
+[bridge] [Bridge] Status changed: connected
+[bridge] [Relay INFO] Keepalive ping sent key=cyIeD4Zd...
+[bridge] [Relay WARN] Desktop disconnected key=OS8L2gmM...
+[bridge] [Relay INFO] ←Desktop pong key=cyIeD4Zd...
+[bridge] [Relay INFO] Keepalive ping sent key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop pong key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop ping key=cyIeD4Zd... sending pong
+[bridge] [Relay INFO] Keepalive ping sent key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop pong key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop ping key=cyIeD4Zd... sending pong
+[bridge] [Relay INFO] Keepalive ping sent key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop pong key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop ping key=cyIeD4Zd... sending pong
+[bridge] [Relay INFO] Keepalive ping sent key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop ping key=cyIeD4Zd... sending pong
+[bridge] [Relay INFO] ←Desktop pong key=cyIeD4Zd...
+[bridge] [Relay INFO] Keepalive ping sent key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop pong key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop ping key=cyIeD4Zd... sending pong
+[bridge] [Relay INFO] Keepalive ping sent key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop pong key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop ping key=cyIeD4Zd... sending pong
+[bridge] [Relay INFO] Keepalive ping sent key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop pong key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop ping key=cyIeD4Zd... sending pong
+[electron] wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 npx electron . exited with code 0
+--> Sending SIGTERM to other processes..
+[vite] vite --host 0.0.0.0 --port 5000 exited with code 1
+--> Sending SIGTERM to other processes..
+[bridge] wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 PROJECT_DIR=../projects node src/local-server.js exited with code 1
+
+C:\Users\Aiden\Desktop\guardian-ai>npm run electron:dev
+
+> guardian-ai@1.0.0 electron:dev
+> concurrently --kill-others --names vite,electron,bridge "vite --host 0.0.0.0 --port 5000" "wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 npx electron ." "wait-on http://localhost:5000 && cd electron-browser && npx cross-env LAMBY_PORT=4999 PROJECT_DIR=../projects node src/local-server.js"
+
+[vite] [Lamby] No authentication — relay URL is the secret
+[vite]
+[vite]   VITE v5.4.19  ready in 253 ms
+[vite]
+[vite]   ➜  Local:   http://localhost:5000/
+[vite]   ➜  Network: http://192.168.1.182:5000/
+[bridge] [Lamby Local] ====== STARTING ======
+[bridge] [Lamby Local] Node v25.4.0 | PID 11616 | win32
+[bridge] [Lamby Local] CWD: C:\Users\Aiden\Desktop\guardian-ai\electron-browser
+[bridge] [Lamby Local] Log file: C:\Users\Aiden\.guardian-ai\local-server.log
+[bridge] [Lamby Local] Loaded sandbox-dispatcher.cjs OK
+[bridge] [Lamby Local] Bridge config: relay=wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev project=groks-app
+[bridge] [Lamby Local] Loaded bridge-connector.cjs OK
+[bridge] [Lamby Local] Server running on port 4999
+[bridge] [Lamby Local] No authentication — relay URL is the secret
+[bridge] [Lamby Local] Projects dir: ../projects
+[bridge] [Lamby Local] Sandbox API: http://localhost:4999/api/sandbox/execute
+[bridge] [Lamby Local] Bridge relay: wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev
+[electron]
+[electron] Grok Desktop: GPU acceleration enabled
+[bridge] [Bridge] Creating connector: relay=wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev project=groks-app
+[bridge] 04:51:37 [Bridge]       Project scan: found 11 dirs under "../projects" → [audio-file-player-+-visualizer, duckstation, reactjs-vite-tailwindcss-boilerplate, landing-page, main-copy-1773868763513, efflux-tracker, musicalizr, react-canva, pokemon-react-js-and-three-js, r3f-audio-visualizer, mario]
+[bridge] 04:51:37 [Bridge]       Connecting to wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev...
+[bridge] [Bridge] connect() called — waiting for relay handshake...
+[bridge] 04:51:38 [Bridge]       Connected to relay at 35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev
+[bridge] [Bridge] Status changed: connected
+[bridge] [Relay INFO] Keepalive ping sent key=J4226O2i...
+[bridge] [Relay ERROR] Socket error key=cyIeD4Zd... err=write EPIPE
+[bridge] [Relay WARN] Desktop disconnected key=cyIeD4Zd...
+[bridge] [Relay INFO] ←Desktop pong key=J4226O2i...
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[bridge] [Bridge] Status changed: disconnected
+[bridge] [Bridge] Creating connector: relay=wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev project=default
+[bridge] 04:51:49 [Bridge]       Project scan: found 11 dirs under "../projects" → [audio-file-player-+-visualizer, duckstation, reactjs-vite-tailwindcss-boilerplate, landing-page, main-copy-1773868763513, efflux-tracker, musicalizr, react-canva, pokemon-react-js-and-three-js, r3f-audio-visualizer, mario]
+[bridge] 04:51:49 [Bridge]       Connecting to wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev...
+[bridge] [Bridge] connect() called — waiting for relay handshake...
+[bridge] [Bridge] Status changed: disconnected
+[bridge] 04:51:49 [Bridge]       Connected to relay at 35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev
+[bridge] [Bridge] Status changed: connected
+[bridge] [Relay WARN] Desktop disconnected key=J4226O2i...
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=2, reactions=2, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=2, reactions=2, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=2, reactions=2, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=2, reactions=2, followUps=0, generating=false
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=1, reactions=2, followUps=0, generating=false
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=1, reactions=0, followUps=0, generating=true
+[electron] [GROK-IPC] grok-check-response-ready: ready=false, generating=true, signals="none", stopDebug="stop-btn: stop model response", baseline: copy=1, reactions=0, followUps=0
+[electron] [GROK-IPC] grok-check-response-ready: ready=false, generating=true, signals="none", stopDebug="stop-btn: stop model response", baseline: copy=1, reactions=0, followUps=0
+[electron] [GROK-IPC] grok-check-response-ready: ready=false, generating=true, signals="none", stopDebug="stop-btn: stop model response", baseline: copy=1, reactions=0, followUps=0
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
+[electron] [GROK-IPC] grok-check-response-ready: ready=true, generating=false, signals="NEW-copy(2>1), NEW-reactions(2>0)", stopDebug="", baseline: copy=1, reactions=0, followUps=0
+[electron] [GROK-IPC][v26.1] grok-copy-last-response called
+[electron] [GROK-IPC] grok-copy-last-response result: success=true, textLen=2161, findMethod="copy-btn-parent(depth=2)", error=none
+[electron] [GROK-IPC] grok-snapshot-baseline: copy=2, reactions=2, followUps=0, generating=false
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
+[vite] [Preview] Starting groks-app with: npx vite --host 0.0.0.0 --port 5168
+[vite] [Preview] Using local binary for groks-app: C:\Users\Aiden\Desktop\guardian-ai\projects\groks-app\node_modules\.bin\vite.cmd
+[vite] (node:7608) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+[vite] (Use `node --trace-deprecation ...` to show where the warning was created)
+[vite] [Preview:groks-app] Port 5168 is in use, trying another one...
+[vite] [Preview:groks-app] Port 5169 is in use, trying another one...
+[vite] Port 5170 is in use, trying another one...
+[vite] Port 5171 is in use, trying another one...
+[vite] Port 5172 is in use, trying another one...
+[vite] Port 5173 is in use, trying another one...
+[vite] [Preview:groks-app] VITE v5.4.21  ready in 815 ms
+[vite] [Preview:groks-app] ➜  Local:   http://localhost:5174/
+[vite]   ➜  Network: http://192.168.1.182:5174/
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
+[bridge] [Relay INFO] Keepalive ping sent key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop pong key=B1VX3f0n...
+[bridge] [Relay INFO] ←Desktop ping key=B1VX3f0n... sending pong
