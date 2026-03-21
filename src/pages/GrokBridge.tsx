@@ -1697,11 +1697,6 @@ const GrokBridge: React.FC = () => {
     try { return (localStorage.getItem('lamby-bridge-mode') as 'dev' | 'production') || 'production'; } catch { return 'production'; }
   });
   const [serverDevRelayUrl, setServerDevRelayUrl] = useState<string>('');
-  const [connectionLocked, setConnectionLocked] = useState(true);
-  const [unlockInput, setUnlockInput] = useState('');
-  const [showUnlockPrompt, setShowUnlockPrompt] = useState(false);
-  const [unlockError, setUnlockError] = useState(false);
-  const CONN_LOCK_KEY = 'leaveitalone';
   const bridgeWsRef = useRef<WebSocket | null>(null);
   const [browserUrl, setBrowserUrl] = useState('https://grok.com');
   const [customUrl, setCustomUrl] = useState('');

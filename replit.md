@@ -32,6 +32,25 @@ The following toolbar/button sections are critical and must NOT be removed or al
 - **AppLayout header** (`src/components/AppLayout.tsx` lines 17-24): Contains SidebarTrigger and ParallaxControls
 - When modifying parallax wall sizing or layout, NEVER remove or clip these toolbar sections
 
+## LOCKED — BRIDGE CONNECTION CODE — KEY REQUIRED: "leaveitalone"
+The following files and code sections are PERMANENTLY LOCKED. The agent MUST NOT modify, rewrite, refactor, or touch any of these files or their connection logic under ANY circumstances — not even to "fix" or "improve" them — unless the user provides the exact unlock key "leaveitalone" in their message.
+
+**Locked files (do NOT edit):**
+- `server/bridge-connector.cjs` — Desktop connector (raw TLS sockets, wsEncodeFrame, wsDecodeFrame, doConnect, send)
+- `lamby-bridge/desktop-connector.js` — Working standalone connector (source of truth)
+- `lamby-bridge/index.js` — Relay server source
+
+**Locked code sections (do NOT edit):**
+- `connectToBridge()` function in `src/pages/GrokBridge.tsx` — Browser WebSocket connection
+- Dev/Production button onClick handlers in `src/pages/GrokBridge.tsx` (the relay mode toggle buttons)
+- Relay URL constants: `wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev` and `wss://bridge-relay.replit.app`
+
+**What this means:**
+- If a task or request would require changing any of the above, STOP and ask the user for the unlock key first.
+- Do NOT silently modify these as part of a larger refactor or feature.
+- Do NOT replace raw TLS sockets with any WebSocket library (ws, socket.io, etc.) — EVER.
+- The connection code works. Leave it alone.
+
 ## Project Structure
 ```
 src/
