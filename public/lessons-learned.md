@@ -4,6 +4,25 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 20: browse_page summarizer confuses JSON API response with file content
+**Date:** 2026-03-21
+**Context:** L2 PASSED, but Grok's agents noted unreliable content extraction during grok-read verification.
+**Problem:** When Grok calls `browse_page` on a grok-read URL, the summarizer receives the full JSON response (e.g., `{"results":[{"data":{"content":"import React..."}}]}`). The summarizer often confuses the JSON envelope with the file content — reporting CHAR_COUNT: 614 / LINE_COUNT: 3 when the actual file is 97 chars. It extracts metadata from the JSON structure rather than parsing the nested `content` field.
+**Impact:** Grok cannot reliably extract exact file content or char counts from grok-read via browse_page. This causes:
+- Incorrect char count comparisons (e.g., "614 chars" vs actual "97 chars")
+- Verification steps that compare char counts may falsely fail or falsely pass
+- Multi-agent confusion when different agents get different summarizer interpretations
+**Workarounds applied:**
+1. L2 coord notes now use relative terms ("comment present", "original code intact") instead of exact char count comparisons
+2. Verification relies on content markers ("starts with import", "has React.FC") not char counts
+3. Stop rules prevent infinite retry when summarizer gives inconsistent results
+**Future fix options:**
+- Add a `?format=plain` param to grok-read that returns raw file content (not JSON) so browse_page summarizer gets clean text
+- Add a `?charCount=true` param that returns just the character count as plain text
+**Rule:** Never rely on browse_page's summarizer for exact char counts from JSON API responses. Use content markers (first line, key strings) for verification instead.
+
+---
+
 ## Lesson 19: Grok multi-agent retries cause infinite loops — must add hard stop rules
 **Date:** 2026-03-21
 **Context:** L2 test completed but Grok's multi-agent system (Lucas/Harper) continued firing browse_page calls indefinitely, overwriting Dashboard.tsx continuously.

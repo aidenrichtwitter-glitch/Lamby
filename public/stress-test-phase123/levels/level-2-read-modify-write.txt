@@ -19,9 +19,10 @@ STEPS (do them in order, post to coord after each):
    → Post to coord EXACTLY: "L2-S1: diag OK, relay online"
 
 2. READ THE TARGET FILE: Call /api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
-   → Study the content carefully. Note the EXACT char count and line count.
-   → Post to coord EXACTLY: "L2-S2: read OK, [N] chars"
-   IMPORTANT: Remember this exact char count — you will use it to verify the restore.
+   → Study the content carefully. Note the FIRST LINE of the file (e.g., "import React from 'react'").
+   → Post to coord EXACTLY: "L2-S2: read OK"
+   IMPORTANT: Remember the first line of the file — you will use it to verify the restore.
+   NOTE: browse_page's summarizer may report inaccurate char counts from JSON responses. Do NOT rely on char counts for verification. Use content markers (first line, key strings) instead.
 
 3. MODIFY THE CONTENT: Take the ENTIRE file content from step 2.
    Add this comment block at the very top of the file (before any imports):
@@ -59,9 +60,10 @@ STEPS (do them in order, post to coord after each):
 
 8. VERIFY RESTORE: Call /api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
    → Confirm the comment lines are GONE (file should NOT start with "//")
-   → Confirm the char count matches the count from step 2
-   → Post to coord EXACTLY: "L2-S8: restore verified, [N] chars"
+   → Confirm the first line matches what you saw in step 2 (e.g., "import React from 'react'")
+   → Post to coord EXACTLY: "L2-S8: restore verified"
    → If restore failed: Run step 7 ONE more time, then verify again. Do NOT loop.
+   NOTE: Do NOT compare char counts — the summarizer reports inaccurate counts. Verify by checking the first line and absence of comment lines.
 
 9. FINAL: Post to coord EXACTLY: "L2 COMPLETE: PASS" or "L2 COMPLETE: FAIL - [reason]"
 
