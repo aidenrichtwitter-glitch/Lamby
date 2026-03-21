@@ -5274,7 +5274,7 @@ function projectManagementPlugin(): Plugin {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Access-Control-Allow-Origin", "*");
         const relay = getBridgeRelayStatus();
-        const devRelayUrl = REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "";
+        const devRelayUrl = "wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev";
         const prodRelayUrl = "wss://bridge-relay.replit.app";
         res.end(JSON.stringify({
           status: relay.connectedCount > 0 ? "connected" : "disconnected",
@@ -5291,7 +5291,7 @@ function projectManagementPlugin(): Plugin {
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Access-Control-Allow-Origin", "*");
         const relay = getBridgeRelayStatus();
-        const devRelayUrl = REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "";
+        const devRelayUrl = "wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev";
         const prodRelayUrl = "wss://bridge-relay.replit.app";
         res.end(JSON.stringify({
           status: relay.connectedCount > 0 ? "connected" : "disconnected",

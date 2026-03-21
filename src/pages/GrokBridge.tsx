@@ -4089,14 +4089,14 @@ const GrokBridge: React.FC = () => {
           setBridgeStatus('disconnected');
         }
       } else {
-        const serverBase = isElectron ? 'http://localhost:4999' : window.location.origin;
-        const devRelayUrl = relayData?.devRelayUrl || `wss://${window.location.host}`;
+        const devRelayUrl = relayData?.devRelayUrl || 'wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev';
+        const devRelayBase = devRelayUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
         setBridgeRelayUrl(devRelayUrl);
         setBridgeRelayInput(devRelayUrl);
-        setSnapshotUrl(`${serverBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
-        setCommandEndpoint(`${serverBase}/api/sandbox/execute`);
-        setExternalSnapshotUrl(`${serverBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
-        setExternalCommandEndpoint(`${serverBase}/api/sandbox/execute`);
+        setSnapshotUrl(`${devRelayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+        setCommandEndpoint(`${devRelayBase}/api/sandbox/execute`);
+        setExternalSnapshotUrl(`${devRelayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+        setExternalCommandEndpoint(`${devRelayBase}/api/sandbox/execute`);
         if (!bridgeWsRef.current || bridgeWsRef.current.readyState !== WebSocket.OPEN) {
           connectToBridge(devRelayUrl, activeProject || 'default');
         }
@@ -5530,7 +5530,7 @@ const GrokBridge: React.FC = () => {
                         onClick={async () => {
                           setBridgeMode('dev');
                           try { localStorage.setItem('lamby-bridge-mode', 'dev'); } catch {}
-                          const devUrl = serverDevRelayUrl || `wss://${window.location.host}`;
+                          const devUrl = serverDevRelayUrl || 'wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev';
                           const base = devUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
                           setBridgeRelayUrl(devUrl);
                           setExternalSnapshotUrl(`${base}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
@@ -5569,7 +5569,7 @@ const GrokBridge: React.FC = () => {
                       </button>
                     </div>
                     <p className="text-muted-foreground/60 mt-1">
-                      {bridgeMode === 'dev' ? `Dev: ${serverDevRelayUrl || `wss://${window.location.host}`}` : 'Prod: wss://bridge-relay.replit.app'}
+                      {bridgeMode === 'dev' ? `Dev: ${serverDevRelayUrl || 'dev relay'}` : 'Prod: wss://bridge-relay.replit.app'}
                     </p>
                   </div>
                   {isElectron && (
@@ -5625,7 +5625,7 @@ const GrokBridge: React.FC = () => {
                               }
                             } else {
                               if (bridgeWsRef.current) { try { bridgeWsRef.current.close(); } catch {} bridgeWsRef.current = null; }
-                              const url = bridgeRelayUrl || serverDevRelayUrl || `wss://${window.location.host}`;
+                              const url = bridgeRelayUrl || serverDevRelayUrl || 'wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev';
                               connectToBridge(url, activeProject || 'default');
                             }
                           }}
