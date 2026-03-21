@@ -4,6 +4,30 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 11: A review stage after task completion catches false success claims
+**Date:** 2026-03-21
+**Context:** Phase 3 run 3 — Grok claimed full success but bridge review showed otherwise
+**Problem:** Grok reported a successful run (Metrics created, App/Nav updated, git committed). But a post-task review via the bridge revealed: Metrics.tsx was deleted (not created), App.tsx unchanged, Navigation.tsx still had duplicate imports, and the git commit only contained deletions. Without a review stage, the user would have believed Grok's summary.
+**Fix:** Added mandatory "Review Stage" (steps 17–22) to the prompt. After completing all work, Grok must re-read every changed file, check the git diff stat, verify console errors, and post a structured pass/fail review to coord. This makes Grok's final self-assessment verifiable.
+
+---
+
+## Lesson 10: git add . commits deletions from earlier cleanup
+**Date:** 2026-03-21
+**Context:** Phase 3 run 3 — Grok deleted old Metrics.tsx as cleanup, then failed to create a new one
+**Problem:** Grok deleted the leftover Metrics.tsx from a prior run as a "cleanup" step. Then attempted to create a new one via write_file_chunk, which silently failed. When Grok later ran `git add .` + `git commit`, the deletion was staged and committed. The commit showed `235 deletions(-)` and `0 insertions(+)` — the opposite of what was intended.
+**Fix:** Added "KNOWN ISSUE: git add . COMMITS DELETIONS" section. New rule: Do NOT commit until ALL new files are verified present via grok-tree AND grok-read. Also: do not delete files during cleanup unless certain — deletions get committed if git add runs later.
+
+---
+
+## Lesson 9: write_file_chunk can silently fail to assemble
+**Date:** 2026-03-21
+**Context:** Phase 3 run 3 — Grok creating Metrics.tsx via 5 chunks
+**Problem:** Grok used write_file_chunk with 5 chunks of ~1400 chars each. It claimed the file was 7290 chars and "verified via grok-read." But the file was never actually assembled on disk — grok-tree showed it missing, and the git commit deleted the old version. The chunk assembly silently failed, likely due to encoding issues in the base64 payloads ("proxy encoding issue encountered" per coord notes).
+**Fix:** New rule: For files under 5KB, always use a single write_file action (not chunked). After ANY new file creation, verify with BOTH grok-tree (shows filesystem) AND grok-read (shows content). If either shows missing/empty, retry. grok-read alone can return stale cached data.
+
+---
+
 ## Lesson 8: Grok posts duplicate coord notes
 **Date:** 2026-03-21
 **Context:** Phase 3 run 3 — Grok posting final status to /api/coord

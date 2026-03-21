@@ -186,6 +186,25 @@ RULE E — PREFER write_file OVER grok-write FOR SMALL FILES:
 - LESSON: grok-write search/replace is fragile. For critical edits (imports, arrays), prefer
   reading the full file, modifying it, and writing back the complete file via write_file.
 
+=== KNOWN ISSUE: write_file_chunk FAILURES ===
+In previous runs, you used write_file_chunk to create Metrics.tsx in 5 chunks. You CLAIMED the
+file was 7290 chars and verified via grok-read. But the file was NEVER actually created — it was
+DELETED in your git commit (235 lines removed, 0 added). The chunked assembly silently failed.
+
+FOR FILES UNDER 5KB: Use a single write_file action, NOT write_file_chunk.
+FOR FILES 5KB–8KB: Use write_file_chunk but IMMEDIATELY grok-read afterward. If the file is
+  empty or missing, the chunk assembly failed — retry with fewer/smaller chunks.
+CRITICAL: After creating any new file, ALWAYS run grok-tree to confirm the file appears in the
+  tree. grok-read can sometimes return stale/cached data. grok-tree shows what's actually on disk.
+
+=== KNOWN ISSUE: git add . COMMITS DELETIONS ===
+If you delete a file as a "cleanup" step and then run git add . later, that DELETION gets
+committed. In your last run, you deleted the old Metrics.tsx for cleanup, then failed to create
+a new one, then ran git add . which staged the deletion, then committed — resulting in a commit
+that only deleted files.
+RULE: Do NOT commit until ALL new files are verified as present via grok-tree AND grok-read.
+If any expected file is missing, DO NOT commit — fix the issue first.
+
 KNOWN UNTESTED SCENARIOS (exercise caution):
 - Concurrent/parallel browse_page calls to the bridge (bridge is a serial queue — avoid parallel requests)
 - Bridge timeout/disconnect behavior during long operations (relay has 30s timeout)
@@ -196,9 +215,9 @@ KNOWN UNTESTED SCENARIOS (exercise caution):
 Project name: groks-app
 STRESS TEST TASK:
   First, clean up from previous failed runs:
-  0. Run grok-git action=status to see what's dirty. If src/pages/Metrics.tsx already exists
-     as an untracked file, delete it first so you start clean. If Navigation.tsx has a duplicate
-     Activity import, fix it.
+  0. Run grok-git action=status to see what's dirty. Fix Navigation.tsx duplicate Activity import
+     if present. Do NOT delete files unless you are certain they need to go — deleted files get
+     committed as deletions if you run git add . later.
 
   Then complete these steps:
   1. Read the project structure via grok-tree
@@ -206,19 +225,45 @@ STRESS TEST TASK:
   3. Read src/components/Navigation.tsx to see the exact NAV_ITEMS array
   4. Create a brand new src/pages/Metrics.tsx page with bridge performance metrics
      (at least 3000 chars of real React component code with metrics cards, animations, dark mode)
-     USE grok-proxy + write_file (NOT grok-write) since this is a new file
-  5. Update src/components/App.tsx to import and route Metrics — USE write_file to overwrite
+     USE grok-proxy + write_file (single action, NOT write_file_chunk)
+     If the file is too large for a single write_file, split into 2 chunks max via write_file_chunk.
+  5. VERIFY the new file exists: grok-tree AND grok-read src/pages/Metrics.tsx
+     If the file is missing or empty, STOP and retry step 4. Do NOT continue.
+     POST to coord: "Created Metrics.tsx — verified present via grok-tree + grok-read"
+  6. Update src/components/App.tsx to import and route Metrics — USE write_file to overwrite
      the entire file (read it first, add the import + PAGES entry, write the whole thing back)
-  6. Update src/components/Navigation.tsx to add a Metrics nav item — USE write_file to overwrite
-     the entire file (read it first, add the nav item to NAV_ITEMS, write the whole thing back)
-  7. After EACH edit: grok-read the file to CONFIRM your change is present. If not, retry.
-  8. After ALL edits: check get_console_errors to confirm no compile errors
-  9. Take a screenshot to verify the changes are visible
-  10. Git add all files: grok-git action=add&args=.
-  11. Git commit: grok-git action=commit&message=Phase 3: Grok-4 autonomous stress test
-      CHECK the response — if "nothing to commit", debug why.
-  12. Verify commit landed: grok-git action=log&count=3
-  13. Post final status to /api/coord
+  7. VERIFY App.tsx: grok-read — confirm Metrics import AND PAGES entry are present.
+     POST to coord: "Updated App.tsx — Metrics import + route verified via grok-read"
+  8. Update src/components/Navigation.tsx to add a Metrics nav item — USE write_file to overwrite
+     the entire file (read it first, add the nav item to NAV_ITEMS, fix any duplicate imports, write back)
+  9. VERIFY Navigation.tsx: grok-read — confirm metrics nav item in NAV_ITEMS, no duplicate imports.
+     POST to coord: "Updated Navigation.tsx — metrics nav item verified, no duplicate imports"
+  10. Check get_console_errors to confirm no compile errors
+      POST to coord: "Console errors: clean" or "Console errors: [details]"
+  11. Take a screenshot with waitMs=10000 to verify the Metrics page is visible
+  12. FINAL CHECK before committing: grok-tree must show src/pages/Metrics.tsx exists.
+      grok-git action=status must show App.tsx, Navigation.tsx, and Metrics.tsx as modified/new.
+      If ANY expected file is missing from status, DO NOT commit — fix it first.
+  13. Git add: grok-git action=add&args=.
+  14. Git commit: grok-git action=commit&message=Phase 3: Grok-4 autonomous stress test
+      CHECK the response — if "nothing to commit", something went wrong. Debug and retry.
+  15. Verify commit: grok-git action=log&count=3 — confirm your commit hash is there.
+      Then: grok-git action=diff&args=HEAD~1..HEAD%20--stat — confirm the commit ADDS files (not deletes).
+      POST to coord: "Git committed [hash] — diff shows N files added/changed, 0 deleted"
+  16. Post final status to /api/coord summarizing everything.
+
+  === REVIEW STAGE (MANDATORY — DO THIS LAST) ===
+  After completing all steps above, perform a full self-review:
+  17. grok-read src/pages/Metrics.tsx — paste the first 5 lines to prove it exists
+  18. grok-read src/components/App.tsx — confirm Metrics is in the imports AND in the PAGES object
+  19. grok-read src/components/Navigation.tsx — confirm metrics is in NAV_ITEMS, no duplicate imports
+  20. grok-git action=diff&args=HEAD~1..HEAD%20--stat — confirm the commit adds files, not just deletes
+  21. get_console_errors — confirm zero errors
+  22. POST to coord: "REVIEW COMPLETE: [pass/fail] — Metrics.tsx [present/missing], App.tsx [updated/unchanged],
+      Navigation.tsx [updated/unchanged], git diff [adds N files / PROBLEM: only deletions], console [clean/errors]"
+
+  If ANY review check fails, POST the failure to coord and attempt to fix it. Do NOT claim success
+  if the review shows problems.
 
   Do all of this using ONLY the bridge endpoints documented above. Show your work at every step.
   DO NOT claim an edit succeeded without showing the grok-read verification.
