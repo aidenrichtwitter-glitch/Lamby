@@ -298,15 +298,12 @@ async function fastScreenshot(outputPath, opts) {
   const t0 = Date.now();
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const needsUrl = opts && opts.url && opts.url !== "about:blank";
 
-  if (!needsUrl) {
-    const r1 = await _fastMethod1_ScreenshotDesktop(outputPath);
-    if (r1) { r1.ms = Date.now() - t0; return r1; }
+  const r1 = await _fastMethod1_ScreenshotDesktop(outputPath);
+  if (r1) { r1.ms = Date.now() - t0; return r1; }
 
-    const r2 = _fastMethod2_PowerShell(outputPath);
-    if (r2) { r2.ms = Date.now() - t0; return r2; }
-  }
+  const r2 = _fastMethod2_PowerShell(outputPath);
+  if (r2) { r2.ms = Date.now() - t0; return r2; }
 
   const r3 = await _fastMethod3_CDPConnect(outputPath, opts);
   if (r3) { r3.ms = Date.now() - t0; return r3; }
@@ -317,7 +314,7 @@ async function fastScreenshot(outputPath, opts) {
   const r5 = _fastMethod5_ColdstartPuppeteer(outputPath, opts);
   if (r5) { r5.ms = Date.now() - t0; return r5; }
 
-  return null;
+  return { captured: false, method: "none", ms: Date.now() - t0 };
 }
 
 function detectPmForDir(projDir) {
@@ -1547,14 +1544,14 @@ async function executeSandboxAction(action, projectsDir, options) {
                 const base64 = imgData.toString("base64");
                 resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, screenshotPath, base64: base64.length < 5000000 ? base64 : null, base64Length: base64.length, captured: true, method: "puppeteer-coldstart", ms: Date.now() - cpCaptureStart } });
               } else {
-                resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: "Screenshot file not created" } });
+                resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: "Screenshot file not created", method: "puppeteer-coldstart", ms: Date.now() - cpCaptureStart } });
               }
             } catch (e) {
-              resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: `Screenshot failed: ${e.message}`.slice(0, 500) } });
+              resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: `Screenshot failed: ${e.message}`.slice(0, 500), method: "puppeteer-coldstart", ms: Date.now() - cpCaptureStart } });
             }
           });
         }
-        return { status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, note: "Install puppeteer or playwright for automated screenshots. Use the URL to view the preview manually." } };
+        return { status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, method: "none", ms: 0, note: "Install puppeteer or playwright for automated screenshots. Use the URL to view the preview manually." } };
       }
       case "screenshot_preview": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
@@ -1637,7 +1634,7 @@ async function executeSandboxAction(action, projectsDir, options) {
         const hasPuppeteer = fs.existsSync(puppeteerBin) || puppeteerPath;
         const hasChromium = !!getChromiumPath();
         if (!hasPlaywright && !hasPuppeteer && !hasChromium) {
-          return { status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, note: "No headless browser available. Install puppeteer globally or in the project: npm i puppeteer", searched: { puppeteerPath: null, chromiumBinary: false } } };
+          return { status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, method: "none", ms: 0, note: "No headless browser available. Install puppeteer globally or in the project: npm i puppeteer", searched: { puppeteerPath: null, chromiumBinary: false } } };
         }
         if (!hasPuppeteer && !hasPlaywright && hasChromium) {
           puppeteerPath = findPuppeteerPath() || "puppeteer-core";
@@ -1674,10 +1671,10 @@ async function executeSandboxAction(action, projectsDir, options) {
                 method: "puppeteer-coldstart", ms: Date.now() - spCaptureStart
               }});
             } else {
-              resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: "Screenshot file not created" } });
+              resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: "Screenshot file not created", method: "puppeteer-coldstart", ms: Date.now() - spCaptureStart } });
             }
           } catch (e) {
-            resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: `Screenshot failed: ${e.message}`.slice(0, 500) } });
+            resolve({ status: "success", type: t, data: { url: previewUrl, port: previewPort, captured: false, error: `Screenshot failed: ${e.message}`.slice(0, 500), method: "puppeteer-coldstart", ms: Date.now() - spCaptureStart } });
           }
         });
       }
@@ -2467,10 +2464,10 @@ async function executeSandboxAction(action, projectsDir, options) {
             try { comparison = JSON.parse(output); } catch {}
             return { status: "success", type: t, data: { beforeFile: action.beforeUrl ? `before-${ts}.png` : null, afterFile: action.afterUrl ? `after-${ts}.png` : null, outputDir: ".visual-diffs", comparison, method: "puppeteer-coldstart", ms: Date.now() - vdStart } };
           } catch (e) {
-            return { status: "error", type: t, error: `Visual diff capture failed: ${(e.stderr || e.message || "").slice(0, 500)}` };
+            return { status: "error", type: t, error: `Visual diff capture failed: ${(e.stderr || e.message || "").slice(0, 500)}`, method: "puppeteer-coldstart", ms: Date.now() - vdStart };
           }
         }
-        return { status: "success", type: t, data: { beforeUrl: action.beforeUrl, afterUrl: action.afterUrl, available: false, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer" } };
+        return { status: "success", type: t, data: { beforeUrl: action.beforeUrl, afterUrl: action.afterUrl, available: false, method: "none", ms: Date.now() - vdStart, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer" } };
       }
       case "capture_component": {
         const dir = projectName ? validateProjectPath(projectName, null, projectsDir).resolved : projectsDir;
@@ -2500,14 +2497,14 @@ async function executeSandboxAction(action, projectsDir, options) {
               childProcess.execFileSync("node", ["-e", script], { cwd: dir, timeout: 30000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"], env: chromExecEnv5 });
               return { status: "success", type: t, data: { file: `${safeName}-${ts}.png`, outputDir: ".component-captures", componentName: action.componentName, method: "puppeteer-coldstart", ms: Date.now() - ccStart } };
             } catch (e) {
-              return { status: "error", type: t, error: `Component capture failed: ${(e.stderr || e.message || "").slice(0, 500)}` };
+              return { status: "error", type: t, error: `Component capture failed: ${(e.stderr || e.message || "").slice(0, 500)}`, method: "puppeteer-coldstart", ms: Date.now() - ccStart };
             }
           }
-          return { status: "success", type: t, data: { componentName: action.componentName, available: false, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer. Then provide a url to capture." } };
+          return { status: "success", type: t, data: { componentName: action.componentName, available: false, method: "none", ms: Date.now() - ccStart, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer. Then provide a url to capture." } };
         }
         let puppeteerPath = findPuppeteerPath();
         if (!puppeteerPath) {
-          return { status: "success", type: t, data: { componentName: action.componentName, available: false, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer. Then provide a url to capture." } };
+          return { status: "success", type: t, data: { componentName: action.componentName, available: false, method: "none", ms: 0, note: "Puppeteer/puppeteer-core not installed. Install with: npm i puppeteer. Then provide a url to capture." } };
         }
         return { status: "success", type: t, data: { componentName: action.componentName, available: true, note: "Provide a url parameter pointing to the component's isolated render (Storybook URL or dev server route) to capture it." } };
       }
