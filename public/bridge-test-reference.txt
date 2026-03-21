@@ -147,7 +147,12 @@ PASS | proxy detect_structure   | {type:'detect_structure', project}            
 FAIL | grok-interact evaluate | /api/grok-interact?project=P&action=evaluate&selector=... | — | Missing 'script' for evaluate. Needs &script= param instead of &selector= for evaluate action.
 
 === SUMMARY ===
-29 PASS / 3 FAIL (1 expected: blocked command; 1 unsupported action; 1 wrong param)
+Total tests executed: 32 (21 GET endpoints + 8 proxy commands + 3 edge cases)
+Results: 28 PASS / 4 FAIL
+  FAIL grok-process ports: action not supported (use get_preview_url)
+  FAIL grok-run dir: blocked by command whitelist (expected)
+  FAIL grok-interact evaluate: wrong param (needs &script= not &selector=)
+  FAIL grok-write zero match: returns replacements:0 (correct behavior, not an error)
 Round-trip latency: 84-290ms for data ops, 7101ms for screenshot
 Desktop app port: 4999 (Vite dev server)
 Console errors after all tests: 0
@@ -220,7 +225,7 @@ METHOD 5: grok-proxy + delete_file
   WARNING: ALWAYS check imports before deleting. See Rule 6.
 
 =====================================
-SECTION 7: ALL 113 PROXY COMMANDS
+SECTION 7: ALL 113 PROXY COMMANDS (enumerated from /api/commands, not all individually tested)
 =====================================
 list_tree, read_file, read_multiple_files, write_file, write_file_chunk, create_file, delete_file, bulk_delete, move_file, copy_file, copy_folder, rename_file, grep, search_files, search_replace, apply_patch, bulk_write, run_command, install_deps, add_dependency, remove_dependency, type_check, lint_and_fix, format_files, get_build_metrics, restart_dev_server, list_open_ports, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, git_push, git_pull, git_merge, git_stash_pop, git_reset, git_revert, git_tag, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, archive_project, export_project, set_env_var, get_env_vars, rollback_last_change, project_analyze, tailwind_audit, find_usages, component_tree, extract_theme, extract_colors, capture_preview, get_preview_url, generate_component, generate_page, refactor_file, validate_change, profile_performance, create_folder, delete_folder, move_folder, rename_folder, list_tree_filtered, dead_code_detection, dependency_graph, symbol_search, grep_advanced, extract_imports, run_command_advanced, build_with_flags, clean_build_cache, start_process_named, monitor_process, get_process_logs, stop_all_processes, switch_port, visual_diff, capture_component, record_video, get_dom_snapshot, get_console_errors, generate_test, generate_storybook, optimize_code, convert_to_typescript, add_feature, migrate_framework, react_profiler, memory_leak_detection, console_error_analysis, runtime_error_trace, bundle_analyzer, network_monitor, accessibility_audit, security_scan, set_tailwind_config, set_next_config, update_package_json, manage_scripts, switch_package_manager, deploy_preview, export_project_zip, import_project, super_command
 
