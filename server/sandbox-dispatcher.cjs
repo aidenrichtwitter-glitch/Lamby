@@ -299,20 +299,11 @@ async function fastScreenshot(outputPath, opts) {
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-  const r1 = await _fastMethod1_ScreenshotDesktop(outputPath);
-  if (r1) { r1.ms = Date.now() - t0; return r1; }
-
-  const r2 = _fastMethod2_PowerShell(outputPath);
-  if (r2) { r2.ms = Date.now() - t0; return r2; }
-
   const r3 = await _fastMethod3_CDPConnect(outputPath, opts);
   if (r3) { r3.ms = Date.now() - t0; return r3; }
 
   const r4 = await _fastMethod4_PersistentPuppeteer(outputPath, opts);
   if (r4) { r4.ms = Date.now() - t0; return r4; }
-
-  const r5 = _fastMethod5_ColdstartPuppeteer(outputPath, opts);
-  if (r5) { r5.ms = Date.now() - t0; return r5; }
 
   return { captured: false, method: "none", ms: Date.now() - t0 };
 }
