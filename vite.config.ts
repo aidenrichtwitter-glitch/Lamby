@@ -275,11 +275,7 @@ function projectManagementPlugin(): Plugin {
       }
 
       const crypto = await import("crypto");
-      const snapshotKey = "92781fb690e47d110da1458cbe03ac9a";
-      function isValidKey(providedKey: string): boolean {
-        return providedKey === snapshotKey;
-      }
-      console.log(`[Lamby] Snapshot key: ${snapshotKey} (hardcoded, use /api/snapshot-key from localhost to retrieve)`);
+      console.log(`[Lamby] No authentication — relay URL is the secret`);
 
       const snapshotRateLimit = new Map<string, number[]>();
 
@@ -384,10 +380,10 @@ function projectManagementPlugin(): Plugin {
         const baseUrl = `${protocol}://${host}`;
         const reqUrl = new URL(req.url || "", `http://${host}`);
         const requestedProject = reqUrl.searchParams.get("project") || "";
-        res.end(JSON.stringify({ key: snapshotKey, globalKey: snapshotKey, project: requestedProject || null, baseUrl, devRelayUrl: REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "", exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}?key=${snapshotKey}`, commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`, commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, write_file, create_file, delete_file, move_file, copy_file, rename_file, grep, run_command, install_deps, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, search_files, screenshot_preview, browser_interact, interact_preview" }));
+        res.end(JSON.stringify({ project: requestedProject || null, baseUrl, devRelayUrl: REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "", exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}`, commandEndpoint: `${baseUrl}/api/sandbox/execute`, commandProtocol: "POST JSON {actions: [{type, project, ...}]}. No authentication required." }));
       });
 
-      const bridgeClients = new Map<string, { ws: any; snapshotKey: string; lastPing: number; connId: string; replaced: boolean }>();
+      const bridgeClients = new Map<string, { ws: any; lastPing: number; connId: string; replaced: boolean }>();
       const pendingRelayRequests = new Map<string, { resolve: (s: string) => void; timer: ReturnType<typeof setTimeout> }>();
 
       server.middlewares.use("/api/snapshot/", async (req, res) => {
@@ -396,15 +392,6 @@ function projectManagementPlugin(): Plugin {
           const url = new URL(req.url || "", `http://${req.headers.host}`);
           const pathParts = url.pathname.split("/").filter(Boolean);
           const projectName = pathParts[0] || "";
-          const providedKey = url.searchParams.get("key") || (req.headers.authorization || "").replace("Bearer ", "");
-
-          if (providedKey !== snapshotKey) {
-            res.statusCode = 403;
-            res.setHeader("Content-Type", "text/plain");
-            res.end("Lamby Snapshot API\n\nAccess denied — invalid or missing key.\nProvide ?key=YOUR_KEY or Authorization: Bearer YOUR_KEY");
-            return;
-          }
-
           const now = Date.now();
           const clientIp = (req.headers["x-forwarded-for"] as string || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
           const hits = snapshotRateLimit.get(clientIp) || [];
@@ -418,7 +405,7 @@ function projectManagementPlugin(): Plugin {
           recentHits.push(now);
           snapshotRateLimit.set(clientIp, recentHits);
 
-          let relayClient: { ws: any; snapshotKey: string } | null = null;
+          let relayClient: { ws: any } | null = null;
           for (const [, client] of bridgeClients) {
             if (client.ws.readyState === 1) {
               relayClient = client;
@@ -4196,7 +4183,7 @@ function projectManagementPlugin(): Plugin {
           if (!apiKey) { res.statusCode = 400; res.end(JSON.stringify({ error: "XAI API key not configured" })); return; }
 
           const relayUrl = clientRelayUrl || BRIDGE_RELAY_URL;
-          const bKey = clientBridgeKey || bridgeRelayKey || snapshotKey;
+          const bKey = clientBridgeKey || bridgeRelayKey || "";
           const useModel = model || "grok-4-0709";
 
           res.setHeader("Content-Type", "text/event-stream");
@@ -5326,7 +5313,6 @@ function projectManagementPlugin(): Plugin {
           status: relay.connectedCount > 0 ? "connected" : "disconnected",
           connectedClients: relay.connectedCount,
           relayUrl: devRelayUrl || prodRelayUrl,
-          snapshotKey,
           devRelayUrl,
           prodRelayUrl,
         }));
@@ -5342,8 +5328,6 @@ function projectManagementPlugin(): Plugin {
           status: relay.connectedCount > 0 ? "connected" : "disconnected",
           connectedClients: relay.connectedCount,
           relayUrl: devRelayUrl || prodRelayUrl,
-          bridgeKey: relay.firstConnectedKey ? relay.firstConnectedKey.substring(0, 8) + "..." : "",
-          key: snapshotKey,
           devRelayUrl,
           prodRelayUrl,
         }));
@@ -5353,8 +5337,6 @@ function projectManagementPlugin(): Plugin {
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
         const url = new URL(req.url || "", `http://${req.headers.host}`);
         const projectName = url.searchParams.get("project") || "";
-        const providedKey = url.searchParams.get("key") || (req.headers.authorization || "").replace("Bearer ", "");
-        if (providedKey !== snapshotKey) { res.statusCode = 403; res.end(JSON.stringify({ error: "Invalid key" })); return; }
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify(gatherConsoleLogs(projectName)));
       });
@@ -5363,12 +5345,6 @@ function projectManagementPlugin(): Plugin {
         if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
         try {
           const url = new URL(req.url || "", `http://${req.headers.host}`);
-          const providedKey = url.searchParams.get("key") || (req.headers.authorization || "").replace("Bearer ", "");
-
-          if (providedKey !== snapshotKey) {
-            res.statusCode = 403; res.end(JSON.stringify({ error: "Invalid key" })); return;
-          }
-
           const body = JSON.parse(await readBody(req));
           const actions = body.actions;
           if (!Array.isArray(actions) || actions.length === 0) {
@@ -5378,7 +5354,7 @@ function projectManagementPlugin(): Plugin {
             res.statusCode = 400; res.end(JSON.stringify({ error: "Max 50 actions per request" })); return;
           }
 
-          let sandboxRelayClient: { ws: any; snapshotKey: string } | null = null;
+          let sandboxRelayClient: { ws: any } | null = null;
           for (const [, client] of bridgeClients) {
             if (client.ws.readyState === 1) { sandboxRelayClient = client; break; }
           }
@@ -5417,10 +5393,6 @@ function projectManagementPlugin(): Plugin {
       server.middlewares.use("/api/sandbox/audit-log", async (req, res) => {
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
         const url = new URL(req.url || "", `http://${req.headers.host}`);
-        const providedKey = url.searchParams.get("key") || (req.headers.authorization || "").replace("Bearer ", "");
-        if (providedKey !== snapshotKey) {
-          res.statusCode = 403; res.end(JSON.stringify({ error: "Invalid key" })); return;
-        }
         res.setHeader("Content-Type", "application/json");
         res.end(JSON.stringify({ entries: sandboxAuditLog.slice(-100) }));
       });
@@ -5523,7 +5495,7 @@ function projectManagementPlugin(): Plugin {
             setTimeout(() => { try { existingClient.ws.close(); } catch {} }, 500);
           }
 
-          const client = { ws, snapshotKey: clientSnapshotKey, lastPing: Date.now(), connId, replaced: false };
+          const client = { ws, lastPing: Date.now(), connId, replaced: false };
           bridgeClients.set(bridgeKey, client);
 
           ws.on("message", (data: any) => {
@@ -5572,11 +5544,6 @@ function projectManagementPlugin(): Plugin {
 
         server.httpServer.on("upgrade", (req: any, socket: any, head: any) => {
           if (req.url && req.url.startsWith("/ws/sandbox")) {
-            const reqUrl = new URL(req.url, "http://localhost");
-            const providedKey = reqUrl.searchParams.get("key") || "";
-            if (providedKey !== snapshotKey) {
-              socket.destroy(); return;
-            }
             sandboxWss.handleUpgrade(req, socket, head, (ws: any) => {
               sandboxWss.emit("connection", ws);
             });
@@ -5584,14 +5551,9 @@ function projectManagementPlugin(): Plugin {
           }
           if (req.url && req.url.startsWith("/bridge-ws")) {
             const reqUrl = new URL(req.url, "http://localhost");
-            const bridgeKey = reqUrl.searchParams.get("key") || "";
-            const clientSnapshotKey = reqUrl.searchParams.get("snapshotKey") || "";
-            if (!bridgeKey || bridgeKey.length < 8) {
-              socket.destroy();
-              return;
-            }
+            const bridgeKey = reqUrl.searchParams.get("key") || crypto.randomUUID();
             bridgeWss.handleUpgrade(req, socket, head, (ws: any) => {
-              bridgeWss.emit("connection", ws, bridgeKey, clientSnapshotKey);
+              bridgeWss.emit("connection", ws, bridgeKey, "");
             });
             return;
           }

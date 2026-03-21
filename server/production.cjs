@@ -5,12 +5,6 @@ const crypto = require("crypto");
 
 const PORT = parseInt(process.env.PORT || "5000", 10);
 const DIST_DIR = path.resolve(__dirname, "..", "dist");
-const snapshotKey = "92781fb690e47d110da1458cbe03ac9a";
-
-function isValidKey(providedKey) {
-  return providedKey === snapshotKey;
-}
-
 const bridgeClients = new Map();
 const pendingRelayRequests = new Map();
 const pendingSandboxRelayRequests = new Map();
@@ -18,18 +12,6 @@ const pendingConsoleLogRequests = new Map();
 const sandboxAuditLog = [];
 
 
-const lambyConfigPath = path.resolve(__dirname, "..", ".lamby-keys.json");
-let prodBridgeKey;
-try {
-  if (fs.existsSync(lambyConfigPath)) {
-    const saved = JSON.parse(fs.readFileSync(lambyConfigPath, "utf-8"));
-    prodBridgeKey = saved.bridgeRelayKey && saved.bridgeRelayKey.length >= 16 ? saved.bridgeRelayKey : crypto.randomBytes(16).toString("hex");
-  } else {
-    prodBridgeKey = crypto.randomBytes(16).toString("hex");
-  }
-} catch {
-  prodBridgeKey = crypto.randomBytes(16).toString("hex");
-}
 function getProdBridgeRelayStatus() {
   let connectedCount = 0;
   let firstConnectedKey = "";
@@ -81,15 +63,9 @@ function readBody(req) {
   });
 }
 
-function getKey(req, url) {
-  return url.searchParams.get("key") || (req.headers.authorization || "").replace("Bearer ", "");
-}
-
-function findBridgeClient(key) {
-  if (key === snapshotKey) {
-    for (const [, client] of bridgeClients) {
-      if (client.alive) return client;
-    }
+function getFirstAliveClient() {
+  for (const [, client] of bridgeClients) {
+    if (client.alive) return client;
   }
   return null;
 }
@@ -204,7 +180,7 @@ function handleWsUpgrade(req, socket, bridgeKey, clientSnapshotKey) {
 
   console.log(`[Bridge Relay] Desktop client connected (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)})`);
 
-  const client = { socket, snapshotKey: clientSnapshotKey, lastPing: Date.now(), alive: true, connId, replaced: false };
+  const client = { socket, lastPing: Date.now(), alive: true, connId, replaced: false };
   bridgeClients.set(bridgeKey, client);
 
   client.send = (data) => {
@@ -296,42 +272,30 @@ const server = http.createServer(async (req, res) => {
     const requestedProject = url.searchParams.get("project") || "";
     const REPLIT_DEV_DOMAIN = process.env.REPLIT_DEV_DOMAIN || "";
     sendJson(res, {
-      key: snapshotKey,
-      globalKey: snapshotKey,
       project: requestedProject || null,
       baseUrl,
       devRelayUrl: REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "",
-      exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}?key=${snapshotKey}`,
-      commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${snapshotKey}`,
-      commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Relay-only in production — requests forwarded to connected desktop client via bridge.",
+      exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}`,
+      commandEndpoint: `${baseUrl}/api/sandbox/execute`,
+      commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Relay-only — requests forwarded to connected desktop client via bridge.",
     });
     return;
   }
 
   if (pathname === "/api/bridge-status") {
-    const providedKey = getKey(req, url);
-    if (!isValidKey(providedKey) && !findBridgeClient(providedKey)) {
-      sendJson(res, { error: "Invalid key" }, 403);
-      return;
-    }
     const relay = getProdBridgeRelayStatus();
     const clients = Array.from(bridgeClients.entries()).map(([key, c]) => ({
       key: key.substring(0, 8) + "...",
-      snapshotKey: c.snapshotKey.substring(0, 8) + "...",
       connected: c.alive,
       lastPing: c.lastPing,
     }));
     const rdDomain = process.env.REPLIT_DEV_DOMAIN || "";
     const devRelayUrl = rdDomain ? `wss://${rdDomain}` : "";
-    const prodRelayUrl = "wss://bridge-relay.replit.app";
     sendJson(res, {
       status: relay.connectedCount > 0 ? "connected" : "disconnected",
       connectedClients: clients.length,
       clients,
-      bridgeKey: relay.firstConnectedKey ? relay.firstConnectedKey.substring(0, 8) + "..." : "",
-      key: snapshotKey,
       devRelayUrl,
-      prodRelayUrl,
     });
     return;
   }
@@ -341,14 +305,11 @@ const server = http.createServer(async (req, res) => {
     const relay = getProdBridgeRelayStatus();
     const rdDomain2 = process.env.REPLIT_DEV_DOMAIN || "";
     const devRelayUrl = rdDomain2 ? `wss://${rdDomain2}` : "";
-    const prodRelayUrl = "wss://bridge-relay.replit.app";
     sendJson(res, {
       status: relay.connectedCount > 0 ? "connected" : "disconnected",
       connectedClients: relay.connectedCount,
-      relayUrl: prodRelayUrl,
-      snapshotKey,
+      relayUrl: `https://${req.headers.host || "bridge-relay.replit.app"}`,
       devRelayUrl,
-      prodRelayUrl,
     });
     return;
   }
@@ -357,15 +318,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     const pathParts = pathname.replace("/api/snapshot/", "").split("/").filter(Boolean);
     const projectName = pathParts[0] || "";
-    const providedKey = getKey(req, url);
 
-    if (!isValidKey(providedKey) && !findBridgeClient(providedKey)) {
-      res.writeHead(403, { "Content-Type": "text/plain" });
-      res.end("Lamby Snapshot API\n\nAccess denied — invalid or missing key.\nProvide ?key=YOUR_KEY or Authorization: Bearer YOUR_KEY");
-      return;
-    }
-
-    const matchedClient = findBridgeClient(providedKey);
+    const matchedClient = getFirstAliveClient();
     if (matchedClient) {
       const requestId = crypto.randomUUID();
       const relayPromise = new Promise((resolve) => {
@@ -396,13 +350,6 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/sandbox/execute") {
     if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
     try {
-      const providedKey = getKey(req, url);
-      const execProject = url.searchParams.get("project") || "";
-      if (!isValidKey(providedKey) && !findBridgeClient(providedKey)) {
-        sendJson(res, { error: "Invalid key" }, 403);
-        return;
-      }
-
       const body = JSON.parse(await readBody(req));
       const actions = body.actions;
       if (!Array.isArray(actions) || actions.length === 0) {
@@ -414,7 +361,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const matchedClient = findBridgeClient(providedKey);
+      const matchedClient = getFirstAliveClient();
       if (!matchedClient) {
         sendJson(res, { error: "No desktop client connected. The production server is relay-only — connect your desktop app via the Bridge." }, 503);
         return;
@@ -451,20 +398,13 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/sandbox/audit-log") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
-    const providedKey = getKey(req, url);
-    const auditProject = url.searchParams.get("project") || "";
-    if (!isValidKey(providedKey) && !findBridgeClient(providedKey)) {
-      sendJson(res, { error: "Invalid key" }, 403);
-      return;
-    }
     sendJson(res, { entries: sandboxAuditLog.slice(-100) });
     return;
   }
 
   if (pathname === "/api/console-logs") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
-    const providedKey = getKey(req, url);
-    const matchedClient = findBridgeClient(providedKey);
+    const matchedClient = getFirstAliveClient();
     if (!matchedClient) {
       sendJson(res, { error: "No desktop client connected" }, 503);
       return;
@@ -490,13 +430,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const screenshotMatch = pathname.match(/^\/api\/screenshot\/([^/]+)\/([^/]+)$/);
+  const screenshotMatch = pathname.match(/^\/api\/screenshot\/([^/]+)(?:\/([^/]+))?$/);
   if (screenshotMatch) {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
-    const providedKey = screenshotMatch[1];
-    const project = decodeURIComponent(screenshotMatch[2]);
-    const matchedClient = findBridgeClient(providedKey);
-    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    const project = decodeURIComponent(screenshotMatch[2] || screenshotMatch[1]);
+    const matchedClient = getFirstAliveClient();
     if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
     const selector = url.searchParams.get("selector") || undefined;
     const fullPage = url.searchParams.get("fullPage") === "true";
@@ -518,9 +456,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/grok-proxy") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
-    const providedKey = getKey(req, url);
-    const matchedClient = findBridgeClient(providedKey);
-    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    const matchedClient = getFirstAliveClient();
     if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
 
     const payloadB64 = url.searchParams.get("payload") || "";
@@ -554,9 +490,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/grok-edit") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
-    const providedKey = getKey(req, url);
-    const matchedClient = findBridgeClient(providedKey);
-    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    const matchedClient = getFirstAliveClient();
     if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
 
     const project = url.searchParams.get("project") || "";
@@ -587,9 +521,7 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/grok-interact") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
-    const providedKey = getKey(req, url);
-    const matchedClient = findBridgeClient(providedKey);
-    if (!matchedClient && providedKey !== snapshotKey) { sendJson(res, { error: "Invalid key" }, 403); return; }
+    const matchedClient = getFirstAliveClient();
     if (!matchedClient) { sendJson(res, { error: "No desktop client connected." }, 503); return; }
 
     const project = url.searchParams.get("project") || "";
@@ -634,13 +566,13 @@ const server = http.createServer(async (req, res) => {
     sendJson(res, {
       service: "Lamby Bridge Relay — Grok Integration (Production)",
       endpoints: {
-        snapshot: "/api/snapshot/:project?key=KEY",
-        consoleLogs: "/api/console-logs?key=KEY&project=NAME",
-        execute: "POST /api/sandbox/execute?key=KEY",
-        grokProxy: "/api/grok-proxy?key=KEY&project=NAME&payload=BASE64_ACTIONS",
-        grokEdit: "/api/grok-edit?key=KEY&project=NAME&path=FILE&search=OLD&replace=NEW&replaceAll=true",
-        grokInteract: "/api/grok-interact?key=KEY&project=NAME&action=ACTION&selector=CSS",
-        screenshot: "/api/screenshot/:key/:project?fullPage=true&waitMs=8000",
+        snapshot: "/api/snapshot/:project",
+        consoleLogs: "/api/console-logs?project=NAME",
+        execute: "POST /api/sandbox/execute",
+        grokProxy: "/api/grok-proxy?project=NAME&payload=BASE64_ACTIONS",
+        grokEdit: "/api/grok-edit?project=NAME&path=FILE&search=OLD&replace=NEW&replaceAll=true",
+        grokInteract: "/api/grok-interact?project=NAME&action=ACTION&selector=CSS",
+        screenshot: "/api/screenshot/:project?fullPage=true&waitMs=8000",
         commands: "/api/commands",
       },
     });
@@ -658,18 +590,8 @@ const server = http.createServer(async (req, res) => {
 server.on("upgrade", (req, socket, head) => {
   const reqUrl = new URL(req.url || "", "http://localhost");
   if (req.url && req.url.startsWith("/bridge-ws")) {
-    const bridgeKey = reqUrl.searchParams.get("key") || "";
-    const clientSnapshotKey = reqUrl.searchParams.get("snapshotKey") || "";
-    if (!bridgeKey || bridgeKey.length < 8) {
-      socket.destroy();
-      return;
-    }
-    if (clientSnapshotKey !== snapshotKey && clientSnapshotKey.length < 16) {
-      console.log(`[Bridge Relay] Rejected connection — snapshotKey too short`);
-      socket.destroy();
-      return;
-    }
-    handleWsUpgrade(req, socket, bridgeKey, clientSnapshotKey);
+    const bridgeKey = reqUrl.searchParams.get("key") || crypto.randomUUID();
+    handleWsUpgrade(req, socket, bridgeKey, "");
     return;
   }
   socket.destroy();
@@ -697,7 +619,7 @@ process.on("unhandledRejection", (reason) => {
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`[Lamby Production] Server running on port ${PORT}`);
-  console.log(`[Lamby Production] Snapshot key: ${snapshotKey}`);
+  console.log(`[Lamby Production] No authentication — relay URL is the secret`);
   console.log(`[Lamby Production] Bridge relay ready at /bridge-ws`);
   console.log(`[Lamby Production] Serving static files from ${DIST_DIR}`);
 });

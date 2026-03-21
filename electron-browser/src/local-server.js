@@ -33,18 +33,14 @@ function loadBridgeConfig() {
   try {
     if (fs.existsSync(BRIDGE_CONFIG_PATH)) {
       const cfg = JSON.parse(fs.readFileSync(BRIDGE_CONFIG_PATH, "utf-8"));
-      let changed = false;
       if (!cfg.relayUrl || isLocalhostUrl(cfg.relayUrl)) {
         cfg.relayUrl = CANONICAL_RELAY_URL;
-        changed = true;
+        try { fs.writeFileSync(BRIDGE_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8"); } catch {}
       }
-      if (!cfg.bridgeKey || cfg.bridgeKey.length < 8) { cfg.bridgeKey = crypto.randomBytes(16).toString("hex"); changed = true; }
-      if (!cfg.snapshotKey || cfg.snapshotKey.length < 16) { cfg.snapshotKey = crypto.randomBytes(16).toString("hex"); changed = true; }
-      if (changed) { try { fs.writeFileSync(BRIDGE_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8"); } catch {} }
       return cfg;
     }
   } catch {}
-  const cfg = { relayUrl: CANONICAL_RELAY_URL, bridgeKey: crypto.randomBytes(16).toString("hex"), snapshotKey: crypto.randomBytes(16).toString("hex") };
+  const cfg = { relayUrl: CANONICAL_RELAY_URL };
   try {
     fs.mkdirSync(path.dirname(BRIDGE_CONFIG_PATH), { recursive: true });
     fs.writeFileSync(BRIDGE_CONFIG_PATH, JSON.stringify(cfg, null, 2), "utf-8");
@@ -61,24 +57,6 @@ function saveBridgeConfig(config) {
 }
 
 let bridgeConfig = loadBridgeConfig();
-const snapshotKey = bridgeConfig.snapshotKey;
-
-if (!bridgeConfig.projectKeys) { bridgeConfig.projectKeys = {}; saveBridgeConfig(bridgeConfig); }
-
-function getProjectKey(projectName) {
-  if (!projectName) return snapshotKey;
-  if (bridgeConfig.projectKeys[projectName]) return bridgeConfig.projectKeys[projectName];
-  const key = crypto.randomBytes(16).toString("hex");
-  bridgeConfig.projectKeys[projectName] = key;
-  saveBridgeConfig(bridgeConfig);
-  return key;
-}
-
-function isValidKey(providedKey, projectName) {
-  if (providedKey === snapshotKey) return true;
-  if (projectName && bridgeConfig.projectKeys[projectName] === providedKey) return true;
-  return false;
-}
 
 const { createConnector } = require("../../server/bridge-connector.cjs");
 
@@ -106,17 +84,9 @@ let bridgeConnector = null;
 
 function createBridgeConnector() {
   const relayUrl = bridgeConfig.relayUrl || CANONICAL_RELAY_URL;
-  let bridgeKey = bridgeConfig.bridgeKey;
-  if (!bridgeKey || bridgeKey.length < 8) {
-    bridgeKey = crypto.randomBytes(16).toString("hex");
-    bridgeConfig.bridgeKey = bridgeKey;
-    saveBridgeConfig(bridgeConfig);
-  }
 
   bridgeConnector = createConnector({
     relayUrl,
-    bridgeKey,
-    snapshotKey,
     projectDir: PROJECTS_DIR,
     onMessage: async (msg, send) => {
       if (msg.type === "snapshot-request" && msg.requestId) {
@@ -198,9 +168,7 @@ function sendJson(res, obj, status) {
   res.end(JSON.stringify(obj));
 }
 
-function getKey(req, url) {
-  return url.searchParams.get("key") || (req.headers.authorization || "").replace("Bearer ", "");
-}
+
 
 function patchNextConfig(dir) {
   const candidates = ["next.config.ts", "next.config.mjs", "next.config.js"];
@@ -303,16 +271,11 @@ const server = http.createServer(async (req, res) => {
     const protocol = req.headers["x-forwarded-proto"] || "http";
     const baseUrl = `${protocol}://${host}`;
     const requestedProject = url.searchParams.get("project") || "";
-    const effectiveKey = requestedProject ? getProjectKey(requestedProject) : snapshotKey;
-    const allProjectKeys = { ...bridgeConfig.projectKeys };
     sendJson(res, {
-      key: effectiveKey,
-      globalKey: snapshotKey,
-      projectKeys: allProjectKeys,
       project: requestedProject || null,
       baseUrl,
-      exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}?key=${effectiveKey}`,
-      commandEndpoint: `${baseUrl}/api/sandbox/execute?key=${effectiveKey}`,
+      exampleUrl: `${baseUrl}/api/snapshot/${requestedProject || "PROJECT_NAME"}`,
+      commandEndpoint: `${baseUrl}/api/sandbox/execute`,
       commandProtocol: "POST JSON {actions: [{type, project, ...}]}. Action types: list_tree, read_file, read_multiple_files, write_file, create_file, delete_file, bulk_delete, move_file, copy_file, copy_folder, rename_file, grep, search_files, search_replace, apply_patch, bulk_write, run_command, install_deps, add_dependency, type_check, lint_and_fix, format_files, get_build_metrics, restart_dev_server, list_open_ports, git_status, git_add, git_commit, git_diff, git_log, git_branch, git_checkout, git_stash, git_init, git_push, git_pull, git_merge, detect_structure, start_process, kill_process, list_processes, build_project, run_tests, archive_project, export_project, set_env_var, get_env_vars, rollback_last_change, project_analyze, tailwind_audit, find_usages, component_tree, extract_theme, extract_colors, capture_preview, get_preview_url, generate_component, generate_page, refactor_file, validate_change, profile_performance, create_folder, delete_folder, move_folder, rename_folder, list_tree_filtered, dead_code_detection, dependency_graph, symbol_search, grep_advanced, extract_imports, run_command_advanced, build_with_flags, clean_build_cache, start_process_named, monitor_process, get_process_logs, stop_all_processes, switch_port, git_stash_pop, git_reset, git_revert, git_tag, visual_diff, capture_component, record_video, get_dom_snapshot, get_console_errors, generate_test, generate_storybook, optimize_code, convert_to_typescript, add_feature, migrate_framework, react_profiler, memory_leak_detection, console_error_analysis, runtime_error_trace, bundle_analyzer, network_monitor, accessibility_audit, security_scan, set_tailwind_config, set_next_config, update_package_json, manage_scripts, switch_package_manager, deploy_preview, export_project_zip, import_project, super_command",
     });
     return;
@@ -322,12 +285,6 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     const pathParts = pathname.replace("/api/snapshot/", "").split("/").filter(Boolean);
     const projectName = pathParts[0] || "";
-    const providedKey = getKey(req, url);
-    if (!isValidKey(providedKey, projectName)) {
-      res.writeHead(403, { "Content-Type": "text/plain" });
-      res.end("Lamby Snapshot API\n\nAccess denied — invalid or missing key.\nProvide ?key=YOUR_KEY or Authorization: Bearer YOUR_KEY");
-      return;
-    }
     if (!projectName) {
       let projectList = [];
       if (fs.existsSync(PROJECTS_DIR)) {
@@ -336,7 +293,7 @@ const server = http.createServer(async (req, res) => {
         });
       }
       res.writeHead(200, { "Content-Type": "text/plain" });
-      res.end(`Lamby Snapshot API\n\nAvailable projects:\n${projectList.map(p => `- ${p}`).join("\n") || "(none)"}\n\nUsage: /api/snapshot/PROJECT_NAME?key=YOUR_KEY`);
+      res.end(`Lamby Snapshot API\n\nAvailable projects:\n${projectList.map(p => `- ${p}`).join("\n") || "(none)"}\n\nUsage: /api/snapshot/PROJECT_NAME`);
       return;
     }
     const snapshot = gatherProjectSnapshot(projectName, PROJECTS_DIR);
@@ -348,12 +305,6 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/sandbox/execute") {
     if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
     try {
-      const providedKey = getKey(req, url);
-      const execProject = url.searchParams.get("project") || "";
-      if (!isValidKey(providedKey, execProject)) {
-        sendJson(res, { error: "Invalid key" }, 403);
-        return;
-      }
       const body = JSON.parse(await readBody(req));
       const actions = body.actions;
       if (!Array.isArray(actions) || actions.length === 0) {
@@ -374,12 +325,6 @@ const server = http.createServer(async (req, res) => {
 
   if (pathname === "/api/sandbox/audit-log") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
-    const providedKey = getKey(req, url);
-    const auditProject = url.searchParams.get("project") || "";
-    if (!isValidKey(providedKey, auditProject)) {
-      sendJson(res, { error: "Invalid key" }, 403);
-      return;
-    }
     sendJson(res, { entries: sandboxAuditLog.slice(-100) });
     return;
   }
@@ -876,8 +821,6 @@ const server = http.createServer(async (req, res) => {
     sendJson(res, {
       status: status.status,
       relayUrl: status.relayUrl || bridgeConfig.relayUrl || "",
-      bridgeKey: status.bridgeKey || bridgeConfig.bridgeKey || "",
-      key: snapshotKey,
     });
     return;
   }
@@ -885,8 +828,6 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/console-logs") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
     const projectName = url.searchParams.get("project") || "";
-    const providedKey = getKey(req, url);
-    if (!isValidKey(providedKey, projectName)) { sendJson(res, { error: "Invalid key" }, 403); return; }
     sendJson(res, gatherConsoleLogs(projectName));
     return;
   }
@@ -895,7 +836,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
     try {
       const body = JSON.parse(await readBody(req));
-      bridgeConfig = { relayUrl: body.relayUrl || "", bridgeKey: body.bridgeKey || "", snapshotKey: bridgeConfig.snapshotKey, projectKeys: bridgeConfig.projectKeys || {} };
+      bridgeConfig = { relayUrl: body.relayUrl || "" };
       saveBridgeConfig(bridgeConfig);
       connectToBridgeRelay();
       sendJson(res, { success: true });
@@ -966,8 +907,6 @@ if (WebSocketServer) {
   server.on("upgrade", (req, socket, head) => {
     if (req.url && req.url.startsWith("/ws/sandbox")) {
       const reqUrl = new URL(req.url, "http://localhost");
-      const providedKey = reqUrl.searchParams.get("key") || "";
-      if (!isValidKey(providedKey, "")) { socket.destroy(); return; }
       sandboxWss.handleUpgrade(req, socket, head, (ws) => {
         sandboxWss.emit("connection", ws);
       });
@@ -988,7 +927,7 @@ process.on("unhandledRejection", (reason) => {
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`[Lamby Local] Server running on port ${PORT}`);
-  console.log(`[Lamby Local] Snapshot key: ${snapshotKey}`);
+  console.log(`[Lamby Local] No authentication — relay URL is the secret`);
   console.log(`[Lamby Local] Projects dir: ${PROJECTS_DIR}`);
   console.log(`[Lamby Local] Sandbox API: http://localhost:${PORT}/api/sandbox/execute`);
   console.log(`[Lamby Local] Bridge relay: ${bridgeConfig.relayUrl || "(none)"}`);

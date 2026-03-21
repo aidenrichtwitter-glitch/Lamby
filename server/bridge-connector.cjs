@@ -10,8 +10,7 @@ const { exec, spawn, execFile } = require("child_process");
 
 function createConnector(config) {
   const relayUrl    = config.relayUrl    || "wss://bridge-relay.replit.app";
-  const bridgeKey   = config.bridgeKey   || crypto.randomBytes(16).toString("hex");
-  const snapshotKey = config.snapshotKey || crypto.randomBytes(16).toString("hex");
+  const bridgeKey   = config.bridgeKey   || crypto.randomUUID();
   const projectName = config.projectName || "";
   const projectDir  = config.projectDir  || process.cwd();
   const previewPort = parseInt(config.previewPort || "3000", 10);
@@ -1756,8 +1755,7 @@ function createConnector(config) {
     }
     const port     = parsedUrl.port ? parseInt(parsedUrl.port) : (isSecure ? 443 : 80);
     const wsKey    = crypto.randomBytes(16).toString("base64");
-    const wsPath   = `/bridge-ws?key=${encodeURIComponent(bridgeKey)}&snapshotKey=${encodeURIComponent(snapshotKey)}` +
-                     (projectName ? `&project=${encodeURIComponent(projectName)}` : "");
+    const wsPath   = `/bridge-ws?project=${encodeURIComponent(projectName || "default")}`;
 
     log("info", `Connecting to ${_currentRelayUrl}...`);
 
@@ -1873,8 +1871,6 @@ function createConnector(config) {
         status: effectiveStatus,
         relayUrl: _currentRelayUrl,
         connectedAt: _lastConnectedAt,
-        snapshotKey,
-        bridgeKey,
         mode: _currentRelayUrl.includes("bridge-relay.replit.app") ? "production" : "dev",
       };
     },
@@ -1897,8 +1893,6 @@ module.exports = { createConnector };
 if (require.main === module) {
   const connector = createConnector({
     relayUrl:    process.env.RELAY_URL    || "wss://bridge-relay.replit.app",
-    bridgeKey:   process.env.BRIDGE_KEY   || crypto.randomBytes(16).toString("hex"),
-    snapshotKey: process.env.SNAPSHOT_KEY || crypto.randomBytes(16).toString("hex"),
     projectName: process.env.PROJECT_NAME || "",
     projectDir:  process.env.PROJECT_DIR  || process.cwd(),
     previewPort: process.env.PREVIEW_PORT || process.env.LAMBY_PORT || "3000",

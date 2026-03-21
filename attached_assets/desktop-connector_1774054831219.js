@@ -6,8 +6,6 @@
 // Usage:  node desktop-connector.js
 // Config via env vars (or edit start-connector.bat):
 //   RELAY_URL      wss://bridge-relay.replit.app   Relay server URL
-//   BRIDGE_KEY     (auto)   Unique key for this desktop connection
-//   SNAPSHOT_KEY   (auto)   Key for relay auth / project lookup
 //   PROJECT_NAME   ""       Default project name sent on connect
 //   PROJECT_DIR    cwd      Root dir containing projects/ subdirectory
 //   PREVIEW_PORT   3000     Fallback port for screenshot if not auto-detected
@@ -24,8 +22,6 @@ const { exec, spawn, execSync } = require("child_process");
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const RELAY_URL    = process.env.RELAY_URL    || "wss://bridge-relay.replit.app";
-const BRIDGE_KEY   = process.env.BRIDGE_KEY   || crypto.randomBytes(16).toString("hex");
-const SNAPSHOT_KEY = process.env.SNAPSHOT_KEY || crypto.randomBytes(16).toString("hex");
 const PROJECT_NAME = process.env.PROJECT_NAME || "";
 const PROJECT_DIR  = process.env.PROJECT_DIR  || process.cwd();
 const PREVIEW_PORT = parseInt(process.env.PREVIEW_PORT || process.env.LAMBY_PORT || "3000", 10);
@@ -2040,8 +2036,7 @@ function connect() {
   const host     = relayUrl.hostname;
   const port     = relayUrl.port ? parseInt(relayUrl.port) : (isSecure ? 443 : 80);
   const wsKey    = crypto.randomBytes(16).toString("base64");
-  const wsPath   = `/bridge-ws?key=${encodeURIComponent(BRIDGE_KEY)}&snapshotKey=${encodeURIComponent(SNAPSHOT_KEY)}` +
-                   (PROJECT_NAME ? `&project=${encodeURIComponent(PROJECT_NAME)}` : "");
+  const wsPath   = `/bridge-ws?project=${encodeURIComponent(PROJECT_NAME || "default")}`;
   const upgradeReq = [
     `GET ${wsPath} HTTP/1.1`,
     `Host: ${host}`,
@@ -2114,8 +2109,7 @@ console.log("╔═════════════════════�
 console.log("║   Lamby Bridge Connector v2.0  (86 commands live)    ║");
 console.log("╚═══════════════════════════════════════════════════════╝");
 console.log(`  Relay URL:    ${RELAY_URL}`);
-console.log(`  Bridge key:   ${BRIDGE_KEY.substring(0, 8)}...`);
-console.log(`  Snapshot key: ${SNAPSHOT_KEY.substring(0, 8)}...`);
+console.log(`  No authentication — relay URL is the secret`);
 console.log(`  Project:      ${PROJECT_NAME || "(not set — pass PROJECT_NAME env var)"}`);
 console.log(`  Project dir:  ${PROJECT_DIR}`);
 console.log(`  Chrome:       ${chromePath || "NOT FOUND — screenshots disabled"}`);

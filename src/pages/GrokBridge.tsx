@@ -247,7 +247,6 @@ function extractBaseUrl(endpoint: string): string {
   }
 }
 
-const LAMBY_UNIVERSAL_KEY = '92781fb690e47d110da1458cbe03ac9a';
 
 async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: string; cmdUrl: string; proxyUrl: string; editUrl: string; online: boolean }> {
   const isElectronEnv = typeof window !== 'undefined' && (window as any).process?.type === 'renderer';
@@ -273,18 +272,17 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
           ]);
           keyData = keyRes2?.ok ? await keyRes2.json().catch(() => null) : null;
           const rd = relayRes2?.ok ? await relayRes2.json().catch(() => null) : null;
-          if (rd) statusData = { status: rd.status, relayUrl: rd.relayUrl || '', bridgeKey: rd.snapshotKey || '', key: rd.snapshotKey || keyData?.key || '' };
+          if (rd) statusData = { status: rd.status, relayUrl: rd.relayUrl || '' };
         } catch {}
       }
       const relayUrl = statusData?.relayUrl || '';
-      const key = keyData?.key || statusData?.key || LAMBY_UNIVERSAL_KEY;
-      if (relayUrl && key) {
+      if (relayUrl) {
         const relayBase = relayUrl.replace(/\/$/, '');
         return {
-          snapUrl: `${relayBase}/api/snapshot/${project || 'PROJECT_NAME'}?key=${key}`,
-          cmdUrl: `${relayBase}/api/sandbox/execute?key=${key}`,
-          proxyUrl: `${relayBase}/api/grok-proxy?key=${key}`,
-          editUrl: `${relayBase}/api/grok-edit?key=${key}`,
+          snapUrl: `${relayBase}/api/snapshot/${project || 'PROJECT_NAME'}`,
+          cmdUrl: `${relayBase}/api/sandbox/execute`,
+          proxyUrl: `${relayBase}/api/grok-proxy`,
+          editUrl: `${relayBase}/api/grok-edit`,
           online: statusData?.status === 'connected',
         };
       }
@@ -297,14 +295,13 @@ async function fetchFreshBridgeEndpoints(project: string): Promise<{ snapUrl: st
       const keyData = keyRes?.ok ? await keyRes.json().catch(() => null) : null;
       const relayData = relayRes?.ok ? await relayRes.json().catch(() => null) : null;
       const relayUrl = relayData?.relayUrl || '';
-      const key = keyData?.key || relayData?.snapshotKey || LAMBY_UNIVERSAL_KEY;
-      if (relayUrl && key) {
+      if (relayUrl) {
         const relayBase = relayUrl.replace(/\/$/, '');
         return {
-          snapUrl: `${relayBase}/api/snapshot/${project || 'PROJECT_NAME'}?key=${key}`,
-          cmdUrl: `${relayBase}/api/sandbox/execute?key=${key}`,
-          proxyUrl: `${relayBase}/api/grok-proxy?key=${key}`,
-          editUrl: `${relayBase}/api/grok-edit?key=${key}`,
+          snapUrl: `${relayBase}/api/snapshot/${project || 'PROJECT_NAME'}`,
+          cmdUrl: `${relayBase}/api/sandbox/execute`,
+          proxyUrl: `${relayBase}/api/grok-proxy`,
+          editUrl: `${relayBase}/api/grok-edit`,
           online: relayData?.status === 'connected',
         };
       }
@@ -388,9 +385,6 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `     - Current page status from snapshot\n`;
   section += `  Never claim a change happened unless you saw {"success":true}.\n\n`;
 
-  const UNIVERSAL_KEY = '92781fb690e47d110da1458cbe03ac9a';
-  const keyMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/key=([^&]+)/);
-  const screenshotKey = keyMatch ? keyMatch[1] : UNIVERSAL_KEY;
   const relayBaseMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/^(https?:\/\/[^/]+)/);
   const screenshotRelayBase = relayBaseMatch ? relayBaseMatch[1] : 'https://bridge-relay.replit.app';
 
@@ -426,7 +420,7 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    { type: "git_diff", project: "${proj}" }\n`;
     section += `    { type: "git_log", project: "${proj}", count: 10 }\n`;
     section += `  SCREENSHOT — SIMPLE URL (NO encoding needed, just browse this URL):\n`;
-    section += `    GET ${screenshotRelayBase}/api/screenshot/${screenshotKey}/${proj}?fullPage=true&waitMs=8000\n`;
+    section += `    GET ${screenshotRelayBase}/api/screenshot/${proj}?fullPage=true&waitMs=8000\n`;
     section += `    ALWAYS append ?fullPage=true&waitMs=8000 (or 10000ms for safety). This is the correct, patient way to use the screenshot tool.\n`;
     section += `    Returns: { "success": true, "results": [{ "data": { "captured": true, "screenshotUrl": "https://files.catbox.moe/abc123.png" } }] }\n`;
     section += `    The screenshotUrl is a public direct link — browse it to view or share with the user.\n\n`;
@@ -450,7 +444,7 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `  2. ANALYZE what needs to change\n`;
   section += `  3. USE grok-edit for surgical text replacements (primary) or grok-proxy for complex multi-action chains\n`;
   section += `  3.5. After any edit: WAIT FULL 15 SECONDS for Vite dev server and preview to stabilize\n`;
-  section += `  4. BROWSE the screenshot URL to capture the result: ${screenshotRelayBase}/api/screenshot/${screenshotKey}/${proj}?fullPage=true&waitMs=8000\n`;
+  section += `  4. BROWSE the screenshot URL to capture the result: ${screenshotRelayBase}/api/screenshot/${proj}?fullPage=true&waitMs=8000\n`;
   section += `  5. VERIFY by browsing the snapshot URL again or checking console logs\n`;
   section += `  6. TELL the user what you did, show the screenshot link\n\n`;
 
@@ -3201,12 +3195,10 @@ const GrokBridge: React.FC = () => {
 
     if (useFunctionCalling) {
       const relayBase = extractBaseUrl(freshBridge.cmdUrl || freshBridge.snapUrl || '');
-      const keyMatch = (freshBridge.snapUrl || freshBridge.cmdUrl || '').match(/key=([^&]+)/);
-      const bKey = keyMatch ? keyMatch[1] : '';
       setStatusMessage('🔧 Using function calling mode (Grok can execute tools directly)');
       await streamGrokFC({
         messages: allMessages, model, project: activeProject || '',
-        bridgeRelayUrl: relayBase, bridgeKey: bKey,
+        bridgeRelayUrl: relayBase, bridgeKey: '',
         systemPrompt: `You are Grok, an autonomous AI coding assistant inside Lamby IDE. You have access to function tools that let you directly read files, write files, run commands, take screenshots, and more on the user's project "${activeProject}". Use these tools to fulfill the user's request. Always take a screenshot after making visual changes to show the result. When you use tools, the results are automatically fed back to you — you do NOT need to browse URLs or use browse_page.`,
         onDelta: onDeltaHandler,
         onStatus: (status) => setStatusMessage(status),
@@ -4027,26 +4019,22 @@ const GrokBridge: React.FC = () => {
             if (keyRes2.ok) keyResult = await keyRes2.json();
             if (relayRes2 && relayRes2.ok) {
               const rd = await relayRes2.json().catch(() => null);
-              if (rd) statusResult = { status: rd.status, relayUrl: rd.relayUrl || '', bridgeKey: rd.snapshotKey || '', key: rd.snapshotKey || keyResult?.key || '' };
+              if (rd) statusResult = { status: rd.status, relayUrl: rd.relayUrl || '' };
             }
           } catch {}
         }
         try {
-          const key = keyResult?.key || '';
           const status = statusResult?.status || 'unknown';
           const relayUrl = statusResult?.relayUrl || '';
-          const bridgeKey = statusResult?.bridgeKey || '';
           setBridgeStatus(status);
           setBridgeRelayUrl(relayUrl);
           if (relayUrl) setBridgeRelayInput(relayUrl);
-          if (bridgeKey) setBridgeKeyInput(bridgeKey);
-          setSnapshotUrl(`${serverBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
-          setCommandEndpoint(`${serverBase}/api/sandbox/execute?key=${key}`);
+          setSnapshotUrl(`${serverBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+          setCommandEndpoint(`${serverBase}/api/sandbox/execute`);
           if (relayUrl) {
             const relayBase = relayUrl.replace(/\/$/, '');
-            const externalKey = key;
-            setExternalSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${externalKey}`);
-            setExternalCommandEndpoint(`${relayBase}/api/sandbox/execute?key=${externalKey}`);
+            setExternalSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+            setExternalCommandEndpoint(`${relayBase}/api/sandbox/execute`);
           } else {
             setExternalSnapshotUrl('');
             setExternalCommandEndpoint('');
@@ -4069,21 +4057,19 @@ const GrokBridge: React.FC = () => {
             if (data?.devRelayUrl && !relayData?.devRelayUrl) setServerDevRelayUrl(data.devRelayUrl);
             if (relayData && relayData.status === 'connected' && relayData.relayUrl) {
               const relayBase = relayData.relayUrl.replace(/\/$/, '');
-              const key = data.key || relayData.snapshotKey;
-              setSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
-              setCommandEndpoint(`${relayBase}/api/sandbox/execute?key=${key}`);
-              setExternalSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
-              setExternalCommandEndpoint(`${relayBase}/api/sandbox/execute?key=${key}`);
+              setSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+              setCommandEndpoint(`${relayBase}/api/sandbox/execute`);
+              setExternalSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+              setExternalCommandEndpoint(`${relayBase}/api/sandbox/execute`);
               setBridgeStatus('connected');
               setBridgeRelayUrl(relayData.relayUrl);
             } else {
-              setSnapshotUrl(`${data.baseUrl}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${data.key}`);
-              setCommandEndpoint(data.commandEndpoint || `${data.baseUrl}/api/sandbox/execute?key=${data.key}`);
+              setSnapshotUrl(`${data.baseUrl}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+              setCommandEndpoint(data.commandEndpoint || `${data.baseUrl}/api/sandbox/execute`);
               if (relayData?.relayUrl) {
                 const relayBase = relayData.relayUrl.replace(/\/$/, '');
-                const key = data.key || relayData.snapshotKey;
-                setExternalSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
-                setExternalCommandEndpoint(`${relayBase}/api/sandbox/execute?key=${key}`);
+                setExternalSnapshotUrl(`${relayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+                setExternalCommandEndpoint(`${relayBase}/api/sandbox/execute`);
                 setBridgeRelayUrl(relayData.relayUrl);
               } else {
                 setExternalSnapshotUrl('');
@@ -5403,28 +5389,28 @@ const GrokBridge: React.FC = () => {
             </button>
             <button
               onClick={async () => {
-                const keySource = bridgeKeyInput || (externalSnapshotUrl || snapshotUrl || '').match(/key=([^&]+)/)?.[1] || '';
-                if (keySource) {
+                const urlToCopy = externalSnapshotUrl || snapshotUrl || '';
+                if (urlToCopy) {
                   try {
                     if (typeof navigator !== 'undefined' && navigator.clipboard) {
-                      await navigator.clipboard.writeText(keySource);
+                      await navigator.clipboard.writeText(urlToCopy);
                     } else if (typeof window !== 'undefined' && (window as any).require) {
-                      (window as any).require('electron').clipboard.writeText(keySource);
+                      (window as any).require('electron').clipboard.writeText(urlToCopy);
                     }
-                    setStatusMessage(`Key copied: ${keySource.substring(0, 8)}...`);
+                    setStatusMessage('Snapshot URL copied');
                     setTimeout(() => setStatusMessage(null), 2000);
-                  } catch { setStatusMessage('Failed to copy key'); setTimeout(() => setStatusMessage(null), 2000); }
+                  } catch { setStatusMessage('Failed to copy URL'); setTimeout(() => setStatusMessage(null), 2000); }
                 } else {
-                  setStatusMessage('No key available — connect bridge first');
+                  setStatusMessage('No URL available — connect bridge first');
                   setTimeout(() => setStatusMessage(null), 2000);
                 }
               }}
-              data-testid="button-copy-key"
+              data-testid="button-copy-url"
               className="flex items-center gap-1 px-2 py-0.5 rounded text-[9px] bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors border border-amber-500/20"
-              title="Copy the current bridge/app key to clipboard"
+              title="Copy the snapshot URL to clipboard"
             >
               <Key className="w-3 h-3" />
-              Key
+              URL
             </button>
             <button
               onClick={copyEvolutionContext}
@@ -5516,8 +5502,8 @@ const GrokBridge: React.FC = () => {
                         <code data-testid="text-relay-url" className="text-muted-foreground truncate select-all">{bridgeRelayUrl}</code>
                       </div>
                       <div className="flex items-center gap-1">
-                        <span className="text-muted-foreground/70 shrink-0">Key:</span>
-                        <code data-testid="text-snapshot-key" className="text-muted-foreground truncate select-all font-mono">{snapshotUrl?.match(/key=([^&]+)/)?.[1] || '—'}</code>
+                        <span className="text-muted-foreground/70 shrink-0">Auth:</span>
+                        <code data-testid="text-snapshot-key" className="text-muted-foreground truncate select-all font-mono">none (URL is secret)</code>
                       </div>
                     </div>
                   )}
@@ -5530,11 +5516,10 @@ const GrokBridge: React.FC = () => {
                           setBridgeMode('dev');
                           try { localStorage.setItem('lamby-bridge-mode', 'dev'); } catch {}
                           const devUrl = serverDevRelayUrl || `wss://${window.location.host}`;
-                          const key = snapshotUrl?.match(/key=([^&]+)/)?.[1] || '';
-                          if (devUrl && key) {
+                          if (devUrl) {
                             const base = devUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
-                            setExternalSnapshotUrl(`${base}/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
-                            setExternalCommandEndpoint(`${base}/api/sandbox/execute?key=${key}`);
+                            setExternalSnapshotUrl(`${base}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+                            setExternalCommandEndpoint(`${base}/api/sandbox/execute`);
                             setBridgeRelayUrl(devUrl);
                           }
                           setStatusMessage('Showing Dev relay URLs');
@@ -5553,12 +5538,9 @@ const GrokBridge: React.FC = () => {
                           const prodUrl = 'wss://bridge-relay.replit.app';
                           setBridgeMode('production');
                           try { localStorage.setItem('lamby-bridge-mode', 'production'); } catch {}
-                          const key = snapshotUrl?.match(/key=([^&]+)/)?.[1] || '';
-                          if (key) {
-                            setExternalSnapshotUrl(`https://bridge-relay.replit.app/api/snapshot/${activeProject || 'PROJECT_NAME'}?key=${key}`);
-                            setExternalCommandEndpoint(`https://bridge-relay.replit.app/api/sandbox/execute?key=${key}`);
-                            setBridgeRelayUrl(prodUrl);
-                          }
+                          setExternalSnapshotUrl(`https://bridge-relay.replit.app/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+                          setExternalCommandEndpoint(`https://bridge-relay.replit.app/api/sandbox/execute`);
+                          setBridgeRelayUrl(prodUrl);
                           setStatusMessage('Showing Production relay URLs');
                         }}
                         className={`flex-1 px-2 py-1 rounded text-[9px] border transition-colors ${
@@ -5585,19 +5567,11 @@ const GrokBridge: React.FC = () => {
                         onChange={e => setBridgeRelayInput(e.target.value)}
                         className="w-full px-2 py-1 rounded border border-border bg-background text-foreground text-[10px]"
                       />
-                      <input
-                        data-testid="input-bridge-key"
-                        type="text"
-                        placeholder="Bridge key (shared secret)"
-                        value={bridgeKeyInput}
-                        onChange={e => setBridgeKeyInput(e.target.value)}
-                        className="w-full px-2 py-1 rounded border border-border bg-background text-foreground text-[10px]"
-                      />
                       <div className="flex gap-1">
                         <button
                           data-testid="button-save-bridge-config"
                           onClick={async () => {
-                            if (!bridgeRelayInput.trim() || !bridgeKeyInput.trim()) return;
+                            if (!bridgeRelayInput.trim()) return;
                             try {
                               let result: any;
                               if (isElectron) {
@@ -5605,13 +5579,12 @@ const GrokBridge: React.FC = () => {
                                   const ipcRenderer = (window as any).require('electron').ipcRenderer;
                                   result = await ipcRenderer.invoke('bridge-config-save', {
                                     relayUrl: bridgeRelayInput.trim(),
-                                    bridgeKey: bridgeKeyInput.trim(),
                                   });
                                 } catch {
                                   const res = await fetch('http://localhost:4999/api/bridge-config-save', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ relayUrl: bridgeRelayInput.trim(), bridgeKey: bridgeKeyInput.trim() }),
+                                    body: JSON.stringify({ relayUrl: bridgeRelayInput.trim() }),
                                   });
                                   result = await res.json();
                                 }
