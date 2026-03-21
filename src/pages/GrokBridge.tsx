@@ -636,6 +636,13 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
     });
   }, [activeProject]);
 
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(`lamby-test-levels-${activeProject || 'groks-app'}`);
+      setLevelPassHistory(stored ? JSON.parse(stored) : {});
+    } catch { setLevelPassHistory({}); }
+  }, [activeProject]);
+
   const isLevelUnlocked = useCallback((levelId: number): boolean => {
     if (levelId === 0) return true;
     const prevLevel = levelPassHistory[levelId - 1];
