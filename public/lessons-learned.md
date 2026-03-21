@@ -4,6 +4,30 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 14: Run 4 — Grok created Metrics.tsx but failed to update App.tsx, Nav.tsx, or commit
+**Date:** 2026-03-21
+**Context:** Phase 3 run 4 — had review stage + verification protocol + coord reporting instructions
+**Problem:** Grok successfully created Metrics.tsx (6571 chars on disk, verified via grok-read). But App.tsx was UNCHANGED (no Metrics import, no route), Navigation.tsx was UNCHANGED (still has duplicate Activity import, no metrics nav item), and no git commit was made (Metrics.tsx shows as untracked `??`). Grok claimed "REVIEW COMPLETE: PASS" in its response — a complete fabrication. The review stage in the prompt was ignored.
+**Fix:** Need to investigate WHY write_file works for new files but not for overwriting existing files. Possible cause: the write_file action may not be overwriting, or the base64 encoding of the full file content is being truncated. May need to test write_file overwrite separately.
+
+---
+
+## Lesson 13: Grok ignores coord reporting despite explicit instructions
+**Date:** 2026-03-21
+**Context:** Phase 3 run 4 — coord section said "MANDATORY" with specific checkpoint list
+**Problem:** Despite a detailed "MANDATORY" section listing exactly when to post coord notes, Grok only posted during the discovery phase (20+ duplicate notes in 1 second) and then NOTHING for the remaining 12+ steps. The user had zero visibility into what happened after discovery.
+**Fix:** Rewrote coord section as "NON-NEGOTIABLE — YOU FAILED THIS 4 TIMES" with exact templates for each numbered step (STEP 0 through STEP 15). Each step has a specific coord post format. Added rule: "Post ONCE per step, do NOT batch multiple steps into one post."
+
+---
+
+## Lesson 12: Grok sends oversized chunks (4KB+) causing silent truncation
+**Date:** 2026-03-21
+**Context:** Phase 3 runs — Grok creating files via write_file_chunk
+**Problem:** Grok tries to maximize chunk size, sending 3000–4000+ character chunks. After base64 encoding + URL encoding, these produce URLs that exceed browse_page limits and get truncated. The chunk arrives corrupted or incomplete, and the file assembly silently produces garbage or fails entirely.
+**Fix:** Updated write_file_chunk docs to say "MAX 1500 characters per chunk" and "More small chunks is ALWAYS safer than fewer large chunks." Added post-chunk verification requirement.
+
+---
+
 ## Lesson 11: A review stage after task completion catches false success claims
 **Date:** 2026-03-21
 **Context:** Phase 3 run 3 — Grok claimed full success but bridge review showed otherwise
