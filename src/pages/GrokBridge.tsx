@@ -4006,25 +4006,24 @@ const GrokBridge: React.FC = () => {
       setStatusMessage('Bridge connected');
     };
 
+    const safeSend = (data: any) => {
+      try { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data)); } catch (e) { console.log('[Bridge] Send failed (connection preserved):', e); }
+    };
+
     ws.onmessage = async (event) => {
       try {
         const msg = JSON.parse(typeof event.data === 'string' ? event.data : await event.data.text());
-        if (msg.type === 'ping') {
-          ws.send(JSON.stringify({ type: 'pong' }));
-          return;
-        }
-        if (msg.type === 'pong' || msg.type === 'connection_replaced') {
-          console.log(`[Bridge] ${msg.type}`);
-          return;
-        }
+        if (msg.type === 'ping') { safeSend({ type: 'pong' }); return; }
+        if (msg.type === 'pong' || msg.type === 'connection_replaced') { console.log(`[Bridge] ${msg.type}`); return; }
+        if (msg.type === 'relay-log') { console.log(`[Relay ${(msg.level || 'info').toUpperCase()}] ${msg.message || ''}`); return; }
         if (msg.type === 'snapshot-request' && msg.requestId) {
           const proj = encodeURIComponent(msg.projectName || project || 'default');
           try {
             const snapRes = await fetch(`${apiBase}/api/snapshot/${proj}`);
             const snapshot = await snapRes.text();
-            ws.send(JSON.stringify({ type: 'snapshot-response', requestId: msg.requestId, snapshot }));
+            safeSend({ type: 'snapshot-response', requestId: msg.requestId, snapshot });
           } catch (e: any) {
-            ws.send(JSON.stringify({ type: 'snapshot-response', requestId: msg.requestId, snapshot: `Error: ${e.message}` }));
+            safeSend({ type: 'snapshot-response', requestId: msg.requestId, snapshot: `Error: ${e.message}` });
           }
           return;
         }
@@ -4036,9 +4035,9 @@ const GrokBridge: React.FC = () => {
               body: JSON.stringify({ actions: msg.actions }),
             });
             const result = await execRes.json();
-            ws.send(JSON.stringify({ type: 'sandbox-execute-response', requestId: msg.requestId, result }));
+            safeSend({ type: 'sandbox-execute-response', requestId: msg.requestId, result });
           } catch (e: any) {
-            ws.send(JSON.stringify({ type: 'sandbox-execute-response', requestId: msg.requestId, result: { error: e.message } }));
+            safeSend({ type: 'sandbox-execute-response', requestId: msg.requestId, result: { error: e.message } });
           }
           return;
         }
@@ -4046,15 +4045,15 @@ const GrokBridge: React.FC = () => {
           try {
             const logsRes = await fetch(`${apiBase}/api/console-logs?project=${encodeURIComponent(msg.projectName || project || 'default')}`);
             const logs = await logsRes.json();
-            ws.send(JSON.stringify({ type: 'console-logs-response', requestId: msg.requestId, logs }));
+            safeSend({ type: 'console-logs-response', requestId: msg.requestId, logs });
           } catch (e: any) {
-            ws.send(JSON.stringify({ type: 'console-logs-response', requestId: msg.requestId, logs: { error: e.message } }));
+            safeSend({ type: 'console-logs-response', requestId: msg.requestId, logs: { error: e.message } });
           }
           return;
         }
         console.log('[Bridge] Unhandled message type:', msg.type);
       } catch (e) {
-        console.log('[Bridge] Message parse error:', e);
+        console.log('[Bridge] Message handler error (connection preserved):', e);
       }
     };
 
@@ -4063,19 +4062,11 @@ const GrokBridge: React.FC = () => {
       if (bridgeWsRef.current === ws) {
         bridgeWsRef.current = null;
         setBridgeStatus('disconnected');
-        if (ev.code !== 1000 && ev.code !== 1001) {
-          console.log('[Bridge] Unexpected close, reconnecting in 3s...');
-          setTimeout(() => {
-            if (!bridgeWsRef.current) {
-              connectToBridge(relayWsUrl, project);
-            }
-          }, 3000);
-        }
       }
     };
 
     ws.onerror = (ev) => {
-      console.log('[Bridge] Error:', ev);
+      console.log('[Bridge] WebSocket error event (connection stays open unless server closes it):', ev);
     };
   }, []);
 

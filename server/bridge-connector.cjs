@@ -1649,6 +1649,12 @@ function createConnector(config) {
   }
 
   async function onMessage(rawData) {
+    try { return await _onMessageInner(rawData); } catch (e) {
+      log("error", `FATAL message handler error (connection preserved): ${e.message}`);
+    }
+  }
+
+  async function _onMessageInner(rawData) {
     let msg;
     try { msg = JSON.parse(rawData); } catch { log("warn", `Unparseable message: ${rawData.substring(0, 80)}`); return; }
 
