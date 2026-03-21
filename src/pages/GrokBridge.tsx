@@ -1095,6 +1095,31 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           >
             {browseRunning ? <><X className="w-3 h-3" /> Stop</> : <><Zap className="w-3 h-3" /> Phase 3</>}
           </button>
+          <button
+            onClick={async () => {
+              try {
+                const resp = await fetch('/stress-test-phase123/phase3-prompt-sent-to-grok.txt');
+                if (!resp.ok) { alert('Could not load phase3 prompt file'); return; }
+                const promptText = await resp.text();
+                await navigator.clipboard.writeText(promptText);
+                const convo: Conversation = {
+                  id: crypto.randomUUID(),
+                  title: 'Phase 3 prompt (copied to clipboard)',
+                  messages: [{ role: 'user', content: promptText }],
+                  model: 'grok-4',
+                  createdAt: Date.now(),
+                };
+                onPhase3Complete?.(convo);
+              } catch (err: any) {
+                alert('Failed to copy: ' + err.message);
+              }
+            }}
+            data-testid="button-copy-phase3-prompt"
+            className="flex items-center gap-1 px-2 py-1 rounded text-[9px] transition-colors border shrink-0 whitespace-nowrap bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
+            title="Copy Phase 3 prompt to clipboard and show it in the API tab — paste into Grok on browser for live feedback"
+          >
+            <Copy className="w-3 h-3" /> Copy P3
+          </button>
           {browseEvents.length > 0 && !showBrowseResults && (
             <button
               onClick={() => setShowBrowseResults(true)}
