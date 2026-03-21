@@ -4,6 +4,15 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 18: smartDecode on relay fixes double-encoding from browse_page
+**Date:** 2026-03-21
+**Context:** L2 tests showed grok-create failing because Grok's browse_page tool URL-encodes the entire URL, including content that's already URL-encoded — causing double-encoding (e.g., `/` → `%2F` → `%252F`).
+**Problem:** After URLSearchParams parses the URL once, double-encoded values like `%252F` become `%2F` — still encoded, not the original `/`. This corrupts file content with literal `%2F` instead of slashes, `%0A` instead of newlines, etc.
+**Fix:** Added `smartDecode()` helper to the bridge relay. It checks if a value still contains `%XX` patterns after normal parsing (using `/%[0-9A-Fa-f]{2}/`), and if so, runs one more `decodeURIComponent()` pass. Applied to content, search, and replace params on grok-create, grok-create-chunk, grok-write, and grok-edit.
+**Result:** Normal strings pass through unchanged. Double-encoded strings get auto-fixed. No prompt changes needed.
+
+---
+
 ## Lesson 17: Use git checkout for file restore — never re-write manually
 **Date:** 2026-03-21
 **Context:** L2 read-modify-write test required restoring Dashboard.tsx to its original state after adding test comments.
