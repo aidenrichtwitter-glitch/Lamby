@@ -106,6 +106,7 @@ supabase/
 
 ## CRITICAL: User Environment
 - **The user ALWAYS works in the desktop Electron app, NEVER in the Replit web preview.**
+- **Code delivery**: The user uses the **Download Source** button in Replit to get the latest code onto their Windows machine. After any code changes, remind them to re-download.
 - All code changes must be tested and validated for the Electron context.
 - `local-server.js` and `vite.config.ts` must ALWAYS be 1:1 mirrors (IPC handlers in `main.js` are Electron-only — exempt from mirror rule).
 - When making changes to browser-mode IPC handlers in `main.js`, always add visible logging so the user can see what's happening in Electron DevTools.
