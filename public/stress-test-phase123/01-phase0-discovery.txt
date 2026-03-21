@@ -2,10 +2,16 @@
 PHASE 0: DISCOVERY
 ===============================================================
 
+CONTEXT:
+  The bridge relay exposes GET-only HTTP endpoints that Grok calls via
+  its browse_page tool. This phase maps out every endpoint Grok can use,
+  the request/response formats, and the architectural constraints.
+  This app generates the prompt — Grok does all the actual work.
+
 STEP 1: Confirm bridge connectivity
   GET /api/bridge-status
   Response: {"connectedClients":1,"clients":[{"connected":true,"lastPing":...,"project":"groks-app"}]}
-  Result: CONNECTED
+  Result: CONNECTED — Grok can reach the desktop through the relay
 
 STEP 2: Run diagnostics
   GET /api/diag?project=groks-app
@@ -19,34 +25,39 @@ STEP 2: Run diagnostics
     }
   }
   Result: All core endpoints operational, 87ms round-trip
+  This is the first thing Grok should call to confirm the bridge is live.
 
 STEP 3: Enumerate all commands
   GET /api/commands
   Response: 113 supported commands enumerated (see full list in 04-phase3-matrix.txt)
+  These are all the action types Grok can send via grok-proxy payloads.
 
 STEP 4: Architecture confirmed
-  Request Chain:
-    1. Build payload: base64(JSON.stringify({actions:[{type,project,...}]}))
-    2. GET /api/grok-proxy?project=P&payload=ENCODED_BASE64
-    3. Relay decodes, forwards via WebSocket to desktop connector
-    4. Desktop executes (file I/O, git, shell, etc.)
-    5. Result returns over WebSocket → relay → HTTP response
+  Request Chain (what happens when Grok calls browse_page on a bridge URL):
+    1. Grok builds payload: base64(JSON.stringify({actions:[{type,project,...}]}))
+    2. Grok issues GET /api/grok-proxy?project=P&payload=ENCODED_BASE64 via browse_page
+    3. Relay decodes payload, forwards actions via WebSocket to desktop connector
+    4. Desktop connector (Node.js on Windows) executes: file I/O, git, shell, etc.
+    5. Connector sends result back over WebSocket
+    6. Relay returns JSON response — Grok reads it via browse_page
 
-  Key Constraints Identified:
-    - Grok browse_page = GET only, no POST
+  Key Constraints for Grok:
+    - browse_page = GET only, no POST available
     - URL length: relay accepts 11KB+, but browse_page may truncate ~8KB
     - WebSocket timeout: 30 seconds
     - Desktop runs Windows (PowerShell for shell commands)
     - Serial command queue (one connection, no parallelism)
 
-STEP 5: Critical bug discovered
+STEP 5: Critical bug discovered (affects Grok's requests)
   BUG: "project" field must be inside each action object, NOT just query param
-  Without it: files land in wrong directory, unfindable by grok-read
+  If Grok omits it from the action: files land in wrong directory, unfindable by grok-read
   CORRECT: {"actions":[{"type":"write_file","project":"groks-app","path":"..."}]}
   WRONG:   {"actions":[{"type":"write_file","path":"..."}]} + ?project=groks-app
+  This must be documented in the prompt template so Grok always includes it.
 
-STEP 6: Encoding requirement discovered
+STEP 6: Encoding requirement discovered (affects Grok's URL building)
   Base64 output contains + and = characters
   These break URL query params if not encoded
-  SOLUTION: Always encodeURIComponent(btoa(json)) before putting in payload= param
+  SOLUTION: Grok must always encodeURIComponent(btoa(json)) before putting in payload= param
   Without this step: silent failures, corrupted payloads
+  This must be in the prompt template so Grok always does the encoding correctly.

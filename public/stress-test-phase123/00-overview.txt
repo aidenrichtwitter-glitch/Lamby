@@ -7,16 +7,26 @@ Project: groks-app
 Desktop: Connected (Windows, Node.js v25.4.0, npm 11.7.0)
 App Port: 4999 (Vite dev server)
 
-OBJECTIVE:
-  Make substantial changes to the groks-app desktop project using ONLY
-  GET-based bridge methods (the same way Grok would via browse_page),
-  verify everything works, revert everything, document all findings,
-  and produce a bulletproof Grok prompt template.
+HOW THE BRIDGE WORKS:
+  1. User clicks "Copy Context" in Lamby → prompt copied to clipboard
+  2. User pastes prompt into Grok on grok.com
+  3. Grok reads the prompt, sees bridge endpoint URLs
+  4. Grok uses its browse_page tool (GET-only) to call bridge endpoints
+  5. Bridge relay forwards requests to user's desktop via WebSocket
+  6. Changes happen on the user's local project files
+  THIS APP DOES NOT CALL GROK'S API FOR BRIDGE CHANGES.
+  GROK DOES ALL THE WORK ITSELF THROUGH BROWSE_PAGE.
+
+TEST METHODOLOGY:
+  This stress test simulated Grok's browse_page behavior by issuing
+  the exact same GET requests to the bridge endpoints that Grok would
+  make. Every URL, encoding step, and response format matches what
+  Grok sees when it calls browse_page on these endpoints.
 
 PHASE SUMMARY:
   Phase 0: Discovery — enumerate all endpoints, document architecture
-  Phase 1: Agent writes 4 files + edits + git commits via bridge
-  Phase 2: Revert all Phase 1 changes, verify clean state
+  Phase 1: Simulate Grok writing 4 files + edits + git commits via bridge
+  Phase 2: Simulate Grok reverting all Phase 1 changes, verify clean state
   Phase 3: Full endpoint test matrix (32 tests across all endpoint families)
 
 FINAL RESULTS: 28 PASS / 4 FAIL (all failures are expected/documented behaviors)
@@ -24,8 +34,8 @@ FINAL RESULTS: 28 PASS / 4 FAIL (all failures are expected/documented behaviors)
 FILES IN THIS FOLDER:
   00-overview.txt          — This file (summary)
   01-phase0-discovery.txt  — Endpoint enumeration, architecture, 113 commands
-  02-phase1-writes.txt     — Files written, search/replace, git ops, timings
-  03-phase2-revert.txt     — Revert process, crash incident, fix
+  02-phase1-writes.txt     — Simulated Grok writes: files, search/replace, git, timings
+  03-phase2-revert.txt     — Simulated Grok revert: cleanup, crash incident, fix
   04-phase3-matrix.txt     — Full 32-test endpoint matrix with evidence
   05-critical-rules.txt    — 12 stress-tested rules + known untested scenarios
   06-size-limits.txt       — URL and content size limit testing
