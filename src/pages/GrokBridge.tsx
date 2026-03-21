@@ -543,7 +543,7 @@ function extractContextSections(fullText: string): string[] {
   return sections;
 }
 
-function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport, onReplaceRepo, toasterConfig, toasterAvailable, userTask, setUserTask, onGenerateContext, onEditContext, contextLoading, projectContext, injectTextRef, autoDetectEnabled, onToggleAutoDetect }: { onApply: (filePath: string, code: string, editType?: string, searchCode?: string) => void; onApplyAll?: (blocks: { filePath: string; code: string; editType?: string; searchCode?: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void; onReplaceRepo?: (url: string) => void; toasterConfig?: OllamaToasterConfig; toasterAvailable?: boolean; userTask: string; setUserTask: (task: string) => void; onGenerateContext: (task?: string) => Promise<void>; onEditContext: () => void; contextLoading: boolean; projectContext: string; injectTextRef?: React.MutableRefObject<((text: string) => void) | null>; autoDetectEnabled: boolean; onToggleAutoDetect: (val: boolean) => void }) {
+function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport, onReplaceRepo, toasterConfig, toasterAvailable, userTask, setUserTask, onGenerateContext, onEditContext, onEditTemplate, hasCustomTemplate, contextLoading, projectContext, injectTextRef, autoDetectEnabled, onToggleAutoDetect }: { onApply: (filePath: string, code: string, editType?: string, searchCode?: string) => void; onApplyAll?: (blocks: { filePath: string; code: string; editType?: string; searchCode?: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void; onReplaceRepo?: (url: string) => void; toasterConfig?: OllamaToasterConfig; toasterAvailable?: boolean; userTask: string; setUserTask: (task: string) => void; onGenerateContext: (task?: string) => Promise<void>; onEditContext: () => void; onEditTemplate: () => void; hasCustomTemplate: boolean; contextLoading: boolean; projectContext: string; injectTextRef?: React.MutableRefObject<((text: string) => void) | null>; autoDetectEnabled: boolean; onToggleAutoDetect: (val: boolean) => void }) {
   type ProjectExtractorState = {
     blocks: ExtractedBlock[];
     detectedDeps: { dependencies: string[]; devDependencies: string[] };
@@ -938,6 +938,14 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
             title="View and edit the generated context before copying"
           >
             <FileCode className="w-3 h-3" /> Edit
+          </button>
+          <button
+            onClick={onEditTemplate}
+            data-testid="button-edit-prompt-template"
+            className={`flex items-center gap-1 px-1.5 py-1 rounded text-[9px] transition-colors border shrink-0 ${hasCustomTemplate ? 'bg-primary/15 text-primary border-primary/30 hover:bg-primary/25' : 'bg-secondary/30 text-muted-foreground hover:text-foreground hover:bg-secondary/50 border-border/20'}`}
+            title={hasCustomTemplate ? 'Custom prompt template active — click to edit' : 'Set a custom prompt template (persists across sessions)'}
+          >
+            <FileCode className="w-3 h-3" /> Template{hasCustomTemplate ? ' ✓' : ''}
           </button>
         </div>
         {(detectedDeps.dependencies.length > 0 || detectedDeps.devDependencies.length > 0) && (
@@ -4550,7 +4558,7 @@ const GrokBridge: React.FC = () => {
       setStatusMessage(`Context build failed: ${e.message}`);
       return '';
     }
-  }, [lastErrors, activeProject, toasterAvailability, toasterConfig, previewLogs, messages, summarizeChatHistory, knowledgeMatches, userTask]);
+  }, [lastErrors, activeProject, toasterAvailability, toasterConfig, previewLogs, messages, summarizeChatHistory, knowledgeMatches, userTask, customPromptTemplate]);
 
   const refreshQuickActions = useCallback(async () => {
     if (!activeProject) { setQuickActions([]); return; }
@@ -6340,7 +6348,7 @@ const GrokBridge: React.FC = () => {
 
             {/* Code extractor — shared across both modes */}
             <ParallaxPortal wall="bottom">
-              <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} onReplaceRepo={handleReplaceRepo} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} userTask={userTask} setUserTask={setUserTask} onGenerateContext={async (task?: string) => { const ctx = await buildProjectContext(task); if (ctx) copyContextToClipboard(ctx); }} onEditContext={() => { setEditableContext(projectContext); setShowContextEditor(true); setTimeout(() => contextEditorRef.current?.focus(), 100); }} contextLoading={contextLoading} projectContext={projectContext} injectTextRef={injectExtractorTextRef} autoDetectEnabled={autoDetectEnabled} onToggleAutoDetect={(val) => { setAutoDetectEnabled(val); localStorage.setItem('lamby-autodetect', val ? 'true' : 'false'); }} />
+              <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} onReplaceRepo={handleReplaceRepo} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} userTask={userTask} setUserTask={setUserTask} onGenerateContext={async (task?: string) => { const ctx = await buildProjectContext(task); if (ctx) copyContextToClipboard(ctx); }} onEditContext={() => { setEditableContext(projectContext); setShowContextEditor(true); setTimeout(() => contextEditorRef.current?.focus(), 100); }} onEditTemplate={() => { setShowPromptTemplateEditor(true); setTimeout(() => promptTemplateRef.current?.focus(), 100); }} hasCustomTemplate={!!customPromptTemplate.trim()} contextLoading={contextLoading} projectContext={projectContext} injectTextRef={injectExtractorTextRef} autoDetectEnabled={autoDetectEnabled} onToggleAutoDetect={(val) => { setAutoDetectEnabled(val); localStorage.setItem('lamby-autodetect', val ? 'true' : 'false'); }} />
             </ParallaxPortal>
           </div>
           )}
@@ -6642,6 +6650,85 @@ const GrokBridge: React.FC = () => {
                 wordWrap: 'break-word',
               }}
               data-testid="textarea-context-editor"
+            />
+          </div>
+        </div>
+      )}
+
+      {showPromptTemplateEditor && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={() => setShowPromptTemplateEditor(false)}>
+          <div
+            className="flex flex-col rounded-lg shadow-2xl border border-border/40 overflow-hidden"
+            style={{ width: 'min(900px, 94vw)', height: 'min(700px, 85vh)', background: 'hsl(220, 25%, 10%)' }}
+            onClick={e => e.stopPropagation()}
+            data-testid="modal-prompt-template"
+          >
+            <div className="flex items-center justify-between px-4 py-2 border-b border-border/30" style={{ background: 'hsl(220, 25%, 13%)' }}>
+              <span className="text-[11px] font-medium text-foreground/80 flex items-center gap-2">
+                <FileCode className="w-3.5 h-3.5 text-primary" />
+                Prompt Template
+                {customPromptTemplate.trim() ? (
+                  <span className="text-[9px] text-green-400/70">ACTIVE — this overrides auto-generated context</span>
+                ) : (
+                  <span className="text-[9px] text-muted-foreground/50">Empty = use auto-generated context</span>
+                )}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => {
+                    localStorage.setItem('lamby-prompt-template', customPromptTemplate);
+                    setShowPromptTemplateEditor(false);
+                  }}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded text-[9px] font-medium bg-green-500/15 text-green-400 hover:bg-green-500/25 transition-colors border border-green-500/20"
+                  data-testid="button-save-template"
+                >
+                  <Check className="w-3 h-3" />
+                  Save
+                </button>
+                {customPromptTemplate.trim() && (
+                  <button
+                    onClick={() => {
+                      setCustomPromptTemplate('');
+                      localStorage.removeItem('lamby-prompt-template');
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 rounded text-[9px] bg-red-500/10 text-red-400/70 hover:text-red-400 hover:bg-red-500/20 transition-colors border border-red-500/20"
+                    data-testid="button-clear-template"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Clear
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowPromptTemplateEditor(false)}
+                  className="p-1 text-muted-foreground/60 hover:text-foreground transition-colors"
+                  data-testid="button-close-template-editor"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+            <div className="px-4 py-2 border-b border-border/20 text-[9px] text-muted-foreground/60" style={{ background: 'hsl(220, 25%, 11%)' }}>
+              Use <code className="text-primary/70">{'{{PROJECT}}'}</code> for project name and <code className="text-primary/70">{'{{TASK}}'}</code> for the task field. When this template has content, it completely replaces the auto-generated context.
+            </div>
+            <textarea
+              ref={promptTemplateRef}
+              value={customPromptTemplate}
+              onChange={e => setCustomPromptTemplate(e.target.value)}
+              spellCheck={false}
+              placeholder="Paste your full prompt template here. Use {{PROJECT}} and {{TASK}} as placeholders. When saved, this replaces all auto-generated context."
+              className="flex-1 resize-none outline-none border-none p-4"
+              style={{
+                background: 'hsl(220, 20%, 11%)',
+                color: 'hsl(220, 10%, 82%)',
+                fontSize: '11px',
+                fontFamily: '"Fira Code", "Cascadia Code", "JetBrains Mono", "Consolas", monospace',
+                lineHeight: '1.5',
+                tabSize: 2,
+                caretColor: 'hsl(150, 60%, 55%)',
+                whiteSpace: 'pre-wrap',
+                wordWrap: 'break-word',
+              }}
+              data-testid="textarea-prompt-template"
             />
           </div>
         </div>
