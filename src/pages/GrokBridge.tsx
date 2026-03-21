@@ -5537,6 +5537,8 @@ const GrokBridge: React.FC = () => {
                           const devUrl = serverDevRelayUrl || 'wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev';
                           const base = devUrl.replace(/^wss:/, 'https:').replace(/^ws:/, 'http:').replace(/\/$/, '');
                           setBridgeRelayUrl(devUrl);
+                          setSnapshotUrl(`${base}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+                          setCommandEndpoint(`${base}/api/sandbox/execute`);
                           setExternalSnapshotUrl(`${base}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
                           setExternalCommandEndpoint(`${base}/api/sandbox/execute`);
                           if (isElectron) {
@@ -5567,6 +5569,8 @@ const GrokBridge: React.FC = () => {
                           setBridgeMode('production');
                           try { localStorage.setItem('lamby-bridge-mode', 'production'); } catch {}
                           setBridgeRelayUrl(prodUrl);
+                          setSnapshotUrl(`${prodBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
+                          setCommandEndpoint(`${prodBase}/api/sandbox/execute`);
                           setExternalSnapshotUrl(`${prodBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
                           setExternalCommandEndpoint(`${prodBase}/api/sandbox/execute`);
                           if (isElectron) {
