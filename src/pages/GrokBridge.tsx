@@ -614,20 +614,22 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
     browseAbortRef.current = controller;
 
     try {
-      let promptTemplate = projectContext;
-      if (!promptTemplate) {
-        const resp = await fetch('/grok-prompt-template.txt');
-        promptTemplate = await resp.text();
+      const phase3Resp = await fetch('/stress-test-phase123/phase3-prompt-sent-to-grok.txt');
+      let promptText: string;
+      if (phase3Resp.ok) {
+        promptText = await phase3Resp.text();
+      } else {
+        const templateResp = await fetch('/grok-prompt-template.txt');
+        promptText = await templateResp.text();
+        const task = userTask.trim() || 'Read the project file tree and take a screenshot to confirm the bridge is working.';
+        promptText = promptText.replace(/\{\{TASK\}\}/g, task);
       }
-
-      const task = userTask.trim() || 'Read the project file tree and take a screenshot to confirm the bridge is working.';
-      promptTemplate = promptTemplate.replace(/\{\{TASK\}\}/g, task);
 
       const response = await fetch('/api/grok-browse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: promptTemplate,
+          prompt: promptText,
           model: 'grok-4-0709',
           project: activeProject || 'groks-app',
           saveToFile: `public/stress-test-phase123/phase3-browse-${Date.now()}.json`,
@@ -1030,9 +1032,9 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
             onClick={browseRunning ? () => { browseAbortRef.current?.abort(); } : runGrokBrowse}
             data-testid="button-run-grok-browse"
             className={`flex items-center gap-1 px-2 py-1 rounded text-[9px] transition-colors border shrink-0 whitespace-nowrap ${browseRunning ? 'bg-red-500/15 text-red-400 border-red-500/30 hover:bg-red-500/25' : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25'}`}
-            title={browseRunning ? 'Stop the running API call' : 'Send prompt to Grok-4 via Responses API with web_search/browse_page — Grok will actually call bridge endpoints'}
+            title={browseRunning ? 'Stop the running Phase 3 test' : 'Run Phase 3: Send stress-test prompt to Grok-4 via Responses API — Grok uses browse_page to call bridge endpoints for real'}
           >
-            {browseRunning ? <><X className="w-3 h-3" /> Stop</> : <><Zap className="w-3 h-3" /> Run via API</>}
+            {browseRunning ? <><X className="w-3 h-3" /> Stop</> : <><Zap className="w-3 h-3" /> Phase 3</>}
           </button>
           {browseEvents.length > 0 && !showBrowseResults && (
             <button
