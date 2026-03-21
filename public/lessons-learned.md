@@ -4,6 +4,18 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 17: Use git checkout for file restore — never re-write manually
+**Date:** 2026-03-21
+**Context:** L2 read-modify-write test required restoring Dashboard.tsx to its original state after adding test comments.
+**Problem:** Grok attempted to "restore" by re-writing the file content via grok-create, but failed both times:
+- Run 1: Wrote back only the 2-line comment (120 chars), losing the entire component.
+- Run 2: Re-read the file (which already had stale comments from run 1) and wrote that back, accumulating 4 comment lines instead of removing them.
+Grok cannot reliably track "original state" across multiple browse_page calls — it loses context or re-reads dirty state.
+**Fix:** Changed L2-S7 to use `grok-run?cmd=git%20checkout%20HEAD%20--%20src/pages/Dashboard.tsx` instead of grok-create. Git checkout restores the exact committed version — guaranteed clean, no encoding issues, no content tracking needed.
+**Rule:** For any test that modifies existing files and needs to restore them, ALWAYS use `git checkout HEAD -- <path>` via grok-run. Never ask Grok to manually re-write the original content.
+
+---
+
 ## Lesson 16: Smart endpoints eliminate encoding failures
 **Date:** 2026-03-21
 **Context:** After 5 consecutive Phase 3 failures where every grok-proxy write_file call returned "payload must be valid base64-encoded JSON"

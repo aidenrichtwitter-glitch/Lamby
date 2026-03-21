@@ -1,5 +1,5 @@
 === LEVEL 2: READ-MODIFY-WRITE TEST ===
-=== OBJECTIVE: Read an existing file, make a small change, write it back, verify ===
+=== OBJECTIVE: Read an existing file, make a small change, write it back, verify, then restore via git ===
 
 You will modify ONE existing file using the read → modify → grok-create pattern.
 This tests the most important skill: safely editing existing code.
@@ -13,8 +13,9 @@ STEPS (do them in order, post to coord after each):
    → Post to coord: "L2-S1: diag OK, relay online"
 
 2. READ THE TARGET FILE: Call /api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
-   → Study the content carefully. Note the exact structure and all existing code.
+   → Study the content carefully. Note the EXACT char count and line count.
    → Post to coord: "L2-S2: Dashboard.tsx read OK, [N] chars, [N] lines"
+   IMPORTANT: Remember this exact char count — you will use it to verify the restore later.
 
 3. MODIFY THE CONTENT: In your response, take the ENTIRE file content from step 2.
    Add this comment block at the very top of the file (before any imports):
@@ -40,29 +41,36 @@ STEPS (do them in order, post to coord after each):
    → Post to coord: "L2-S6: console [clean/errors]"
    → If errors: The modification broke something. Read the error, fix the file, retry.
 
-7. RESTORE ORIGINAL: Use grok-create to write back the ORIGINAL content from step 2
-   (without the comment lines). This leaves the project clean.
-   → Post to coord: "L2-S7: Dashboard.tsx restored to original content"
+7. RESTORE ORIGINAL VIA GIT: Use grok-git to restore Dashboard.tsx to its committed state.
+   This is MORE RELIABLE than trying to re-write the original content manually.
+   Call: {{RELAY_BASE}}/api/grok-run?project={{PROJECT}}&cmd=git%20checkout%20HEAD%20--%20src/pages/Dashboard.tsx
+   This restores the file to its exact state from the last git commit — guaranteed clean.
+   Do NOT try to restore by re-writing the file content via grok-create. Use git.
+   → Post to coord: "L2-S7: Dashboard.tsx restored via git checkout HEAD"
 
 8. VERIFY RESTORE: Call /api/grok-read?project={{PROJECT}}&path=src/pages/Dashboard.tsx
-   → Confirm the comment is gone and the file matches the original from step 2
-   → Post to coord: "L2-S8: restore verified, file matches original"
+   → Confirm the comment lines are GONE (file should NOT start with "//")
+   → Confirm the char count matches the EXACT count from step 2
+   → If char count doesn't match or comments are still present, the restore FAILED.
+     In that case, re-run step 7 (git checkout) and re-verify.
+   → Post to coord: "L2-S8: restore verified, [N] chars matches original [N] chars, no comment lines"
 
-9. FINAL: Post to coord: "L2 COMPLETE: Read-modify-write cycle succeeded. File modified, verified, and restored."
+9. FINAL: Post to coord: "L2 COMPLETE: Read-modify-write cycle succeeded. File modified, verified, and restored via git checkout."
 
 === PASS CRITERIA ===
 - All coord notes posted (L2-S1 through L2-S8 + final)
 - Step 5 verification shows the comment was added correctly
 - Step 6 console check is clean
-- Step 8 verification shows the file was restored to its original state
+- Step 8 verification shows the file was restored to its EXACT original state (matching char count from S2)
 - No other files were modified
-- No git commit was made
+- No git commit was made (git checkout just reverts working tree changes)
 
 === FAIL CONDITIONS ===
 - Dashboard.tsx content corrupted (missing code, truncated, garbled)
 - Comment not present after write
 - Original code not intact after modification
-- File not properly restored in step 7
+- File not properly restored in step 7 (char count mismatch)
+- Comment lines still present after restore
 - Console errors after modification
 - Any other file modified
 - Coord notes missing
