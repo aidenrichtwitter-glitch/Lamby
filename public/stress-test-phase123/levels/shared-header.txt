@@ -102,13 +102,15 @@ DIAGNOSTICS — diag:
 
 8. WINDOWS SHELL: run_command runs on Windows. Use PowerShell syntax.
 
-9. GIT LIMITATIONS: git reset --hard is sanitized to --soft.
+9. WINDOWS LINE ENDINGS: Desktop files use \r\n. grok-write search strings use \n. This causes SILENT FAILURE (0 replacements) for multi-line or line-ending-sensitive searches. For small files (<2KB like App.tsx), prefer grok-create (read → modify → write full file) over grok-write.
 
-10. BATCH LIMIT: Up to 10 actions per grok-proxy request.
+10. GIT LIMITATIONS: git reset --hard is sanitized to --soft.
 
-11. ALL ENDPOINTS ARE GET: Do NOT attempt POST requests.
+11. BATCH LIMIT: Up to 10 actions per grok-proxy request.
 
-12. NEVER CLAIM SUCCESS WITHOUT VERIFICATION.
+12. ALL ENDPOINTS ARE GET: Do NOT attempt POST requests.
+
+13. NEVER CLAIM SUCCESS WITHOUT VERIFICATION.
 
 === MANDATORY VERIFICATION PROTOCOL ===
 RULE A — CHECK EVERY grok-write RESPONSE: If replacements == 0, THE EDIT FAILED. Retry.

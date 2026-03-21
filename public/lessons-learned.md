@@ -4,6 +4,17 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 23: Windows line endings (\r) cause grok-write search/replace to fail silently
+**Date:** 2026-03-21
+**Context:** L3 test — grok-write to add `metrics: Metrics` to App.tsx PAGES map returned 0 replacements.
+**Root cause:** The desktop project (groks-app) runs on Windows. Files have `\r\n` line endings. When grok-write receives a search string with `\n` line endings, it doesn't match `\r\n` in the file. Result: 0 replacements, no error — just silent failure.
+**Evidence:** `JSON.stringify(settingsLine)` showed `"  settings: Settings\r"` — the trailing `\r` was invisible but broke the match.
+**Impact:** Any grok-write search/replace that spans multiple lines or matches line endings will fail on Windows projects.
+**Fix for prompts:** For App.tsx (small file <2KB), the L3 prompt now says: use grok-create with the full updated content instead of grok-write. Read → modify in memory → grok-create. This bypasses line ending issues entirely.
+**Rule:** On Windows desktop projects, prefer grok-create (full file) over grok-write (search/replace) for any edit that involves line-ending-sensitive matching. grok-write is reliable only for single-line replacements where `\r` doesn't interfere.
+
+---
+
 ## Lesson 22: grok-create fails silently when content exceeds browse_page URL length limit
 **Date:** 2026-03-21
 **Context:** Grok repeatedly reports grok-create "not working" for Metrics.tsx (4000+ char component).

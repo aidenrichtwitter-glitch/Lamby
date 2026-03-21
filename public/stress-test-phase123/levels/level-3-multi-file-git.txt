@@ -16,13 +16,20 @@ CRITICAL STOP RULES (READ THESE FIRST):
 - Each grok-write call should be made EXACTLY ONCE per file. Do NOT call grok-write on the same file multiple times for the same change.
 
 CRITICAL APPROACH — WHAT WORKS (TESTED AND VERIFIED):
-- For CREATING new files (Metrics.tsx): Use grok-create. URL-encode the content.
-  If the file is large (>5KB), use grok-create-chunk.
-- For EDITING existing files: Try grok-write (search/replace) FIRST.
-  URL: {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=FILE&search=OLD_TEXT&replace=NEW_TEXT
-  IMPORTANT: If grok-write returns {replacements: 0}, the search text did not match.
-  FALLBACK: For small files (<2KB like App.tsx), read the file, modify it in memory, and use grok-create to write the whole updated file. This is MORE RELIABLE than retrying grok-write.
-- NEVER call grok-write more than ONCE for the same change on the same file. Multi-agent parallel calls cause duplicate entries.
+- For CREATING new files (Metrics.tsx): Use grok-create-chunk (NOT grok-create).
+  The file will be >1000 chars. browse_page has a ~2048 char URL limit. grok-create WILL FAIL.
+  Split into ~800-char raw chunks. Send each as a separate GET:
+  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=CHUNK&chunk=N&total=TOTAL
+  Chunks must be sent IN ORDER (0, 1, 2, ...). The file only appears on disk when the FINAL chunk lands.
+
+- For EDITING App.tsx: Use grok-create (read → modify → write full file).
+  DO NOT USE grok-write ON APP.TSX. The desktop runs on Windows with \r\n line endings.
+  grok-write search strings use \n but the file has \r\n — this causes SILENT FAILURE (0 replacements).
+  App.tsx is small (~920 chars), so grok-create with the full updated content works perfectly.
+
+- For EDITING Navigation.tsx: grok-write WORKS for SINGLE-LINE replacements (no \r issue when
+  matching within one line). Use it for the nav item. Do NOT call it more than ONCE.
+
 - Activity icon is ALREADY imported in Navigation.tsx. Do NOT add a duplicate import.
 
 STEPS (do them in order, post to coord after each):
@@ -38,7 +45,7 @@ STEPS (do them in order, post to coord after each):
    → Study it carefully. Note:
    - The exact import lines (e.g., "import Settings from '../pages/Settings'")
    - The PAGES map entries (e.g., "settings: Settings")
-   - These are the patterns you will match for search/replace
+   - You will need the FULL CONTENT of this file for step 6
    → Post to coord: "L3-S2: App read"
 
 3. READ NAVIGATION: Call /api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
@@ -46,16 +53,9 @@ STEPS (do them in order, post to coord after each):
    → Activity icon IS already imported — do NOT add it again
    → Post to coord: "L3-S3: Nav read, Activity already imported"
 
-4. CREATE METRICS PAGE: You MUST use grok-create-chunk (NOT grok-create) because the component
-   will be >1000 chars and browse_page has a URL length limit (~2048 chars) that truncates large URLs.
+4. CREATE METRICS PAGE: Use grok-create-chunk (NOT grok-create).
 
-   Split your Metrics.tsx into 4-5 chunks of ~800 raw chars each. Send each chunk as:
-   GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=CHUNK_TEXT&chunk=N&total=TOTAL
-   - chunk=0 creates the file. chunk=1+ appends. File is complete when chunk=total-1 arrives.
-   - URL-encode each chunk's content.
-   - Keep each chunk's ENCODED content under ~1500 chars so the full URL stays under ~2000 chars.
-
-   The file MUST have:
+   Build a Metrics.tsx component with these requirements:
    - Named export: export const Metrics: React.FC = () => { ... }
    - Default export: export default Metrics
    - At least 3 metric cards (bridge latency, uptime, requests)
@@ -63,6 +63,14 @@ STEPS (do them in order, post to coord after each):
    - TypeScript types (interface MetricCard)
    - Dark mode support (dark: classes)
    - At least 80 lines of real code
+
+   Split the content into 4-5 chunks of ~800 raw chars each. For each chunk:
+   GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=CHUNK_TEXT&chunk=N&total=TOTAL
+   - URL-encode each chunk's content
+   - Keep each chunk's ENCODED content under ~1500 chars so the full URL stays under ~2000 chars
+   - Send chunks IN ORDER: chunk=0, then chunk=1, then chunk=2, etc.
+   - The file only appears on disk when the last chunk (chunk=total-1) arrives
+   - DO NOT send chunks out of order or in parallel
 
    DO NOT use grok-create (single URL) for this — it WILL fail because the URL is too long.
    → Post to coord: "L3-S4: Metrics.tsx chunks sent"
@@ -73,20 +81,20 @@ STEPS (do them in order, post to coord after each):
    → Post to coord: "L3-S5: Metrics.tsx verified"
    → If MISSING or EMPTY: Retry step 4 ONCE. If still missing, post failure and stop.
 
-6. UPDATE APP.TSX — APPROACH THAT WORKS:
-   Read App.tsx first. Then you have TWO options:
+6. UPDATE APP.TSX — USE GROK-CREATE (NOT grok-write):
+   *** WINDOWS LINE ENDING WARNING: The desktop project uses \r\n line endings. ***
+   *** grok-write search/replace WILL FAIL SILENTLY because it sends \n but the file has \r\n. ***
+   *** This is a KNOWN BUG. The ONLY reliable approach for App.tsx is grok-create. ***
 
-   OPTION A (preferred for App.tsx — it's small ~920 chars):
-   Read the full file, add the import line and PAGES entry in your memory, then grok-create the entire updated file.
-   - Add after the last import: import { Metrics } from '../pages/Metrics'
-   - Add to PAGES map: metrics: Metrics (with comma after the previous entry)
+   Take the App.tsx content you read in step 2 and modify it:
+   a) Add after the last import line: import { Metrics } from '../pages/Metrics'
+   b) Add to the PAGES map after the last entry: metrics: Metrics (with comma after the previous entry)
 
-   OPTION B (grok-write — may fail on whitespace):
-   a) grok-write: search="import Settings from '../pages/Settings'" replace="import Settings from '../pages/Settings'\nimport { Metrics } from '../pages/Metrics'"
-   b) grok-write: search="settings: Settings" replace="settings: Settings,\n  metrics: Metrics"
-   If either returns 0 replacements, fall back to OPTION A.
+   Then write the entire updated file:
+   GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/components/App.tsx&content=FULL_UPDATED_CONTENT
 
-   → Post to coord: "L3-S6: App.tsx updated"
+   The file is ~920 chars so grok-create (single URL) works fine for this one.
+   → Post to coord: "L3-S6: App.tsx updated via grok-create"
 
 7. VERIFY APP: grok-read App.tsx
    → Confirm "import { Metrics }" is present
@@ -96,8 +104,9 @@ STEPS (do them in order, post to coord after each):
    → If EITHER missing: Read the file, fix it with grok-create, verify again. Do NOT continue without both.
 
 8. UPDATE NAVIGATION: Use grok-write to add ONE metrics nav item.
-   Search for the LAST nav item: "{ id: 'settings', label: 'Settings', icon: Settings }"
-   Replace with: "{ id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }"
+   Search for the LAST nav item: { id: 'settings', label: 'Settings', icon: Settings }
+   Replace with: { id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }
+   This is a SINGLE-LINE search so \r\n line endings do NOT affect it.
    DO NOT add an import for Activity — it is ALREADY imported.
    DO NOT call grok-write more than ONCE for this change.
    → Post to coord: "L3-S8: Navigation.tsx updated"
