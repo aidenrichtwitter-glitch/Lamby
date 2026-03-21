@@ -483,28 +483,12 @@ function projectManagementPlugin(): Plugin {
                 } catch {}
               }
               const stat = fs.statSync(projPath);
-              let bridgeKey = "";
-              const metaFilePath = path.join(projPath, ".lamby-meta.json");
-              try {
-                if (fs.existsSync(metaFilePath)) {
-                  const meta = JSON.parse(fs.readFileSync(metaFilePath, "utf-8"));
-                  bridgeKey = meta.bridgeKey || "";
-                }
-                if (!bridgeKey) {
-                  bridgeKey = crypto.randomBytes(16).toString("hex");
-                  const existingMeta: any = {};
-                  try { if (fs.existsSync(metaFilePath)) Object.assign(existingMeta, JSON.parse(fs.readFileSync(metaFilePath, "utf-8"))); } catch {}
-                  existingMeta.bridgeKey = bridgeKey;
-                  fs.writeFileSync(metaFilePath, JSON.stringify(existingMeta, null, 2));
-                }
-              } catch {}
               return {
                 name: e.name,
                 path: `projects/${e.name}`,
                 createdAt: stat.birthtime.toISOString(),
                 framework,
                 description,
-                bridgeKey,
               };
             });
           res.setHeader("Content-Type", "application/json");
@@ -539,12 +523,11 @@ function projectManagementPlugin(): Plugin {
           }, null, 2);
           fs.writeFileSync(path.join(projectDir, "package.json"), pkgJson, "utf-8");
 
-          const projectBridgeKey = crypto.randomBytes(16).toString("hex");
-          const metaObj = { bridgeKey: projectBridgeKey, createdAt: new Date().toISOString() };
+          const metaObj = { createdAt: new Date().toISOString() };
           try { fs.writeFileSync(path.join(projectDir, ".lamby-meta.json"), JSON.stringify(metaObj, null, 2)); } catch {}
 
           res.setHeader("Content-Type", "application/json");
-          res.end(JSON.stringify({ success: true, name, framework, description, path: `projects/${name}`, bridgeKey: projectBridgeKey }));
+          res.end(JSON.stringify({ success: true, name, framework, description, path: `projects/${name}` }));
         } catch (err: any) {
           res.statusCode = 500;
           res.end(JSON.stringify({ success: false, error: err.message }));
@@ -4095,7 +4078,7 @@ function projectManagementPlugin(): Plugin {
         { type: "function", name: "browser_interact", description: "Interact with the live preview (click, type, evaluate JS).", parameters: { type: "object", properties: { project: { type: "string" }, action: { type: "string", enum: ["click", "type", "evaluate", "waitFor"] }, selector: { type: "string" }, value: { type: "string" }, script: { type: "string" }, screenshot: { type: "boolean" } }, required: ["project", "action"] } },
       ];
 
-      async function executeGrokFunctionCall(name: string, args: any, bridgeRelayUrl: string, bridgeKey: string): Promise<string> {
+      async function executeGrokFunctionCall(name: string, args: any, bridgeRelayUrl: string): Promise<string> {
         const project = args.project || "";
         let actions: any[] = [];
 
@@ -4165,7 +4148,7 @@ function projectManagementPlugin(): Plugin {
         if (req.method !== "POST") { res.statusCode = 405; res.end("Method not allowed"); return; }
         try {
           const body = JSON.parse(await readBody(req));
-          const { messages, model, project, bridgeRelayUrl: clientRelayUrl, bridgeKey: clientBridgeKey, systemPrompt } = body;
+          const { messages, model, project, bridgeRelayUrl: clientRelayUrl, systemPrompt } = body;
 
           if (!messages || !Array.isArray(messages)) {
             res.statusCode = 400; res.end(JSON.stringify({ error: "messages array required" })); return;
@@ -4182,8 +4165,8 @@ function projectManagementPlugin(): Plugin {
           }
           if (!apiKey) { res.statusCode = 400; res.end(JSON.stringify({ error: "XAI API key not configured" })); return; }
 
-          const relayUrl = clientRelayUrl || BRIDGE_RELAY_URL;
-          const bKey = clientBridgeKey || bridgeRelayKey || "";
+          const devRelayUrl = REPLIT_DEV_DOMAIN ? `https://${REPLIT_DEV_DOMAIN}` : "";
+          const relayUrl = clientRelayUrl || devRelayUrl || "https://bridge-relay.replit.app";
           const useModel = model || "grok-4-0709";
 
           res.setHeader("Content-Type", "text/event-stream");
@@ -4279,7 +4262,7 @@ function projectManagementPlugin(): Plugin {
 
               sendSSE("function_call", { name: fnName, arguments: fnArgs, call_id: fc.call_id });
 
-              const result = await executeGrokFunctionCall(fnName, fnArgs, relayUrl, bKey);
+              const result = await executeGrokFunctionCall(fnName, fnArgs, relayUrl);
 
               sendSSE("function_result", { name: fnName, call_id: fc.call_id, result: result.length > 2000 ? result.slice(0, 2000) + "...(truncated in SSE, full sent to Grok)" : result });
 
@@ -5135,7 +5118,6 @@ function projectManagementPlugin(): Plugin {
           try {
             const existingMeta: any = {};
             try { if (fs.existsSync(metaPath)) Object.assign(existingMeta, JSON.parse(fs.readFileSync(metaPath, "utf-8"))); } catch {}
-            if (!existingMeta.bridgeKey) existingMeta.bridgeKey = crypto.randomBytes(16).toString("hex");
             Object.assign(existingMeta, { owner, repo, sourceUrl: `https://github.com/${owner}/${repo}`, clonedAt: new Date().toISOString(), projectName });
             fs.writeFileSync(metaPath, JSON.stringify(existingMeta, null, 2));
             console.log(`[Import] Saved source metadata to .lamby-meta.json`);
@@ -5251,23 +5233,6 @@ function projectManagementPlugin(): Plugin {
 
       const pendingSandboxRelayRequests = new Map<string, { resolve: (s: string) => void; timer: ReturnType<typeof setTimeout> }>();
 
-      const lambyConfigPath = path.resolve(process.cwd(), ".lamby-keys.json");
-      let bridgeRelayKey: string;
-      try {
-        const fs3 = await import("fs");
-        if (fs3.existsSync(lambyConfigPath)) {
-          const saved2 = JSON.parse(fs3.readFileSync(lambyConfigPath, "utf-8"));
-          bridgeRelayKey = saved2.bridgeRelayKey && saved2.bridgeRelayKey.length >= 16 ? saved2.bridgeRelayKey : crypto.randomBytes(16).toString("hex");
-          if (!saved2.bridgeRelayKey) {
-            saved2.bridgeRelayKey = bridgeRelayKey;
-            fs3.writeFileSync(lambyConfigPath, JSON.stringify(saved2, null, 2), "utf-8");
-          }
-        } else {
-          bridgeRelayKey = crypto.randomBytes(16).toString("hex");
-        }
-      } catch {
-        bridgeRelayKey = crypto.randomBytes(16).toString("hex");
-      }
 
       let _sandboxWssRef: any = null;
 
@@ -5304,8 +5269,10 @@ function projectManagementPlugin(): Plugin {
       }
 
       server.middlewares.use("/api/bridge-relay-status", async (req, res) => {
+        if (req.method === "OPTIONS") { res.setHeader("Access-Control-Allow-Origin", "*"); res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS"); res.statusCode = 204; res.end(); return; }
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
         res.setHeader("Content-Type", "application/json");
+        res.setHeader("Access-Control-Allow-Origin", "*");
         const relay = getBridgeRelayStatus();
         const devRelayUrl = REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "";
         const prodRelayUrl = "wss://bridge-relay.replit.app";
@@ -5319,8 +5286,10 @@ function projectManagementPlugin(): Plugin {
       });
 
       server.middlewares.use("/api/bridge-status", async (req, res) => {
+        if (req.method === "OPTIONS") { res.setHeader("Access-Control-Allow-Origin", "*"); res.setHeader("Access-Control-Allow-Methods", "GET,OPTIONS"); res.statusCode = 204; res.end(); return; }
         if (req.method !== "GET") { res.statusCode = 405; res.end("Method not allowed"); return; }
         res.setHeader("Content-Type", "application/json");
+        res.setHeader("Access-Control-Allow-Origin", "*");
         const relay = getBridgeRelayStatus();
         const devRelayUrl = REPLIT_DEV_DOMAIN ? `wss://${REPLIT_DEV_DOMAIN}` : "";
         const prodRelayUrl = "wss://bridge-relay.replit.app";
@@ -5483,20 +5452,20 @@ function projectManagementPlugin(): Plugin {
 
         const bridgeWss = new WebSocketServer({ noServer: true });
 
-        bridgeWss.on("connection", (ws: any, bridgeKey: string, clientSnapshotKey: string) => {
+        bridgeWss.on("connection", (ws: any, clientId: string) => {
           const connId = crypto.randomUUID();
-          console.log(`[Bridge Relay] Desktop client connected (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)})`);
+          console.log(`[Bridge Relay] Desktop client connected (project: ${clientId}, connId: ${connId.substring(0, 8)})`);
 
-          const existingClient = bridgeClients.get(bridgeKey);
+          const existingClient = bridgeClients.get(clientId);
           if (existingClient) {
-            console.log(`[Bridge Relay] Replacing stale connection for key ${bridgeKey.substring(0, 8)}... (old connId: ${(existingClient.connId || "?").substring(0, 8)})`);
+            console.log(`[Bridge Relay] Replacing stale connection for project ${clientId} (old connId: ${(existingClient.connId || "?").substring(0, 8)})`);
             existingClient.replaced = true;
-            try { existingClient.ws.send(JSON.stringify({ type: "connection_replaced", reason: "A newer connection with the same key has connected." })); } catch {}
+            try { existingClient.ws.send(JSON.stringify({ type: "connection_replaced", reason: "A newer connection has connected for this project." })); } catch {}
             setTimeout(() => { try { existingClient.ws.close(); } catch {} }, 500);
           }
 
           const client = { ws, lastPing: Date.now(), connId, replaced: false };
-          bridgeClients.set(bridgeKey, client);
+          bridgeClients.set(clientId, client);
 
           ws.on("message", (data: any) => {
             try {
@@ -5524,20 +5493,20 @@ function projectManagementPlugin(): Plugin {
 
           ws.on("close", () => {
             if (client.replaced) {
-              console.log(`[Bridge Relay] Old connection closed (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)}) — already replaced, not removing from map`);
+              console.log(`[Bridge Relay] Old connection closed (project: ${clientId}, connId: ${connId.substring(0, 8)}) — already replaced, not removing from map`);
               return;
             }
-            console.log(`[Bridge Relay] Desktop client disconnected (key: ${bridgeKey.substring(0, 8)}..., connId: ${connId.substring(0, 8)})`);
-            const current = bridgeClients.get(bridgeKey);
+            console.log(`[Bridge Relay] Desktop client disconnected (project: ${clientId}, connId: ${connId.substring(0, 8)})`);
+            const current = bridgeClients.get(clientId);
             if (current && current.connId === connId) {
-              bridgeClients.delete(bridgeKey);
+              bridgeClients.delete(clientId);
             }
           });
 
           ws.on("error", () => {
-            const current = bridgeClients.get(bridgeKey);
+            const current = bridgeClients.get(clientId);
             if (current && current.connId === connId) {
-              bridgeClients.delete(bridgeKey);
+              bridgeClients.delete(clientId);
             }
           });
         });
@@ -5551,9 +5520,9 @@ function projectManagementPlugin(): Plugin {
           }
           if (req.url && req.url.startsWith("/bridge-ws")) {
             const reqUrl = new URL(req.url, "http://localhost");
-            const bridgeKey = reqUrl.searchParams.get("key") || crypto.randomUUID();
+            const clientId = reqUrl.searchParams.get("project") || crypto.randomUUID();
             bridgeWss.handleUpgrade(req, socket, head, (ws: any) => {
-              bridgeWss.emit("connection", ws, bridgeKey, "");
+              bridgeWss.emit("connection", ws, clientId, "");
             });
             return;
           }
