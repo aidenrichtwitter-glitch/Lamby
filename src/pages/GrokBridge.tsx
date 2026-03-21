@@ -319,10 +319,13 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   const editBaseUrl = editUrl || (cmdEndpoint ? cmdEndpoint.replace(/\/api\/sandbox\/execute\b/, '/api/grok-edit') : '');
   const grokDocsUrl = snapshotUrl ? snapshotUrl.replace(/\/api\/snapshot\/[^?]+/, '/api/grok') : '';
 
+  const relayBaseMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/^(https?:\/\/[^/]+)/);
+  const relayBase = relayBaseMatch ? relayBaseMatch[1] : 'https://bridge-relay.replit.app';
+
   let section = '\n=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS — USE IT) ===\n';
   section += `You are Grok-4 working inside Lamby with full bridge-relay access. Your ONLY web tool is browse_page (GET-only).\n\n`;
   section += `CRITICAL PATIENCE PROTOCOL (MANDATORY — APPLY EVERY TIME):\n`;
-  section += `- Desktop connections and Vite dev server reloads take 5–20 seconds. You MUST wait a full 15 seconds after ANY edit (grok-edit or grok-proxy) before taking a screenshot or performing the next action.\n`;
+  section += `- Desktop connections and Vite dev server reloads take 5–20 seconds. You MUST wait a full 15 seconds after ANY edit (grok-edit, grok-write, or grok-proxy) before taking a screenshot or performing the next action.\n`;
   section += `- Never perform an edit and a screenshot in the same logical step or rapid succession. Always do: edit → wait 15s → screenshot.\n`;
   section += `- For the screenshot tool: ALWAYS use the full URL with ?fullPage=true&waitMs=8000 (minimum 8000ms, use 10000ms for safety on complex pages). Never use the default 3000ms or no wait param — this is required to let the preview fully render after changes.\n`;
   section += `- If you rush or ignore the 15-second wait, the preview may still be loading and changes will appear broken. Slow down every time.\n\n`;
@@ -331,13 +334,17 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `⚠ WARNING: The desktop app may be temporarily offline — API calls might fail until it reconnects. If calls fail, fall back to // file: blocks.\n\n`;
   }
 
+  section += `DISCOVERY — CALL FIRST (confirms all endpoints are live + gives you ready-to-use URLs):\n`;
   if (grokDocsUrl) {
-    section += `DISCOVERY (call FIRST to confirm endpoints are live):\n`;
-    section += `  GET ${grokDocsUrl}\n\n`;
+    section += `  GET ${grokDocsUrl}           → legacy docs page\n`;
   }
+  section += `  GET ${relayBase}/api/diag?project=${proj}\n`;
+  section += `  Returns: connection status, roundtrip latency, pass/fail for ALL endpoints, and readyUrls with pre-filled example URLs.\n`;
+  section += `  The readyUrls object gives you copy-pasteable URLs for every endpoint — just fill in your params.\n`;
+  section += `  Also shows the coord message board size and desktop connection state.\n\n`;
 
   if (snapshotUrl) {
-    section += `READ THE PROJECT (do this before making changes):\n`;
+    section += `READ THE PROJECT (legacy full snapshot — still works but prefer grok-read for individual files):\n`;
     section += `  GET ${snapshotUrl}\n`;
     section += `  Returns: plain-text snapshot with file tree, package.json, git status, and full contents of every source file.\n\n`;
   }
@@ -348,34 +355,94 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `  Returns: JSON { previews: [{ name, port, stdout, stderr }] } — live output from running dev servers.\n\n`;
   }
 
+  section += `=== SMART BRIDGE ENDPOINTS (PREFERRED — simple GET, no encoding needed) ===\n`;
+  section += `All responses include _bridge metadata with readyUrls and connection state.\n\n`;
+
+  section += `READ FILES — grok-read:\n`;
+  section += `  Single file:   GET ${relayBase}/api/grok-read?project=${proj}&path=src/App.tsx\n`;
+  section += `  Returns: { success, results: [{ data: { path, content } }], _bridge }\n\n`;
+
+  section += `WRITE/EDIT FILES — grok-write (with automatic verify — edits AND confirms in 1 call):\n`;
+  section += `  GET ${relayBase}/api/grok-write?project=${proj}&path=src/App.tsx&search=OLD_TEXT&replace=NEW_TEXT\n`;
+  section += `  Auto-reads the file back to verify the edit landed. Returns verified content.\n`;
+  section += `  URL-encode the search and replace values. Supports newlines (\\n) and special chars.\n`;
+  section += `  For large edits (>2KB), use grok-proxy write_file or write_file_chunk instead.\n\n`;
+
   if (editBaseUrl) {
-    section += `PRIMARY EDIT METHOD — grok-edit (simple GET, no base64):\n`;
-    section += `  ${editBaseUrl}?project=${proj}&path=FILE_PATH&search=OLD_TEXT&replace=NEW_TEXT&replaceAll=true\n\n`;
-    section += `  This is the fastest way to edit files. URL-encode the search and replace values.\n`;
+    section += `EDIT FILES — grok-edit (legacy, no auto-verify):\n`;
+    section += `  ${editBaseUrl}?project=${proj}&path=FILE_PATH&search=OLD_TEXT&replace=NEW_TEXT&replaceAll=true\n`;
     section += `  For HTML content with special characters, use base64 params instead:\n`;
-    section += `  ${editBaseUrl}?project=${proj}&path=FILE_PATH&searchB64=BASE64_OLD&replaceB64=BASE64_NEW\n`;
-    section += `  Returns: { "success": true, "results": [{ "data": { "replacements": N } }] }\n\n`;
-    section += `  EXAMPLE:\n`;
-    section += `  ${editBaseUrl}?project=${proj}&path=index.html&search=text-white&replace=text-purple-300&replaceAll=true\n\n`;
+    section += `  ${editBaseUrl}?project=${proj}&path=FILE_PATH&searchB64=BASE64_OLD&replaceB64=BASE64_NEW\n\n`;
   }
+
+  section += `FILE TREE — grok-tree:\n`;
+  section += `  Full tree:     GET ${relayBase}/api/grok-tree?project=${proj}\n`;
+  section += `  Filtered:      GET ${relayBase}/api/grok-tree?project=${proj}&filter=src\n\n`;
+
+  section += `GIT — grok-git (16 actions via one endpoint):\n`;
+  section += `  GET ${relayBase}/api/grok-git?project=${proj}&action=ACTION\n`;
+  section += `  Actions: status, add, commit, diff, log, branch, checkout, stash, stash-pop, push, pull, merge, reset, revert, tag, init\n`;
+  section += `  Extra params: files (for add), message (for commit), count (for log), branch (for checkout/merge)\n`;
+  section += `  Examples:\n`;
+  section += `    ?project=${proj}&action=status\n`;
+  section += `    ?project=${proj}&action=add&files=.\n`;
+  section += `    ?project=${proj}&action=commit&message=fix: update styles\n`;
+  section += `    ?project=${proj}&action=log&count=5\n`;
+  section += `    ?project=${proj}&action=diff\n\n`;
+
+  section += `PROCESSES — grok-process:\n`;
+  section += `  GET ${relayBase}/api/grok-process?project=${proj}&action=list\n`;
+  section += `  GET ${relayBase}/api/grok-process?project=${proj}&action=start&cmd=npm run dev\n`;
+  section += `  GET ${relayBase}/api/grok-process?project=${proj}&action=kill&pid=12345\n`;
+  section += `  Actions: list, start, stop, kill, restart, ports, env\n\n`;
+
+  section += `SEARCH — grok-search:\n`;
+  section += `  Text/regex:    GET ${relayBase}/api/grok-search?project=${proj}&q=TODO\n`;
+  section += `  Symbol search: GET ${relayBase}/api/grok-search?project=${proj}&q=MyComponent&type=symbol\n`;
+  section += `  Returns matches with file, line number, and matched text.\n\n`;
+
+  section += `RUN COMMANDS — grok-run:\n`;
+  section += `  GET ${relayBase}/api/grok-run?project=${proj}&cmd=npm run build\n`;
+  section += `  Returns: { success, results: [{ data: { stdout, stderr, exitCode } }] }\n`;
+  section += `  Note: for commands with quotes, URL-encode the entire cmd value.\n\n`;
+
+  section += `MACROS (multiple operations in a single call):\n`;
+  section += `  PROJECT STATUS (tree + package.json + git status + preview URL in 1 call):\n`;
+  section += `    GET ${relayBase}/api/grok-macro/project-status?project=${proj}\n`;
+  section += `  READ WITH CONTEXT (file content + imports analysis in 1 call):\n`;
+  section += `    GET ${relayBase}/api/grok-macro/read-context?project=${proj}&path=src/App.tsx\n\n`;
+
+  section += `SCREENSHOT — SIMPLE URL (NO encoding needed, just browse this URL):\n`;
+  section += `  GET ${relayBase}/api/screenshot/${proj}?fullPage=true&waitMs=8000\n`;
+  section += `  ALWAYS append ?fullPage=true&waitMs=8000 (or 10000ms for safety).\n`;
+  section += `  Returns: { success, results: [{ data: { captured: true, screenshotUrl: "https://files.catbox.moe/abc123.png" } }] }\n`;
+  section += `  The screenshotUrl is a public direct link — browse it to view or share with the user.\n\n`;
 
   const interactBaseUrl = editBaseUrl ? editBaseUrl.replace('/api/grok-edit', '/api/grok-interact') : '';
   if (interactBaseUrl) {
-    section += `BROWSER INTERACTION — grok-interact (simple GET, interact with live preview):\n`;
+    section += `BROWSER INTERACTION — grok-interact:\n`;
     section += `  ${interactBaseUrl}?project=${proj}&action=ACTION&selector=CSS_SELECTOR\n`;
     section += `  Actions: click, type, select, evaluate, runFunction, waitFor\n`;
-    section += `  Params: selector, text (mapped to value), value, x, y, code (mapped to script), script, functionName, args (JSON array), screenshot=true, waitAfter (ms), timeout (ms)\n`;
-    section += `  EXAMPLE (click a button):\n`;
-    section += `  ${interactBaseUrl}?project=${proj}&action=click&selector=%23submit-btn\n`;
-    section += `  EXAMPLE (type text):\n`;
-    section += `  ${interactBaseUrl}?project=${proj}&action=type&selector=%23input&text=hello+world\n`;
-    section += `  EXAMPLE (evaluate JS):\n`;
-    section += `  ${interactBaseUrl}?project=${proj}&action=evaluate&code=return+document.title\n\n`;
+    section += `  Params: selector, text, value, x, y, code, script, functionName, args, screenshot=true, waitAfter, timeout\n`;
+    section += `  Examples:\n`;
+    section += `    ?project=${proj}&action=click&selector=%23submit-btn\n`;
+    section += `    ?project=${proj}&action=type&selector=%23input&text=hello+world\n`;
+    section += `    ?project=${proj}&action=evaluate&code=return+document.title\n\n`;
   }
 
+  section += `AGENT COORDINATION — coord (message board for multi-agent feedback):\n`;
+  section += `  Write a note:  GET ${relayBase}/api/coord?note=YOUR_MESSAGE&from=grok\n`;
+  section += `  Read board:    GET ${relayBase}/api/coord\n`;
+  section += `  Clear board:   GET ${relayBase}/api/coord?clear=1\n`;
+  section += `  Use this to leave notes for the user or other agents, check for incoming instructions, and coordinate work.\n\n`;
+
+  section += `SELF-DIAGNOSTIC — diag:\n`;
+  section += `  GET ${relayBase}/api/diag?project=${proj}\n`;
+  section += `  Returns: relay status, desktop connection, roundtrip latency, endpoint pass/fail, readyUrls.\n`;
+  section += `  Call this FIRST when starting work to confirm everything is live.\n\n`;
 
   section += `RETRY & ERROR HANDLING (follow strictly):\n`;
-  section += `  1. Before any grok-edit call, wait at least 6 seconds.\n`;
+  section += `  1. Before any edit call, wait at least 6 seconds.\n`;
   section += `  2. On 503 (or timeout):\n`;
   section += `     - Wait 8 seconds → retry (attempt 2)\n`;
   section += `     - Wait 12 seconds → retry (attempt 3)\n`;
@@ -386,12 +453,9 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `     - Current page status from snapshot\n`;
   section += `  Never claim a change happened unless you saw {"success":true}.\n\n`;
 
-  const relayBaseMatch = (snapshotUrl || proxyBaseUrl || editBaseUrl).match(/^(https?:\/\/[^/]+)/);
-  const screenshotRelayBase = relayBaseMatch ? relayBaseMatch[1] : 'https://bridge-relay.replit.app';
-
   if (proxyBaseUrl) {
-    section += `ADVANCED: GET proxy for multi-action chains (read + edit + run in one call):\n`;
-    section += `  Use this when you need multiple actions in one request (read files, run commands, git, install deps, etc.).\n`;
+    section += `LEGACY: grok-proxy for multi-action chains (read + edit + run in one call):\n`;
+    section += `  Use this ONLY when you need batched actions in one request. Prefer the smart endpoints above.\n`;
     section += `  1. Build actions JSON:  { "actions": [ ...action objects... ] }\n`;
     section += `  2. Base64-encode that JSON string\n`;
     section += `  3. Browse:  ${proxyBaseUrl}?project=${proj}&payload=BASE64_ENCODED_ACTIONS\n\n`;
@@ -402,16 +466,16 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    { type: "read_file", project: "${proj}", path: "src/App.tsx" }  → file content\n`;
     section += `    { type: "write_file", project: "${proj}", path: "src/App.tsx", content: "..." }  → overwrite file (FULL content required, keep under 2KB)\n`;
     section += `    { type: "write_file_chunk", project: "${proj}", path: "src/App.tsx", content: "...", chunk_index: 0, total_chunks: 3 }  → chunked write for files > 2KB\n`;
-    section += `      LARGE FILE RULE: For content > 2KB, split into ~1500-char chunks. chunk_index=0 creates/overwrites, 1+ appends. Send each chunk as a separate action.\n`;
-    section += `    { type: "create_file", project: "${proj}", path: "src/new.ts", content: "..." }  → create new file\n`;
+    section += `      LARGE FILE RULE: For content > 2KB, split into ~1500-char chunks. chunk_index=0 creates/overwrites, 1+ appends.\n`;
+    section += `    { type: "create_file", project: "${proj}", path: "src/new.ts", content: "..." }\n`;
     section += `    { type: "delete_file", project: "${proj}", path: "src/old.ts" }\n`;
-    section += `    { type: "search_replace", project: "${proj}", path: "src/App.tsx", search: "oldText", replace: "newText" }  → find & replace\n`;
+    section += `    { type: "search_replace", project: "${proj}", path: "src/App.tsx", search: "oldText", replace: "newText" }\n`;
     section += `  SEARCH:\n`;
-    section += `    { type: "grep", project: "${proj}", pattern: "TODO" }  → regex search across all files\n`;
-    section += `    { type: "search_files", project: "${proj}", pattern: "Button" }  → filename search\n`;
+    section += `    { type: "grep", project: "${proj}", pattern: "TODO" }\n`;
+    section += `    { type: "search_files", project: "${proj}", pattern: "Button" }\n`;
     section += `  SHELL / PROCESS / GIT:\n`;
     section += `    { type: "run_command", project: "${proj}", command: "npm run build" }\n`;
-    section += `    { type: "install_deps", project: "${proj}" }  → auto-detects npm/yarn/pnpm/bun\n`;
+    section += `    { type: "install_deps", project: "${proj}" }\n`;
     section += `    { type: "start_process", project: "${proj}", command: "npm run dev" }\n`;
     section += `    { type: "list_processes", project: "${proj}" }\n`;
     section += `    { type: "kill_process", project: "${proj}", pid: 12345 }\n`;
@@ -420,39 +484,32 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
     section += `    { type: "git_commit", project: "${proj}", message: "fix: description" }\n`;
     section += `    { type: "git_diff", project: "${proj}" }\n`;
     section += `    { type: "git_log", project: "${proj}", count: 10 }\n`;
-    section += `  SCREENSHOT — SIMPLE URL (NO encoding needed, just browse this URL):\n`;
-    section += `    GET ${screenshotRelayBase}/api/screenshot/${proj}?fullPage=true&waitMs=8000\n`;
-    section += `    ALWAYS append ?fullPage=true&waitMs=8000 (or 10000ms for safety). This is the correct, patient way to use the screenshot tool.\n`;
-    section += `    Returns: { "success": true, "results": [{ "data": { "captured": true, "screenshotUrl": "https://files.catbox.moe/abc123.png" } }] }\n`;
-    section += `    The screenshotUrl is a public direct link — browse it to view or share with the user.\n\n`;
-    section += `  SCREENSHOT via grok-proxy (alternative, for multi-action chains):\n`;
-    section += `    { type: "screenshot_preview", project: "${proj}" }  → screenshot the running app\n`;
+    section += `  SCREENSHOT via grok-proxy:\n`;
+    section += `    { type: "screenshot_preview", project: "${proj}" }\n`;
     section += `    { type: "screenshot_preview", project: "${proj}", selector: "#hero", fullPage: true, waitMs: 3000 }\n`;
-    section += `    Response: { captured: true, screenshotUrl: "https://files.catbox.moe/abc123.png" }\n`;
-    section += `    The screenshotUrl is a public direct link — browse it to view or share with the user.\n`;
-    section += `  BROWSER INTERACTION (click buttons, type text, run JS in the live preview):\n`;
+    section += `  BROWSER INTERACTION via grok-proxy:\n`;
     section += `    { type: "browser_interact", project: "${proj}", action: "click", selector: "#submit-btn" }\n`;
-    section += `    { type: "browser_interact", project: "${proj}", action: "click", selector: "#btn", screenshot: true }  → click + screenshot after\n`;
     section += `    { type: "browser_interact", project: "${proj}", action: "type", selector: "#input", value: "hello" }\n`;
-    section += `    { type: "browser_interact", project: "${proj}", action: "evaluate", script: "return document.title" }\n`;
-    section += `    { type: "browser_interact", project: "${proj}", action: "runFunction", functionName: "window.myFunc", args: ["a"] }\n`;
-    section += `    { type: "browser_interact", project: "${proj}", action: "waitFor", selector: ".loaded", timeout: 10000 }\n`;
-    section += `    Options: screenshot: true (capture + upload after action), waitAfter: 2000 (ms), extractText: true + extractSelector: "#result"\n\n`;
+    section += `    { type: "browser_interact", project: "${proj}", action: "evaluate", script: "return document.title" }\n\n`;
   }
 
-  section += `YOUR WORKFLOW (UPDATED WITH PATIENCE):\n`;
-  section += `  1. BROWSE the snapshot URL to see all project files\n`;
-  section += `  2. ANALYZE what needs to change\n`;
-  section += `  3. USE grok-edit for surgical text replacements (primary) or grok-proxy for complex multi-action chains\n`;
-  section += `  3.5. After any edit: WAIT FULL 15 SECONDS for Vite dev server and preview to stabilize\n`;
-  section += `  4. BROWSE the screenshot URL to capture the result: ${screenshotRelayBase}/api/screenshot/${proj}?fullPage=true&waitMs=8000\n`;
-  section += `  5. VERIFY by browsing the snapshot URL again or checking console logs\n`;
-  section += `  6. TELL the user what you did, show the screenshot link\n\n`;
+  section += `YOUR WORKFLOW (RECOMMENDED):\n`;
+  section += `  1. CALL /api/diag to confirm bridge is live and get readyUrls\n`;
+  section += `  2. CHECK /api/coord for any pending instructions or notes\n`;
+  section += `  3. READ project status via grok-macro/project-status (tree + pkg + git + preview in 1 call)\n`;
+  section += `  4. READ specific files via grok-read or grok-macro/read-context\n`;
+  section += `  5. EDIT via grok-write (auto-verify) or grok-edit (for replaceAll)\n`;
+  section += `  5.5. After any edit: WAIT FULL 15 SECONDS for Vite dev server and preview to stabilize\n`;
+  section += `  6. SCREENSHOT via ${relayBase}/api/screenshot/${proj}?fullPage=true&waitMs=8000\n`;
+  section += `  7. VERIFY via grok-read or snapshot\n`;
+  section += `  8. COMMIT via grok-git?action=add&files=. then grok-git?action=commit&message=...\n`;
+  section += `  9. POST status to /api/coord for feedback: ?note=Done: updated styles&from=grok\n\n`;
 
-  section += `IMPORTANT RULES (UPDATED):\n`;
+  section += `IMPORTANT RULES:\n`;
   section += `  - ALWAYS use browse_page on these URLs to make changes. Do NOT just show code in your response.\n`;
   section += `  - ALL endpoints are GET-based. Do NOT attempt POST requests.\n`;
-  section += `  - Browse the snapshot FIRST to understand the current state before making changes.\n`;
+  section += `  - Prefer smart endpoints (grok-read, grok-write, grok-tree, etc.) over grok-proxy — they're simpler and don't need base64.\n`;
+  section += `  - Browse the snapshot or use grok-macro/project-status FIRST to understand the current state before making changes.\n`;
   section += `  - Prefer grok-edit for single-file edits (simpler, faster). Use grok-proxy for multi-step operations.\n`;
   section += `  - After making visual changes, take a screenshot_preview and share the screenshotUrl with the user.\n`;
   section += `  - ENFORCE PATIENCE: Wait 15 seconds after every edit before screenshot or next action. Never work faster than the computer can respond.\n`;
@@ -2648,14 +2705,16 @@ const GrokBridge: React.FC = () => {
       enrichedPrompt += logsApiSection;
     }
     if (freshLogs.cmdUrl) {
-      enrichedPrompt += `\nYOU HAVE FULL READ/WRITE ACCESS to this project via the Sandbox API above.\n`;
-      enrichedPrompt += `Use it to investigate and fix the errors shown in these logs:\n`;
-      enrichedPrompt += `1. read_file the files referenced in the error traces\n`;
-      enrichedPrompt += `2. grep for the broken symbol if needed\n`;
-      enrichedPrompt += `3. write_file with corrected code\n`;
-      enrichedPrompt += `4. run_command to verify the fix compiles\n`;
-      enrichedPrompt += `5. Fetch fresh console logs to confirm the fix\n`;
-      enrichedPrompt += `Respond with \`\`\`json {"actions": [...]} so Lamby auto-executes your fix.\n`;
+      enrichedPrompt += `\nYOU HAVE FULL READ/WRITE ACCESS to this project via the Smart Bridge endpoints above.\n`;
+      enrichedPrompt += `Use them to investigate and fix the errors shown in these logs:\n`;
+      enrichedPrompt += `1. Call /api/diag to confirm bridge is live\n`;
+      enrichedPrompt += `2. Use grok-read to read the files referenced in error traces\n`;
+      enrichedPrompt += `3. Use grok-search to grep for the broken symbol if needed\n`;
+      enrichedPrompt += `4. Use grok-write to apply the fix (auto-verifies the edit landed)\n`;
+      enrichedPrompt += `5. Use grok-run to verify the fix compiles (e.g. npm run build)\n`;
+      enrichedPrompt += `6. Check console logs to confirm the fix\n`;
+      enrichedPrompt += `7. Post a note to /api/coord confirming what you fixed\n`;
+      enrichedPrompt += `Prefer the smart endpoints (grok-read, grok-write, grok-search, grok-run) over grok-proxy.\n`;
     }
     try {
       if (isElectron) {
@@ -2868,7 +2927,9 @@ const GrokBridge: React.FC = () => {
     const editorApiSection = buildSandboxApiSection(freshEd.snapUrl, freshEd.cmdUrl, activeProject || '', freshEd.online, freshEd.proxyUrl, freshEd.editUrl);
     if (editorApiSection) enriched += editorApiSection;
     if (freshEd.cmdUrl) {
-      enriched += `\nUse the Sandbox API above to read, modify, and write files directly. Respond with \`\`\`json {"actions": [...]} so Lamby auto-executes your changes.\n`;
+      enriched += `\nUse the Smart Bridge endpoints above to read, modify, and write files directly.\n`;
+      enriched += `Prefer grok-read/grok-write/grok-search over grok-proxy — they're simpler (no base64 encoding).\n`;
+      enriched += `After making changes, use grok-git to commit and /api/coord to report what you did.\n`;
     }
     if (mode === 'api') {
       setInput(enriched);
@@ -4365,7 +4426,7 @@ const GrokBridge: React.FC = () => {
         active += `6. Do NOT wrap code in narrative like "here's what your file should look like". Just use the // file: header directly.\n`;
         active += `7. If multiple files need changes, output multiple // file: blocks in sequence.\n`;
         active += `8. You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.\n`;
-        active += `NOTE: If a "LAMBY WORKSPACE API" section appears below, you should use those HTTP endpoints to directly make changes instead of outputting // file: blocks. Use // file: blocks only as a fallback if the API is unreachable.\n\n`;
+        active += `NOTE: If a "LAMBY WORKSPACE API" section appears above, you should use the Smart Bridge endpoints (grok-read, grok-write, grok-search, grok-run, grok-git, etc.) to directly make changes instead of outputting // file: blocks. Use // file: blocks only as a fallback if the API is unreachable.\n\n`;
       } else {
         active += `1. Only cite real, published npm packages — never invent package names.\n`;
         active += `2. Suggest a GitHub repo URL instead of writing code from scratch.\n\n`;
@@ -4375,8 +4436,9 @@ const GrokBridge: React.FC = () => {
       const fileContents: { path: string; content: string; priority: number }[] = [];
 
       if (ctxBridgeOnline && ctxCmdUrl) {
-        active += `\nIMPORTANT: DO NOT expect file contents in this prompt. Use the LAMBY WORKSPACE API above to read files yourself.\n`;
-        active += `Start by calling { type: "read_multiple_files" } or { type: "list_tree" } to see the codebase, then make your changes via the API.\n`;
+        active += `\nIMPORTANT: DO NOT expect file contents in this prompt. Use the Smart Bridge endpoints above to read files yourself.\n`;
+        active += `Start by calling /api/diag to confirm the bridge is live, then use grok-macro/project-status for a full overview.\n`;
+        active += `Use grok-read to read individual files and grok-search to find code. No base64 encoding needed.\n`;
         active += `File contents are NOT included here because you have full API access to read them on-demand.\n\n`;
       } else {
         if (toasterAvailability?.available && activeProject && (lastErrors || errorLogs.length > 0)) {
