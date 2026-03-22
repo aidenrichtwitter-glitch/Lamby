@@ -24,6 +24,12 @@
       "dist/**/*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "../server/bridge-connector.cjs",
+        "to": "server/bridge-connector.cjs"
+      }
+    ],
     "win": {
       "target": "dir",
       "icon": "build/icon.ico"
