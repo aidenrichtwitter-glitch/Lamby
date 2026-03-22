@@ -15,8 +15,14 @@ PHASE 1 — READ (4 calls)
 ==============================
 Gather all information. No writes. No decisions yet.
 
-1a. CLEANUP — restore files to clean baseline (1 call):
-    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/components/App.tsx,src/components/Navigation.tsx,src/pages/Dashboard.tsx
+1a. CLEANUP — restore files to KNOWN CLEAN state (3 calls):
+    *** DO NOT use "git checkout" without a commit hash — HEAD may contain previous L3 commits! ***
+    *** Always restore from the known-clean commit: af7629a ***
+
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&args=af7629a%20--%20src/components/App.tsx
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&args=af7629a%20--%20src/components/Navigation.tsx
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&args=af7629a%20--%20src/pages/Dashboard.tsx
+
     Also delete stale Metrics if it exists (1 call):
     GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/pages/Metrics.tsx
     → "File not found" = success. Do NOT retry.
