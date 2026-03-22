@@ -32,6 +32,7 @@
       "icon": "build/icon.ico"
     },
     "squirrelWindows": {
+      "iconUrl": "file://build/icon.ico",
       "loadingGif": "build/installing.gif"
     },
     "linux": {
