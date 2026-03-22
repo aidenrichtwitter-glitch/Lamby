@@ -154,46 +154,20 @@ function registerGrokIpcHandlers(getWebviewContents) {
     }
   });
 
-  ipcMain.handle('grok-check-response-ready', async (_event, baseline) => {
+  ipcMain.handle('grok-check-response-ready', async () => {
     try {
       const wc = resolveWc();
-      if (!wc) return { ready: false, generating: false, version: BROWSER_MODE_VERSION, signals: 'no-webview' };
+      if (!wc) return { generating: false, version: BROWSER_MODE_VERSION };
 
-      const result = await wc.executeJavaScript(`(() => {
+      const generating = await wc.executeJavaScript(`(() => {
         ${SHARED_COUNTING_JS}
-        return {
-          generating: __isGenerating(),
-          copyCount: __countCopy(),
-          reactionCount: __countReaction(),
-          followUpCount: __countFollowUp(),
-        };
+        return __isGenerating();
       })()`);
 
-      const preCopy = baseline?.preCopyCount ?? baseline?.preMessageCount ?? 0;
-      const preReaction = baseline?.preReactionCount ?? 0;
-      const preFollowUp = baseline?.preFollowUpCount ?? 0;
-
-      const newCopy = result.copyCount > preCopy;
-      const newReaction = result.reactionCount > preReaction;
-      const newFollowUp = result.followUpCount > preFollowUp;
-      const ready = !result.generating && (newCopy || newReaction || newFollowUp);
-
-      const signals = [];
-      if (newCopy) signals.push(`NEW-copy(${result.copyCount}>${preCopy})`);
-      if (newReaction) signals.push(`NEW-reaction(${result.reactionCount}>${preReaction})`);
-      if (newFollowUp) signals.push(`NEW-followUp(${result.followUpCount}>${preFollowUp})`);
-      if (result.generating) signals.push('GENERATING');
-
-      return {
-        ready,
-        generating: result.generating,
-        signals: signals.join(', ') || `copy=${result.copyCount}/${preCopy}, react=${result.reactionCount}/${preReaction}, follow=${result.followUpCount}/${preFollowUp}`,
-        stopDebug: `generating=${result.generating}`,
-        version: BROWSER_MODE_VERSION,
-      };
+      return { generating, version: BROWSER_MODE_VERSION };
     } catch (err) {
       console.error(`${LOG} grok-check-response-ready error:`, err.message);
-      return { ready: false, generating: false, version: BROWSER_MODE_VERSION, signals: `error: ${err.message}` };
+      return { generating: false, version: BROWSER_MODE_VERSION };
     }
   });
 
@@ -364,17 +338,9 @@ function registerGrokIpcHandlers(getWebviewContents) {
 
         await new Promise(r => setTimeout(r, 100));
 
-        const preCopyCount = __countCopy();
-        const preReactionCount = __countReaction();
-        const preFollowUpCount = __countFollowUp();
-
         return {
           success: true,
           inputTag: input.tagName,
-          preCopyCount,
-          preReactionCount,
-          preFollowUpCount,
-          preMessageCount: preCopyCount,
         };
       })()`);
 
@@ -412,7 +378,7 @@ function registerGrokIpcHandlers(getWebviewContents) {
         }
       }
 
-      console.log(`${LOG} grok-send-prompt: success=${result.success}, inputTag=${result.inputTag || 'n/a'}, sendMethod=${result.sendMethod || 'n/a'}, baseline: copy=${result.preCopyCount}, reactions=${result.preReactionCount}, followUps=${result.preFollowUpCount}, error=${result.error || 'none'}`);
+      console.log(`${LOG} grok-send-prompt: success=${result.success}, inputTag=${result.inputTag || 'n/a'}, sendMethod=${result.sendMethod || 'n/a'}, error=${result.error || 'none'}`);
       return result;
     } catch (err) {
       console.error(`${LOG} grok-send-prompt error:`, err.message);

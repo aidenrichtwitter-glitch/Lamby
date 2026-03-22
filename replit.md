@@ -121,9 +121,8 @@ supabase/
 - **Evolution sandbox**: `ensureEvolutionSandbox()` in `project-manager.ts` creates `evolution-sandbox` project via `duplicateProject()`. Browser-evolve writes to sandbox instead of main project.
 - **Grok 4 default**: Evolution cycles default to `grok-4` model. The model selector still lists all Grok models for interactive chat.
 - **Evolve button**: Clicking the Evolve button in GrokBridge's toolbar automatically runs a full evolution cycle via xAI API (Grok 4). Streams response into chat, applies code blocks, registers capabilities, saves next plan. No clipboard copy needed.
-- Readiness detection uses Grok's own UI signals (copy button, follow-ups, reaction buttons) — NOT message container counting. Stop button transition (was generating → now stopped) is logged but does NOT trigger extraction — only concrete new signals do. This prevents premature extraction during Grok's "Agents thinking" deep search mode (can last 10+ minutes).
-- Readiness is scoped per-prompt: `grok-send-prompt` snapshots baseline signal counts (copy buttons, reactions, follow-ups) before sending. `grok-check-response-ready` only triggers "ready" when signal counts INCREASE beyond that baseline — old responses from previous projects are ignored.
-- Manual send detection: A background watcher (3s interval) calls `grok-snapshot-baseline` to check if Grok is generating without the app having sent a prompt. If detected, it snapshots the baseline and starts the same polling loop to auto-capture and process the response.
+- Readiness detection: `grok-check-response-ready` only checks `__isGenerating()`. The polling loop tracks the generating→stopped transition. Once Grok stops generating, a 500ms delay lets the UI mount, then `grok-copy-last-response` extracts the text (clicks native copy button or falls back to DOM scrape). No signal counting needed.
+- Manual send detection: A background watcher (3s interval) calls `grok-check-response-ready` to check if Grok is generating without the app having sent a prompt. If detected, it starts a polling loop that waits for generation to stop, then extracts the response after a 500ms UI mount delay.
 
 ## Lamby Bridge Relay — SEPARATE APPLICATION
 The Bridge Relay is a **completely separate Replit application** — it is NOT part of this codebase and does NOT run here. The relay is deployed independently:

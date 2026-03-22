@@ -2795,14 +2795,8 @@ const GrokBridge: React.FC = () => {
     try {
       console.log('[BROWSER-MODE] Calling grok-send-prompt IPC...');
       const sendResult = await ipcWithTimeout(ipcRenderer, 'grok-send-prompt', prompt);
-      console.log(`[BROWSER-MODE] grok-send-prompt result: success=${sendResult.success}, baseline: msgs=${sendResult.preMessageCount}, copy=${sendResult.preCopyCount}, reactions=${sendResult.preReactionCount}, followUps=${sendResult.preFollowUpCount}, error=${sendResult.error || 'none'}`);
+      console.log(`[BROWSER-MODE] grok-send-prompt result: success=${sendResult.success}, error=${sendResult.error || 'none'}`);
       if (!sendResult.success) throw new Error(sendResult.error || 'Send failed');
-      const signalBaseline = {
-        preMessageCount: typeof sendResult.preMessageCount === 'number' ? sendResult.preMessageCount : 0,
-        preCopyCount: typeof sendResult.preCopyCount === 'number' ? sendResult.preCopyCount : 0,
-        preReactionCount: typeof sendResult.preReactionCount === 'number' ? sendResult.preReactionCount : 0,
-        preFollowUpCount: typeof sendResult.preFollowUpCount === 'number' ? sendResult.preFollowUpCount : 0,
-      };
       setStatusMessage(`${statusLabel} — waiting for Grok response...`);
       if (webviewPollRef.current) { clearTimeout(webviewPollRef.current); webviewPollRef.current = null; }
 
@@ -2861,32 +2855,27 @@ const GrokBridge: React.FC = () => {
             return;
           }
           try {
-            const state = await ipcWithTimeout(ipcRenderer, 'grok-check-response-ready', signalBaseline);
+            const state = await ipcWithTimeout(ipcRenderer, 'grok-check-response-ready');
             const ipcVersion = state.version || 'unknown';
-            const signalsInfo = state.signals || 'none';
-            console.log(`[BROWSER-MODE] Poll #${pollIndex}: ready=${state.ready}, generating=${state.generating}, signals="${signalsInfo}", stopDebug="${state.stopDebug || ''}", ipcVersion=${ipcVersion}, elapsed=${Math.floor(elapsed/1000)}s`);
+            console.log(`[BROWSER-MODE] Poll #${pollIndex}: generating=${state.generating}, ipcVersion=${ipcVersion}, elapsed=${Math.floor(elapsed/1000)}s`);
             if (ipcVersion !== 'unknown' && ipcVersion !== BROWSER_MODE_VERSION) {
               console.warn(`[BROWSER-MODE] VERSION MISMATCH: React=${BROWSER_MODE_VERSION}, Electron=${ipcVersion} — rebuild Electron!`);
-            }
-
-            if (state.ready) {
-              await handleReadyResponse();
-              return;
             }
 
             if (state.generating) {
               wasGenerating = true;
               const elapsedSec = Math.floor(elapsed / 1000);
-              const debugInfo = state.stopDebug ? ` [${state.stopDebug}]` : '';
               const versionTag = ipcVersion !== 'unknown' && ipcVersion !== BROWSER_MODE_VERSION ? ` VERSION MISMATCH (Electron:${ipcVersion})` : '';
-              setStatusMessage(`Grok is generating response... (${elapsedSec}s, next check in ${intervalLabel})${debugInfo}${versionTag}`);
-            } else if (wasGenerating && !state.generating) {
-              console.log('[BROWSER-MODE] Stop button transition detected (was generating, now stopped) — NOT extracting yet, waiting for concrete done signal');
-              const elapsedSec = Math.floor(elapsed / 1000);
-              setStatusMessage(`Grok may be finishing — waiting for confirmation signal... (${elapsedSec}s)`);
+              setStatusMessage(`Grok is generating response... (${elapsedSec}s)${versionTag}`);
+            } else if (wasGenerating) {
+              console.log('[BROWSER-MODE] Generation complete — waiting 500ms for UI to mount, then extracting...');
+              setStatusMessage('Response complete — extracting...');
+              await new Promise(r => setTimeout(r, 500));
+              await handleReadyResponse();
+              return;
             } else {
               const elapsedSec = Math.floor(elapsed / 1000);
-              setStatusMessage(`Waiting for NEW Grok signals... (${elapsedSec}s, current: ${signalsInfo})`);
+              setStatusMessage(`Waiting for Grok to start generating... (${elapsedSec}s)`);
             }
           } catch (pollErr: any) {
             console.error(`[BROWSER-MODE] Poll error: ${pollErr?.message}`);
@@ -2911,7 +2900,6 @@ const GrokBridge: React.FC = () => {
   }, [ipcWithTimeout]);
 
   const manualWatcherRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const manualWatchBaselineRef = useRef<{ preCopyCount: number; preReactionCount: number; preFollowUpCount: number } | null>(null);
 
   useEffect(() => {
     if (!isElectron) return;
@@ -2922,91 +2910,75 @@ const GrokBridge: React.FC = () => {
       if (operationLockRef.current || webviewPollRef.current) return;
 
       try {
-        const snap = await ipcWithTimeout(ipcRenderer, 'grok-snapshot-baseline');
-        if (!snap.success) return;
+        const state = await ipcWithTimeout(ipcRenderer, 'grok-check-response-ready');
+        if (!state.generating) return;
 
-        if (snap.generating) {
-          console.log(`[BROWSER-MODE] Manual send detected — Grok is generating! Snapshotting baseline and starting poll...`);
-          setStatusMessage('Manual Grok input detected — watching for response...');
-          operationLockRef.current = true;
-          manualWatchBaselineRef.current = {
-            preCopyCount: snap.preCopyCount || 0,
-            preReactionCount: snap.preReactionCount || 0,
-            preFollowUpCount: snap.preFollowUpCount || 0,
-          };
-          const signalBaseline = manualWatchBaselineRef.current;
+        console.log(`[BROWSER-MODE] Manual send detected — Grok is generating! Starting poll...`);
+        setStatusMessage('Manual Grok input detected — watching for response...');
+        operationLockRef.current = true;
 
-          const BACKOFF_INTERVALS = [2000, 3000, 4500, 7000, 10000, 15000];
-          const MAX_ELAPSED_MS = 15 * 60 * 1000;
-          const startTime = Date.now();
-          let pollIndex = 0;
-          let wasGenerating = true;
+        const BACKOFF_INTERVALS = [2000, 3000, 4500, 7000, 10000, 15000];
+        const MAX_ELAPSED_MS = 15 * 60 * 1000;
+        const startTime = Date.now();
+        let pollIndex = 0;
 
-          const handleReadyResponse = async () => {
-            console.log('[BROWSER-MODE][MANUAL] Response READY — extracting...');
-            try {
-              const extractResult = await ipcWithTimeout(ipcRenderer, 'grok-copy-last-response');
-              console.log(`[BROWSER-MODE][MANUAL] grok-copy-last-response: success=${extractResult.success}, textLen=${extractResult.text ? extractResult.text.length : 0}`);
-              if (extractResult.success && extractResult.text) {
-                setStatusMessage(`Manual Grok response captured (${extractResult.text.length} chars) — processing...`);
-                lastFullResponseRef.current = extractResult.text;
-                if (injectExtractorTextRef.current) {
-                  injectExtractorTextRef.current(extractResult.text);
-                }
-                if (processWebviewResponseRef.current) {
-                  processWebviewResponseRef.current(extractResult.text);
-                }
-              } else {
-                setStatusMessage(`Could not extract manual response: ${extractResult.error || 'unknown'}`);
+        const handleReadyResponse = async () => {
+          console.log('[BROWSER-MODE][MANUAL] Response READY — extracting...');
+          try {
+            const extractResult = await ipcWithTimeout(ipcRenderer, 'grok-copy-last-response');
+            console.log(`[BROWSER-MODE][MANUAL] grok-copy-last-response: success=${extractResult.success}, textLen=${extractResult.text ? extractResult.text.length : 0}`);
+            if (extractResult.success && extractResult.text) {
+              setStatusMessage(`Manual Grok response captured (${extractResult.text.length} chars) — processing...`);
+              lastFullResponseRef.current = extractResult.text;
+              if (injectExtractorTextRef.current) {
+                injectExtractorTextRef.current(extractResult.text);
               }
-            } catch (err: any) {
-              console.error(`[BROWSER-MODE][MANUAL] Extraction error: ${err?.message}`);
-              setStatusMessage(`Manual response extraction failed: ${err?.message || 'unknown'}`);
+              if (processWebviewResponseRef.current) {
+                processWebviewResponseRef.current(extractResult.text);
+              }
+            } else {
+              setStatusMessage(`Could not extract manual response: ${extractResult.error || 'unknown'}`);
             }
-            operationLockRef.current = false;
-          };
+          } catch (err: any) {
+            console.error(`[BROWSER-MODE][MANUAL] Extraction error: ${err?.message}`);
+            setStatusMessage(`Manual response extraction failed: ${err?.message || 'unknown'}`);
+          }
+          operationLockRef.current = false;
+        };
 
-          const schedulePoll = () => {
-            const delay = BACKOFF_INTERVALS[Math.min(pollIndex, BACKOFF_INTERVALS.length - 1)];
-            webviewPollRef.current = setTimeout(async () => {
-              webviewPollRef.current = null;
-              const elapsed = Date.now() - startTime;
-              if (elapsed > MAX_ELAPSED_MS) {
-                console.log('[BROWSER-MODE][MANUAL] TIMEOUT: 15min elapsed');
-                setStatusMessage('Manual Grok response timed out after 15 min');
-                operationLockRef.current = false;
+        const schedulePoll = () => {
+          const delay = BACKOFF_INTERVALS[Math.min(pollIndex, BACKOFF_INTERVALS.length - 1)];
+          webviewPollRef.current = setTimeout(async () => {
+            webviewPollRef.current = null;
+            const elapsed = Date.now() - startTime;
+            if (elapsed > MAX_ELAPSED_MS) {
+              console.log('[BROWSER-MODE][MANUAL] TIMEOUT: 15min elapsed');
+              setStatusMessage('Manual Grok response timed out after 15 min');
+              operationLockRef.current = false;
+              return;
+            }
+            try {
+              const pollState = await ipcWithTimeout(ipcRenderer, 'grok-check-response-ready');
+              console.log(`[BROWSER-MODE][MANUAL] Poll #${pollIndex}: generating=${pollState.generating}, elapsed=${Math.floor(elapsed/1000)}s`);
+
+              if (!pollState.generating) {
+                console.log('[BROWSER-MODE][MANUAL] Generation complete — waiting 500ms for UI to mount, then extracting...');
+                setStatusMessage('Response complete — extracting...');
+                await new Promise(r => setTimeout(r, 500));
+                await handleReadyResponse();
                 return;
               }
-              try {
-                const state = await ipcWithTimeout(ipcRenderer, 'grok-check-response-ready', signalBaseline);
-                const signalsInfo = state.signals || 'none';
-                console.log(`[BROWSER-MODE][MANUAL] Poll #${pollIndex}: ready=${state.ready}, generating=${state.generating}, signals="${signalsInfo}", elapsed=${Math.floor(elapsed/1000)}s`);
 
-                if (state.ready) {
-                  await handleReadyResponse();
-                  return;
-                }
-
-                if (state.generating) {
-                  wasGenerating = true;
-                  const elapsedSec = Math.floor(elapsed / 1000);
-                  setStatusMessage(`Watching manual Grok response... (${elapsedSec}s)`);
-                } else if (wasGenerating) {
-                  const elapsedSec = Math.floor(elapsed / 1000);
-                  setStatusMessage(`Grok may be finishing — waiting for confirmation... (${elapsedSec}s)`);
-                } else {
-                  const elapsedSec = Math.floor(elapsed / 1000);
-                  setStatusMessage(`Waiting for manual Grok signals... (${elapsedSec}s, ${signalsInfo})`);
-                }
-              } catch (pollErr: any) {
-                console.error(`[BROWSER-MODE][MANUAL] Poll error: ${pollErr?.message}`);
-              }
-              pollIndex++;
-              schedulePoll();
-            }, delay);
-          };
-          schedulePoll();
-        }
+              const elapsedSec = Math.floor(elapsed / 1000);
+              setStatusMessage(`Watching manual Grok response... (${elapsedSec}s)`);
+            } catch (pollErr: any) {
+              console.error(`[BROWSER-MODE][MANUAL] Poll error: ${pollErr?.message}`);
+            }
+            pollIndex++;
+            schedulePoll();
+          }, delay);
+        };
+        schedulePoll();
       } catch {}
     }, WATCH_INTERVAL);
 
@@ -3044,38 +3016,32 @@ const GrokBridge: React.FC = () => {
               return;
             }
 
-            const signalBaseline = {
-              preCopyCount: sendResult.preCopyCount ?? sendResult.signalBaseline?.copyButtons ?? 0,
-              preReactionCount: sendResult.preReactionCount ?? sendResult.signalBaseline?.reactionButtons ?? 0,
-              preFollowUpCount: sendResult.preFollowUpCount ?? sendResult.signalBaseline?.followUpButtons ?? 0,
-            };
-            console.log('[BROWSER-AUTOMATION] Signal baseline from send:', JSON.stringify(signalBaseline));
-
-            const pollForReady = async () => {
-              const POLL_INTERVAL = 3000;
-              const poll = async () => {
-                if (resolved) return;
-                try {
-                  const ready = await ipc.invoke('grok-check-response-ready', signalBaseline);
-                  console.log(`[BROWSER-AUTOMATION] Poll: ready=${ready?.ready}, generating=${ready?.generating}, signals=${JSON.stringify(ready?.signals || {})}`);
-                  if (ready?.ready) {
-                    const extracted = await ipc.invoke('grok-extract-response');
-                    if (extracted?.text && !resolved) {
-                      resolved = true;
-                      clearTimeout(timeout);
-                      console.log(`[BROWSER-AUTOMATION] Captured response: ${extracted.text.length} chars`);
-                      resolve({ success: true, responseText: extracted.text });
-                      return;
-                    }
+            let wasGenerating = false;
+            const POLL_INTERVAL = 3000;
+            const poll = async () => {
+              if (resolved) return;
+              try {
+                const state = await ipc.invoke('grok-check-response-ready');
+                console.log(`[BROWSER-AUTOMATION] Poll: generating=${state?.generating}, wasGenerating=${wasGenerating}`);
+                if (state?.generating) {
+                  wasGenerating = true;
+                } else if (wasGenerating) {
+                  await new Promise(r => setTimeout(r, 500));
+                  const extracted = await ipc.invoke('grok-extract-response');
+                  if (extracted?.text && !resolved) {
+                    resolved = true;
+                    clearTimeout(timeout);
+                    console.log(`[BROWSER-AUTOMATION] Captured response: ${extracted.text.length} chars`);
+                    resolve({ success: true, responseText: extracted.text });
+                    return;
                   }
-                } catch (e) {
-                  console.log('[BROWSER-AUTOMATION] Poll error:', e);
                 }
-                if (!resolved) setTimeout(poll, POLL_INTERVAL);
-              };
-              poll();
+              } catch (e) {
+                console.log('[BROWSER-AUTOMATION] Poll error:', e);
+              }
+              if (!resolved) setTimeout(poll, POLL_INTERVAL);
             };
-            pollForReady();
+            poll();
           } catch (err: any) {
             if (!resolved) {
               resolved = true;
