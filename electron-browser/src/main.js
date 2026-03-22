@@ -99,11 +99,17 @@ function createWindow() {
     title: 'Lamby',
   });
 
-  mainWindow.loadURL(`http://localhost:${VITE_PORT}`);
+  if (app.isPackaged) {
+    const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
+    log(`Packaged mode — loading ${indexPath}`);
+    mainWindow.loadFile(indexPath);
+  } else {
+    log(`Dev mode — loading http://localhost:${VITE_PORT}`);
+    mainWindow.loadURL(`http://localhost:${VITE_PORT}`);
+  }
 
   mainWindow.on('closed', () => { mainWindow = null; });
 
-  log(`Window created, loading http://localhost:${VITE_PORT}`);
   log(`BROWSER_MODE_VERSION: ${BROWSER_MODE_VERSION}`);
 }
 
