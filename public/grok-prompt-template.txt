@@ -268,7 +268,7 @@ Now verify everything. BE HONEST — report exact numbers from grok-read respons
 
 4b. VERIFY App.tsx (1 call):
     GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/App.tsx
-    - Contains "import { Metrics }" or "import { Metrics }"? (yes/no)
+    - Contains "import { Metrics }"? (yes/no)
     - Contains "metrics: Metrics" or "metrics:" in PAGES map? (yes/no)
     - Actual character count? (report the real number — should be >900)
     → If broken: rewrite with grok-create again.
