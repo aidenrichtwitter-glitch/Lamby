@@ -190,6 +190,7 @@ function registerGrokIpcHandlers(getWebviewContents) {
         ready,
         generating: result.generating,
         signals: signals.join(', ') || `copy=${result.copyCount}/${preCopy}, react=${result.reactionCount}/${preReaction}, follow=${result.followUpCount}/${preFollowUp}`,
+        stopDebug: `generating=${result.generating}`,
         version: BROWSER_MODE_VERSION,
       };
     } catch (err) {
