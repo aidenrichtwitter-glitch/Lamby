@@ -339,7 +339,8 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   const relayBase = relayBaseMatch ? relayBaseMatch[1] : 'https://bridge-relay.replit.app';
 
   let section = '\n=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS — USE IT) ===\n';
-  section += `You are Grok-4 working inside Lamby with full bridge-relay access. Your ONLY web tool is browse_page (GET-only).\n\n`;
+  section += `You are Grok-4 working inside Lamby with full bridge-relay access. Your ONLY web tool is browse_page (GET-only).\n`;
+  section += `DO NOT expect file contents in this prompt. Use the Smart Bridge endpoints below to read files yourself.\n\n`;
   section += `CRITICAL PATIENCE PROTOCOL (MANDATORY — APPLY EVERY TIME):\n`;
   section += `- Desktop connections and Vite dev server reloads take 5–20 seconds. You MUST wait a full 15 seconds after ANY edit (grok-edit, grok-write, or grok-proxy) before taking a screenshot or performing the next action.\n`;
   section += `- Never perform an edit and a screenshot in the same logical step or rapid succession. Always do: edit → wait 15s → screenshot.\n`;
@@ -347,7 +348,7 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `- If you rush or ignore the 15-second wait, the preview may still be loading and changes will appear broken. Slow down every time.\n\n`;
 
   if (!bridgeOnline) {
-    section += `⚠ WARNING: The desktop app may be temporarily offline — API calls might fail until it reconnects. If calls fail, fall back to // file: blocks.\n\n`;
+    section += `⚠ WARNING: The desktop app may be temporarily offline — API calls might fail until it reconnects. If calls fail, fall back to // file: blocks (see OUTPUT FORMAT section below).\n\n`;
   }
 
   section += `DISCOVERY — CALL FIRST (confirms all endpoints are live + gives you ready-to-use URLs):\n`;
@@ -540,10 +541,10 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `  10. POST status to /api/coord for feedback: ?note=Done: updated styles&from=grok\n\n`;
 
   section += `IMPORTANT RULES:\n`;
-  section += `  - ALWAYS use browse_page on these URLs to make changes. Do NOT just show code in your response.\n`;
+  section += `  - ALWAYS use browse_page on these URLs to read files and make changes. For LARGE files that exceed bridge write limits, output // file: blocks in your response instead — Lamby auto-applies them (see OUTPUT FORMAT section below).\n`;
   section += `  - ALL endpoints are GET-based. Do NOT attempt POST requests.\n`;
   section += `  - Prefer smart endpoints (grok-read, grok-write, grok-create, grok-delete, grok-tree) over grok-proxy — they're simpler and don't need any encoding beyond URL-encoding.\n`;
-  section += `  - Browse the snapshot or use grok-macro/project-status FIRST to understand the current state before making changes.\n`;
+  section += `  - Use grok-macro/project-status FIRST to understand the current state before making changes.\n`;
   section += `  - For creating/overwriting files: use grok-create (simple GET). For editing: use grok-write. For deleting: use grok-delete. Only use grok-proxy for console errors or batched operations.\n`;
   section += `  - After making visual changes, take a screenshot_preview and share the screenshotUrl with the user.\n`;
   section += `  - ENFORCE PATIENCE: Wait 15 seconds after every edit before screenshot or next action. Never work faster than the computer can respond.\n`;
@@ -4691,33 +4692,12 @@ const GrokBridge: React.FC = () => {
 
       const task = taskOverride || userTask || '';
 
-      if (ctxBridgeOnline && ctxCmdUrl && activeProject) {
-        const relayBase = ctxSnapUrl.replace(/\/api\/snapshot\/.*$/, '');
-        let templateText = customPromptTemplate.trim();
-        if (!templateText) {
-          try {
-            const res = await fetch('/grok-prompt-template.txt');
-            if (res.ok) templateText = await res.text();
-          } catch {}
-        }
-        if (templateText) {
-          const taskLine = task ? `Primary task right now: ${task}` : '';
-          const projName = customPromptTemplate.trim() ? activeProject : DESKTOP_PROJECT;
-          const result = templateText
-            .replace(/\{\{PROJECT\}\}/gi, projName)
-            .replace(/\{\{RELAY_BASE\}\}/gi, relayBase)
-            .replace(/\{\{TASK\}\}/gi, taskLine);
-          setProjectContext(result);
-          setContextLoading(false);
-          return result;
-        }
-      }
-
       if (customPromptTemplate.trim()) {
+        const relayBase = (ctxBridgeOnline && ctxSnapUrl) ? ctxSnapUrl.replace(/\/api\/snapshot\/.*$/, '') : '';
         const result = customPromptTemplate
           .replace(/\{\{PROJECT\}\}/gi, activeProject || '')
           .replace(/\{\{TASK\}\}/gi, task)
-          .replace(/\{\{RELAY_BASE\}\}/gi, '');
+          .replace(/\{\{RELAY_BASE\}\}/gi, relayBase);
         setProjectContext(result);
         setContextLoading(false);
         return result;
@@ -4770,16 +4750,17 @@ const GrokBridge: React.FC = () => {
       const fileBudget = CHARS_BUDGET - hostSection.length - 6000;
 
       let active = `=== ACTIVE PROJECT (BUILD THIS ONLY) ===\n`;
-      if (sandboxApiSection) {
-        active += sandboxApiSection + '\n';
-      }
       if (activeProject) {
         active += `Project name: ${activeProject}\n`;
         const historySummary = summarizeChatHistory(messages);
         if (historySummary) {
           active += `User description / goal: ${historySummary.replace(/=== CHAT HISTORY.*===\n/g, '').trim()}\n`;
         }
-        active += `Status: ${isEmptyProject ? 'Brand new empty project — only initial package.json exists.' : `Active project with ${sourceFiles.length} source files.`}\n`;
+        if (ctxBridgeOnline && ctxCmdUrl) {
+          active += `Status: ${isEmptyProject ? 'Brand new empty project — only initial package.json exists.' : `Active project — use bridge API below to read all files, tree, and project status.`}\n`;
+        } else {
+          active += `Status: ${isEmptyProject ? 'Brand new empty project — only initial package.json exists.' : `Active project with ${sourceFiles.length} source files.`}\n`;
+        }
         let projectDesc = '';
         try {
           const readmeTxt = await readProjectFile(activeProject, 'README.md').catch(() => '');
@@ -4814,11 +4795,15 @@ const GrokBridge: React.FC = () => {
         if (frameworkHint) {
           active += `Detected framework: ${frameworkHint} (based on package.json — for your awareness, not a restriction)\n`;
         }
-        active += `\nCurrent file tree:\n`;
-        for (const fp of flatPaths.slice(0, 80)) active += `- ${fp}\n`;
-        if (flatPaths.length > 80) active += `... (${flatPaths.length} total files)\n`;
-        active += `\n`;
-        if (pkgJsonRaw && !(ctxBridgeOnline && ctxCmdUrl)) active += `package.json:\n${pkgJsonRaw.slice(0, 3000)}\n\n`;
+        if (!(ctxBridgeOnline && ctxCmdUrl)) {
+          active += `\nCurrent file tree:\n`;
+          for (const fp of flatPaths.slice(0, 80)) active += `- ${fp}\n`;
+          if (flatPaths.length > 80) active += `... (${flatPaths.length} total files)\n`;
+          active += `\n`;
+          if (pkgJsonRaw) active += `package.json:\n${pkgJsonRaw.slice(0, 3000)}\n\n`;
+        } else {
+          active += `\n`;
+        }
       } else {
         active += `Project: Lamby — the IDE itself\nThis is the main app source code.\n\n`;
       }
@@ -4853,57 +4838,14 @@ const GrokBridge: React.FC = () => {
         active += `Respond to the user's request below. Check current files, plan minimal changes, output code.\n\n`;
       }
 
-      active += `=== OUTPUT RULES (FOLLOW EXACTLY — THESE ARE HOW GUARDIAN APPLIES YOUR CODE) ===\n`;
-      if (hasSourceFiles || !activeProject) {
-        active += `PREFER STRUCTURED FORMAT: Always use the // file: headers, DEPENDENCIES block, and COMMANDS block whenever possible.\n`;
-        active += `If you need to explain, do it in normal text BEFORE the structured blocks. Never bury code inside paragraphs.\n\n`;
-        active += `FORMAT FOR CODE CHANGES — put a // file: header immediately before each fenced code block:\n`;
-        active += `// file: src/components/App.tsx\n`;
-        active += `\`\`\`tsx\n`;
-        active += `[full file content here]\n`;
-        active += `\`\`\`\n\n`;
-        active += `FORMAT FOR NEW DEPENDENCIES — use a structured block:\n`;
-        active += `=== DEPENDENCIES ===\n`;
-        active += `package-name\n`;
-        active += `dev: @types/whatever\n`;
-        active += `=== END_DEPENDENCIES ===\n\n`;
-        active += `FORMAT FOR SHELL COMMANDS — use a structured block:\n`;
-        active += `=== COMMANDS ===\n`;
-        active += `${detectedPm} run build\n`;
-        active += `npx prisma generate\n`;
-        active += `=== END_COMMANDS ===\n\n`;
-        active += `ALTERNATIVE FORMAT FOR SMALL EDITS — search/replace blocks (use when changing only a few lines in a large file):\n`;
-        active += `// file: src/components/App.tsx\n`;
-        active += `<<<<<<< SEARCH\n`;
-        active += `[exact old code to find]\n`;
-        active += `=======\n`;
-        active += `[new replacement code]\n`;
-        active += `>>>>>>> REPLACE\n\n`;
-        active += `RULES:\n`;
-        active += `1. Every code block MUST have a // file: header. No exceptions. Lamby auto-applies blocks with headers.\n`;
-        active += `2. For FULL replacement: provide COMPLETE file content. Do NOT use "// ... rest unchanged" or partial snippets.\n`;
-        active += `3. For SEARCH/REPLACE: the SEARCH section must match existing code EXACTLY (including whitespace). The REPLACE section is the new code.\n`;
-        active += `4. Only cite real, published npm packages — never invent package names.\n`;
-        active += `5. Keep explanations brief BEFORE the code blocks. Focus on what changed and why.\n`;
-        active += `6. Do NOT wrap code in narrative like "here's what your file should look like". Just use the // file: header directly.\n`;
-        active += `7. If multiple files need changes, output multiple // file: blocks in sequence.\n`;
-        active += `8. You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.\n`;
-        active += `If a "LAMBY WORKSPACE API" section appears above, use the bridge endpoints (grok-write, grok-create, grok-delete, grok-read, grok-search, grok-run, grok-git, etc.) for ALL file operations. Bridge is the fastest path.\n`;
-        active += `For LARGE files that exceed bridge write limits, fall back to // file: blocks above — Lamby auto-applies them. Both methods work; bridge is preferred, // file: blocks are the fallback for big content.\n\n`;
-      } else {
-        active += `1. Only cite real, published npm packages — never invent package names.\n`;
-        active += `2. Suggest a GitHub repo URL instead of writing code from scratch.\n\n`;
+      if (sandboxApiSection) {
+        active += sandboxApiSection + '\n';
       }
 
       let remaining = fileBudget - active.length;
       const fileContents: { path: string; content: string; priority: number }[] = [];
 
-      if (ctxBridgeOnline && ctxCmdUrl) {
-        active += `\nIMPORTANT: DO NOT expect file contents in this prompt. Use the Smart Bridge endpoints above to read files yourself.\n`;
-        active += `Start by calling /api/diag to confirm the bridge is live, then use grok-macro/project-status for a full overview.\n`;
-        active += `Use grok-read to read individual files and grok-search to find code. No base64 encoding needed.\n`;
-        active += `File contents are NOT included here because you have full API access to read them on-demand.\n\n`;
-      } else {
+      if (!(ctxBridgeOnline && ctxCmdUrl)) {
       if (toasterAvailability?.available && activeProject && (lastErrors || errorLogs.length > 0)) {
         try {
           setToasterLoading(true);
@@ -4985,6 +4927,51 @@ const GrokBridge: React.FC = () => {
           active += block;
           remaining -= block.length;
         }
+      }
+
+      active += `=== OUTPUT FORMAT FOR LARGE FILES & BRIDGE FALLBACK (FOLLOW EXACTLY — THESE ARE HOW LAMBY APPLIES YOUR CODE) ===\n`;
+      if (hasSourceFiles || !activeProject) {
+        if (ctxBridgeOnline && ctxCmdUrl) {
+          active += `When bridge grok-write/grok-create fails or the file is too large for a single bridge call, use this format.\n`;
+        } else {
+          active += `PREFER STRUCTURED FORMAT: Always use the // file: headers, DEPENDENCIES block, and COMMANDS block whenever possible.\n`;
+        }
+        active += `Lamby auto-applies any response that follows these rules. Explain briefly BEFORE the blocks, never bury code in paragraphs.\n\n`;
+        active += `FORMAT FOR CODE CHANGES — put a // file: header immediately BEFORE each fenced code block:\n`;
+        active += `// file: src/components/App.tsx\n`;
+        active += `\`\`\`tsx\n`;
+        active += `[full file content here]\n`;
+        active += `\`\`\`\n\n`;
+        active += `FORMAT FOR NEW DEPENDENCIES — use a structured block:\n`;
+        active += `=== DEPENDENCIES ===\n`;
+        active += `package-name\n`;
+        active += `dev: @types/whatever\n`;
+        active += `=== END_DEPENDENCIES ===\n\n`;
+        active += `FORMAT FOR SHELL COMMANDS — use a structured block:\n`;
+        active += `=== COMMANDS ===\n`;
+        active += `${detectedPm} run build\n`;
+        active += `npx prisma generate\n`;
+        active += `=== END_COMMANDS ===\n\n`;
+        active += `ALTERNATIVE FORMAT FOR SMALL EDITS — search/replace blocks (use when changing only a few lines in a large file):\n`;
+        active += `// file: src/components/App.tsx\n`;
+        active += `<<<<<<< SEARCH\n`;
+        active += `[exact old code to find]\n`;
+        active += `=======\n`;
+        active += `[new replacement code]\n`;
+        active += `>>>>>>> REPLACE\n\n`;
+        active += `RULES:\n`;
+        active += `1. Every code block MUST have a // file: header OUTSIDE and BEFORE the fenced code block. No exceptions. Lamby auto-applies blocks with headers.\n`;
+        active += `2. For FULL replacement: provide COMPLETE file content. Do NOT use "// ... rest unchanged" or partial snippets.\n`;
+        active += `3. For SEARCH/REPLACE: the SEARCH section must match existing code EXACTLY (including whitespace). The REPLACE section is the new code.\n`;
+        active += `4. Only cite real, published npm packages — never invent package names.\n`;
+        active += `5. Keep explanations brief BEFORE the code blocks. Focus on what changed and why.\n`;
+        active += `6. Do NOT wrap code in narrative like "here's what your file should look like". Just use the // file: header directly.\n`;
+        active += `7. If multiple files need changes, output multiple // file: blocks in sequence.\n`;
+        active += `8. You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.\n`;
+        active += `=== END OUTPUT FORMAT ===\n\n`;
+      } else {
+        active += `1. Only cite real, published npm packages — never invent package names.\n`;
+        active += `2. Suggest a GitHub repo URL instead of writing code from scratch.\n\n`;
       }
 
       const context = active + hostSection;

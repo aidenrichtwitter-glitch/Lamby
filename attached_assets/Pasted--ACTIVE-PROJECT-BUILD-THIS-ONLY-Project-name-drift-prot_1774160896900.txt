@@ -1,0 +1,1230 @@
+=== ACTIVE PROJECT (BUILD THIS ONLY) ===
+Project name: drift-protocol-dev-sol-perp-trading
+Status: Active project with 30 source files.
+Detected framework: react (based on package.json — for your awareness, not a restriction)
+Current file tree:
+- path/to/file.tsx
+- public/logo.png
+- src/app/app-routes.tsx
+- src/app/app.tsx
+- src/app/favicon.ico
+- src/assets/react.svg
+- src/components/account/account-data-access.tsx
+- src/components/account/account-detail-feature.tsx
+- src/components/account/account-list-feature.tsx
+- src/components/account/account-ui.tsx
+- src/components/basic/basic-data-access.tsx
+- src/components/basic/basic-feature.tsx
+- src/components/basic/basic-ui.tsx
+- src/components/cluster/cluster-data-access.tsx
+- src/components/cluster/cluster-feature.tsx
+- src/components/cluster/cluster-ui.tsx
+- src/components/dashboard/dashboard-feature.tsx
+- src/components/solana/solana-provider.tsx
+- src/components/ui/ui-layout.tsx
+- src/components/WalletConnectButton.tsx
+- src/hooks/useDriftClient.ts
+- src/lib/driftConfig.ts
+- src/App.tsx
+- src/index.css
+- src/main.tsx
+- src/vite-env.d.ts
+- package.json
+- pnpm-lock.yaml
+- postcss.config.mjs
+- README.md
+- tailwind.config.ts
+- tsconfig.app.json
+- tsconfig.json
+- tsconfig.node.json
+- vite.config.ts
+package.json:
+{
+  "name": "template-react-vite-tailwind-counter",
+  "description": "React + Vite + Tailwind + Anchor Counter program",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "anchor": "cd anchor && anchor",
+    "anchor-build": "cd anchor && anchor build",
+    "anchor-localnet": "cd anchor && anchor localnet",
+    "anchor-test": "cd anchor && anchor test",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.30.1",
+    "@drift-labs/sdk": "2.160.0-beta.1",
+    "@solana/spl-token": "0.4.9",
+    "@solana/wallet-adapter-base": "0.9.23",
+    "@solana/wallet-adapter-react": "0.15.35",
+    "@solana/wallet-adapter-react-ui": "0.9.35",
+    "@solana/wallet-adapter-wallets": "^0.19.37",
+    "@solana/web3.js": "1.98.0",
+    "@tabler/icons-react": "^3.15.0",
+    "@tanstack/react-query": "^5.55.2",
+    "@walletconnect/modal": "^2.7.0",
+    "bs58": "^6.0.0",
+    "daisyui": "^4.12.10",
+    "jotai": "^2.9.3",
+    "lightweight-charts": "^5.1.0",
+    "lucide-react": "^0.577.0",
+    "node-stdlib-browser": "^1.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-hot-toast": "^2.4.1",
+    "react-router": "^6.26.1",
+    "react-router-dom": "^6.26.1",
+    "tailwindcss": "^3.4.10"
+  },
+  "devDependencies": {
+    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@eslint/js": "^9.9.0",
+    "@types/jest": "^29.5.13",
+    "@types/node": "^25.5.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "esbuild": "0.21.5",
+    "eslint": "^9.9.0",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "^0.4.9",
+    "globals": "^15.9.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.3.3",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.5.3",
+    "typescript-eslint": "^8.0.1",
+    "vite": "^5.4.1",
+    "vite-plugin-node-polyfills": "^0.22.0",
+    "vite-tsconfig-paths": "^5.0.1"
+  },
+  "create-solana-dapp": {
+    "instructions": [
+      "Run Anchor commands:",
+      "+{pm} run anchor build | test | localnet | deploy"
+    ],
+    "rename": {
+      "scaffold": {
+        "to": "{{name}}",
+        "paths": [
+          "src"
+        ]
+      }
+    },
+    "versions": {
+      "anchor": "0.30.1",
+      "solana": "1.18.0"
+    }
+  }
+}
+Primary task right now: Respond to the user's request below. Check current files, plan minimal changes, output code.
+=== OUTPUT RULES (FOLLOW EXACTLY — THESE ARE HOW GUARDIAN APPLIES YOUR CODE) ===
+PREFER STRUCTURED FORMAT: Always use the // file: headers, DEPENDENCIES block, and COMMANDS block whenever possible.
+If you need to explain, do it in normal text BEFORE the structured blocks. Never bury code inside paragraphs.
+FORMAT FOR CODE CHANGES — put a // file: header immediately before each fenced code block:
+// file: src/components/App.tsx
+```tsx
+[full file content here]
+```
+FORMAT FOR NEW DEPENDENCIES — use a structured block:
+=== DEPENDENCIES ===
+package-name
+dev: @types/whatever
+=== END_DEPENDENCIES ===
+FORMAT FOR SHELL COMMANDS — use a structured block:
+=== COMMANDS ===
+pnpm run build
+npx prisma generate
+=== END_COMMANDS ===
+ALTERNATIVE FORMAT FOR SMALL EDITS — search/replace blocks (use when changing only a few lines in a large file):
+// file: src/components/App.tsx
+<<<<<<< SEARCH
+[exact old code to find]
+=======
+[new replacement code]
+>>>>>>> REPLACE
+RULES:
+1. Every code block MUST have a // file: header. No exceptions. Lamby auto-applies blocks with headers.
+2. For FULL replacement: provide COMPLETE file content. Do NOT use "// ... rest unchanged" or partial snippets.
+3. For SEARCH/REPLACE: the SEARCH section must match existing code EXACTLY (including whitespace). The REPLACE section is the new code.
+4. Only cite real, published npm packages — never invent package names.
+5. Keep explanations brief BEFORE the code blocks. Focus on what changed and why.
+6. Do NOT wrap code in narrative like "here's what your file should look like". Just use the // file: header directly.
+7. If multiple files need changes, output multiple // file: blocks in sequence.
+8. You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.
+path/to/file.tsx:
+// corrected content
+src/app/app-routes.tsx:
+import { UiLayout } from '@/components/ui/ui-layout'
+import { lazy } from 'react'
+import { Navigate, RouteObject, useRoutes } from 'react-router-dom'
+const AccountListFeature = lazy(() => import('../components/account/account-list-feature'))
+const AccountDetailFeature = lazy(() => import('../components/account/account-detail-feature'))
+const ClusterFeature = lazy(() => import('../components/cluster/cluster-feature'))
+const BasicFeature = lazy(() => import('../components/basic/basic-feature'))
+const DashboardFeature = lazy(() => import('../components/dashboard/dashboard-feature'))
+const links: { label: string; path: string }[] = [
+  { label: 'Account', path: '/account' },
+  { label: 'Clusters', path: '/clusters' },
+  { label: 'Basic Program', path: '/basic' },
+]
+const routes: RouteObject[] = [
+  { path: '/account/', element: <AccountListFeature /> },
+  { path: '/account/:address', element: <AccountDetailFeature /> },
+  { path: '/basic', element: <BasicFeature /> },
+  { path: '/clusters', element: <ClusterFeature /> },
+]
+export function AppRoutes() {
+  const router = useRoutes([
+    { index: true, element: <Navigate to={'/dashboard'} replace={true} /> },
+    { path: '/dashboard', element: <DashboardFeature /> },
+    ...routes,
+    { path: '*', element: <Navigate to={'/dashboard'} replace={true} /> },
+  ])
+  return <UiLayout links={links}>{router}</UiLayout>
+}
+src/app/app.tsx:
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ClusterProvider } from '../components/cluster/cluster-data-access'
+import { SolanaProvider } from '../components/solana/solana-provider'
+import { AppRoutes } from './app-routes'
+const client = new QueryClient()
+export function App() {
+  return (
+    <QueryClientProvider client={client}>
+      <ClusterProvider>
+        <SolanaProvider>
+          <AppRoutes />
+        </SolanaProvider>
+      </ClusterProvider>
+    </QueryClientProvider>
+  )
+}
+src/components/account/account-data-access.tsx:
+import { TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token'
+import { useConnection, useWallet } from '@solana/wallet-adapter-react'
+import {
+  Connection,
+  LAMPORTS_PER_SOL,
+  PublicKey,
+  SystemProgram,
+  TransactionMessage,
+  TransactionSignature,
+  VersionedTransaction,
+} from '@solana/web3.js'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { useTransactionToast } from '../ui/ui-layout'
+export function useGetBalance({ address }: { address: PublicKey }) {
+  const { connection } = useConnection()
+  return useQuery({
+    queryKey: ['get-balance', { endpoint: connection.rpcEndpoint, address }],
+    queryFn: () => connection.getBalance(address),
+  })
+}
+export function useGetSignatures({ address }: { address: PublicKey }) {
+  const { connection } = useConnection()
+  return useQuery({
+    queryKey: ['get-signatures', { endpoint: connection.rpcEndpoint, address }],
+    queryFn: () => connection.getSignaturesForAddress(address),
+  })
+}
+export function useGetTokenAccounts({ address }: { address: PublicKey }) {
+  const { connection } = useConnection()
+  return useQuery({
+    queryKey: ['get-token-accounts', { endpoint: connection.rpcEndpoint, address }],
+    queryFn: async () => {
+      const [tokenAccounts, token2022Accounts] = await Promise.all([
+        connection.getParsedTokenAccountsByOwner(address, {
+          programId: TOKEN_PROGRAM_ID,
+        }),
+        connection.getParsedTokenAccountsByOwner(address, {
+          programId: TOKEN_2022_PROGRAM_ID,
+        }),
+      ])
+      return [...tokenAccounts.value, ...token2022Accounts.value]
+    },
+  })
+}
+export function useTransferSol({ address }: { address: PublicKey }) {
+  const { connection } = useConnection()
+  const transactionToast = useTransactionToast()
+  const wallet = useWallet()
+  const client = useQueryClient()
+  return useMutation({
+    mutationKey: ['transfer-sol', { endpoint: connection.rpcEndpoint, address }],
+    mutationFn: async (input: { destination: PublicKey; amount: number }) => {
+      let signature: TransactionSignature = ''
+      try {
+        const { transaction, latestBlockhash } = await createTransaction({
+          publicKey: address,
+          destination: input.destination,
+          amount: input.amount,
+          connection,
+        })
+        // Send transaction and await for signature
+        signature = await wallet.sendTransaction(transaction, connection)
+        // Send transaction and await for signature
+        await connection.confirmTransaction({ signature, ...latestBlockhash }, 'confirmed')
+        console.log(signature)
+        return signature
+      } catch (error: unknown) {
+        console.log('error', `Transaction failed! ${error}`, signature)
+        return
+      }
+    },
+    onSuccess: (signature) => {
+      if (signature) {
+        transactionToast(signature)
+      }
+      return Promise.all([
+        client.invalidateQueries({
+          queryKey: ['get-balance', { endpoint: connection.rpcEndpoint, address }],
+        }),
+        client.invalidateQueries({
+          queryKey: ['get-signatures', { endpoint: connection.rpcEndpoint, address }],
+        }),
+      ])
+    },
+    onError: (error) => {
+      toast.error(`Transaction failed! ${error}`)
+    },
+  })
+}
+export function useRequestAirdrop({ address }: { address: PublicKey }) {
+  const { connection } = useConnection()
+  const transactionToast = useTransactionToast()
+  const client = useQueryClient()
+  return useMutation({
+    mutationKey: ['airdrop', { endpoint: connection.rpcEndpoint, address }],
+    mutationFn: async (amount: number = 1) => {
+      const [latestBlockhash, signature] = await Promise.all([
+        connection.getLatestBlockhash(),
+        connection.requestAirdrop(address, amount * LAMPORTS_PER_SOL),
+      ])
+      await connection.confirmTransaction({ signature, ...latestBlockhash }, 'confirmed')
+      return signature
+    },
+    onSuccess: (signature) => {
+      transactionToast(signature)
+      return Promise.all([
+        client.invalidateQueries({
+          queryKey: ['get-balance', { endpoint: connection.rpcEndpoint, address }],
+        }),
+        client.invalidateQueries({
+          queryKey: ['get-signatures', { endpoint: connection.rpcEndpoint, address }],
+        }),
+      ])
+    },
+  })
+}
+async function createTransaction({
+  publicKey,
+  destination,
+  amount,
+  connection,
+}: {
+  publicKey: PublicKey
+  destination: PublicKey
+  amount: number
+  connection: Connection
+}): Promise<{
+  transaction: VersionedTransaction
+  latestBlockhash: { blockhash: string; lastValidBlockHeight: number }
+}> {
+  // Get the latest blockhash to use in our transaction
+  const latestBlockhash = await connection.getLatestBlockhash()
+  // Create instructions to send, in this case a simple transfer
+  const instructions = [
+    SystemProgram.transfer({
+      fromPubkey: publicKey,
+      toPubkey: destination,
+      lamports: amount * LAMPORTS_PER_SOL,
+    }),
+  ]
+  // Create a new TransactionMessage with version and compile it to legacy
+  const messageLegacy = new TransactionMessage({
+    payerKey: publicKey,
+    recentBlockhash: latestBlockhash.blockhash,
+    instructions,
+  }).compileToLegacyMessage()
+  // Create a new VersionedTransaction which supports legacy and v0
+  const transaction = new VersionedTransaction(messageLegacy)
+  return {
+    transaction,
+    latestBlockhash,
+  }
+}
+src/components/account/account-detail-feature.tsx:
+import { PublicKey } from '@solana/web3.js'
+import { useMemo } from 'react'
+import { useParams } from 'react-router'
+import { ExplorerLink } from '../cluster/cluster-ui'
+import { AppHero, ellipsify } from '../ui/ui-layout'
+import { AccountBalance, AccountButtons, AccountTokens, AccountTransactions } from './account-ui'
+export default function AccountDetailFeature() {
+  const params = useParams() as { address?: string }
+  const address = useMemo(() => {
+    if (!params.address) {
+      return
+    }
+    try {
+      return new PublicKey(params.address)
+    } catch (e) {
+      console.log(`Invalid public key`, e)
+    }
+  }, [params])
+  if (!address) {
+    return <div>Error loading account</div>
+  }
+  return (
+    <div>
+      <AppHero
+        title={<AccountBalance address={address} />}
+        subtitle={
+          <div className="my-4">
+            <ExplorerLink path={`account/${address}`} label={ellipsify(address.toString())} />
+          </div>
+        }
+      >
+        <div className="my-4">
+          <AccountButtons address={address} />
+        </div>
+      </AppHero>
+      <div className="space-y-8">
+        <AccountTokens address={address} />
+        <AccountTransactions address={address} />
+      </div>
+    </div>
+  )
+}
+src/components/account/account-list-feature.tsx:
+import { useWallet } from '@solana/wallet-adapter-react'
+import { Navigate } from 'react-router'
+import { WalletButton } from '../solana/solana-provider'
+export default function AccountListFeature() {
+  const { publicKey } = useWallet()
+  if (publicKey) {
+    return <Navigate to={`/account/${publicKey.toString()}`} replace />
+  }
+  return (
+    <div className="hero py-[64px]">
+      <div className="hero-content text-center">
+        <WalletButton />
+      </div>
+    </div>
+  )
+}
+src/components/basic/basic-data-access.tsx:
+import { BASIC_PROGRAM_ID as programId, getBasicProgram } from '@project/anchor'
+import { useConnection } from '@solana/wallet-adapter-react'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { useCluster } from '../cluster/cluster-data-access'
+import { useAnchorProvider } from '../solana/solana-provider'
+import { useTransactionToast } from '../ui/ui-layout'
+export function useBasicProgram() {
+  const { connection } = useConnection()
+  const { cluster } = useCluster()
+  const transactionToast = useTransactionToast()
+  const provider = useAnchorProvider()
+  const program = getBasicProgram(provider)
+  const getProgramAccount = useQuery({
+    queryKey: ['get-program-account', { cluster }],
+    queryFn: () => connection.getParsedAccountInfo(programId),
+  })
+  const greet = useMutation({
+    mutationKey: ['basic', 'greet', { cluster }],
+    mutationFn: () => program.methods.greet().rpc(),
+    onSuccess: (signature) => {
+      transactionToast(signature)
+    },
+    onError: () => toast.error('Failed to run program'),
+  })
+  return {
+    program,
+    programId,
+    getProgramAccount,
+    greet,
+  }
+}
+src/components/basic/basic-feature.tsx:
+import { useWallet } from '@solana/wallet-adapter-react'
+import { ExplorerLink } from '../cluster/cluster-ui'
+import { WalletButton } from '../solana/solana-provider'
+import { AppHero, ellipsify } from '../ui/ui-layout'
+import { useBasicProgram } from './basic-data-access'
+import { BasicCreate, BasicProgram } from './basic-ui'
+export default function BasicFeature() {
+  const { publicKey } = useWallet()
+  const { programId } = useBasicProgram()
+  return publicKey ? (
+    <div>
+      <AppHero title="Basic" subtitle={'Run the program by clicking the "Run program" button.'}>
+        <p className="mb-6">
+          <ExplorerLink path={`account/${programId}`} label={ellipsify(programId.toString())} />
+        </p>
+        <BasicCreate />
+      </AppHero>
+      <BasicProgram />
+    </div>
+  ) : (
+    <div className="max-w-4xl mx-auto">
+      <div className="hero py-[64px]">
+        <div className="hero-content text-center">
+          <WalletButton className="btn btn-primary" />
+        </div>
+      </div>
+    </div>
+  )
+}
+src/components/basic/basic-ui.tsx:
+import { useBasicProgram } from './basic-data-access'
+export function BasicCreate() {
+  const { greet } = useBasicProgram()
+  return (
+    <button className="btn btn-xs lg:btn-md btn-primary" onClick={() => greet.mutateAsync()} disabled={greet.isPending}>
+      Run program{greet.isPending && '...'}
+    </button>
+  )
+}
+export function BasicProgram() {
+  const { getProgramAccount } = useBasicProgram()
+  if (getProgramAccount.isLoading) {
+    return <span className="loading loading-spinner loading-lg"></span>
+  }
+  if (!getProgramAccount.data?.value) {
+    return (
+      <div className="alert alert-info flex justify-center">
+        <span>Program account not found. Make sure you have deployed the program and are on the correct cluster.</span>
+      </div>
+    )
+  }
+  return (
+    <div className={'space-y-6'}>
+      <pre>{JSON.stringify(getProgramAccount.data.value, null, 2)}</pre>
+    </div>
+  )
+}
+src/components/cluster/cluster-data-access.tsx:
+import { clusterApiUrl, Connection } from '@solana/web3.js'
+import { atom, useAtomValue, useSetAtom } from 'jotai'
+import { atomWithStorage } from 'jotai/utils'
+import { createContext, ReactNode, useContext } from 'react'
+import toast from 'react-hot-toast'
+export interface Cluster {
+  name: string
+  endpoint: string
+  network?: ClusterNetwork
+  active?: boolean
+}
+export enum ClusterNetwork {
+  Mainnet = 'mainnet-beta',
+  Testnet = 'testnet',
+  Devnet = 'devnet',
+  Custom = 'custom',
+}
+// By default, we don't configure the mainnet-beta cluster
+// The endpoint provided by clusterApiUrl('mainnet-beta') does not allow access from the browser due to CORS restrictions
+// To use the mainnet-beta cluster, provide a custom endpoint
+export const defaultClusters: Cluster[] = [
+  {
+    name: 'devnet',
+    endpoint: clusterApiUrl('devnet'),
+    network: ClusterNetwork.Devnet,
+  },
+  { name: 'local', endpoint: 'http://localhost:8899' },
+  {
+    name: 'testnet',
+    endpoint: clusterApiUrl('testnet'),
+    network: ClusterNetwork.Testnet,
+  },
+]
+const clusterAtom = atomWithStorage<Cluster>('solana-cluster', defaultClusters[0])
+const clustersAtom = atomWithStorage<Cluster[]>('solana-clusters', defaultClusters)
+const activeClustersAtom = atom<Cluster[]>((get) => {
+  const clusters = get(clustersAtom)
+  const cluster = get(clusterAtom)
+  return clusters.map((item) => ({
+    ...item,
+    active: item.name === cluster.name,
+  }))
+})
+const activeClusterAtom = atom<Cluster>((get) => {
+  const clusters = get(activeClustersAtom)
+  return clusters.find((item) => item.active) || clusters[0]
+})
+export interface ClusterProviderContext {
+  cluster: Cluster
+  clusters: Cluster[]
+  addCluster: (cluster: Cluster) => void
+  deleteCluster: (cluster: Cluster) => void
+  setCluster: (cluster: Cluster) => void
+  getExplorerUrl(path: string): string
+}
+const Context = createContext<ClusterProviderContext>({} as ClusterProviderContext)
+export function ClusterProvider({ children }: { children: ReactNode }) {
+  const cluster = useAtomValue(activeClusterAtom)
+  const clusters = useAtomValue(activeClustersAtom)
+  const setCluster = useSetAtom(clusterAtom)
+  const setClusters = useSetAtom(clustersAtom)
+  const value: ClusterProviderContext = {
+    cluster,
+    clusters: clusters.sort((a, b) => (a.name > b.name ? 1 : -1)),
+    addCluster: (cluster: Cluster) => {
+      try {
+        new Connection(cluster.endpoint)
+        setClusters([...clusters, cluster])
+      } catch (err) {
+        toast.error(`${err}`)
+      }
+    },
+    deleteCluster: (cluster: Cluster) => {
+      setClusters(clusters.filter((item) => item.name !== cluster.name))
+    },
+    setCluster: (cluster: Cluster) => setCluster(cluster),
+    getExplorerUrl: (path: string) => `https://explorer.solana.com/${path}${getClusterUrlParam(cluster)}`,
+  }
+  return <Context.Provider value={value}>{children}</Context.Provider>
+}
+export function useCluster() {
+  return useContext(Context)
+}
+function getClusterUrlParam(cluster: Cluster): string {
+  let suffix = ''
+  switch (cluster.network) {
+    case ClusterNetwork.Devnet:
+      suffix = 'devnet'
+      break
+    case ClusterNetwork.Mainnet:
+      suffix = ''
+      break
+    case ClusterNetwork.Testnet:
+      suffix = 'testnet'
+      break
+    default:
+      suffix = `custom&customUrl=${encodeURIComponent(cluster.endpoint)}`
+      break
+  }
+  return suffix.length ? `?cluster=${suffix}` : ''
+}
+src/components/cluster/cluster-feature.tsx:
+import { useState } from 'react'
+import { AppHero } from '../ui/ui-layout'
+import { ClusterUiModal, ClusterUiTable } from './cluster-ui'
+export default function ClusterFeature() {
+  const [showModal, setShowModal] = useState(false)
+  return (
+    <div>
+      <AppHero title="Clusters" subtitle="Manage and select your Solana clusters">
+        <ClusterUiModal show={showModal} hideModal={() => setShowModal(false)} />
+        <button className="btn btn-xs lg:btn-md btn-primary" onClick={() => setShowModal(true)}>
+          Add Cluster
+        </button>
+      </AppHero>
+      <ClusterUiTable />
+    </div>
+  )
+}
+src/components/cluster/cluster-ui.tsx:
+import { useConnection } from '@solana/wallet-adapter-react'
+import { Connection } from '@solana/web3.js'
+import { IconTrash } from '@tabler/icons-react'
+import { useQuery } from '@tanstack/react-query'
+import { ReactNode, useState } from 'react'
+import { AppModal } from '../ui/ui-layout'
+import { ClusterNetwork, useCluster } from './cluster-data-access'
+export function ExplorerLink({ path, label, className }: { path: string; label: string; className?: string }) {
+  const { getExplorerUrl } = useCluster()
+  return (
+    <a
+      href={getExplorerUrl(path)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={className ? className : `link font-mono`}
+    >
+      {label}
+    </a>
+  )
+}
+export function ClusterChecker({ children }: { children: ReactNode }) {
+  const { cluster } = useCluster()
+  const { connection } = useConnection()
+  const query = useQuery({
+    queryKey: ['version', { cluster, endpoint: connection.rpcEndpoint }],
+    queryFn: () => connection.getVersion(),
+    retry: 1,
+  })
+  if (query.isLoading) {
+    return null
+  }
+  if (query.isError || !query.data) {
+    return (
+      <div className="alert alert-warning text-warning-content/80 rounded-none flex justify-center">
+        <span>
+          Error connecting to cluster <strong>{cluster.name}</strong>
+        </span>
+        <button className="btn btn-xs btn-neutral" onClick={() => query.refetch()}>
+          Refresh
+        </button>
+      </div>
+    )
+  }
+  return children
+}
+export function ClusterUiSelect() {
+  const { clusters, setCluster, cluster } = useCluster()
+  return (
+    <div className="dropdown dropdown-end">
+      <label tabIndex={0} className="btn btn-primary rounded-btn">
+        {cluster.name}
+      </label>
+      <ul tabIndex={0} className="menu dropdown-content z-[1] p-2 shadow bg-base-100 rounded-box w-52 mt-4">
+        {clusters.map((item) => (
+          <li key={item.name}>
+            <button
+              className={`btn btn-sm ${item.active ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => setCluster(item)}
+            >
+              {item.name}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+export function ClusterUiModal({ hideModal, show }: { hideModal: () => void; show: boolean }) {
+  const { addCluster } = useCluster()
+  const [name, setName] = useState('')
+  const [network, setNetwork] = useState<ClusterNetwork | undefined>()
+  const [endpoint, setEndpoint] = useState('')
+  return (
+    <AppModal
+      title={'Add Cluster'}
+      hide={hideModal}
+      show={show}
+      submit={() => {
+        try {
+          new Connection(endpoint)
+          if (name) {
+            addCluster({ name, network, endpoint })
+            hideModal()
+          } else {
+            console.log('Invalid cluster name')
+          }
+        } catch {
+          console.log('Invalid cluster endpoint')
+        }
+      }}
+      submitLabel="Save"
+    >
+      <input
+        type="text"
+        placeholder="Name"
+        className="input input-bordered w-full"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <input
+        type="text"
+        placeholder="Endpoint"
+        className="input input-bordered w-full"
+        value={endpoint}
+        onChange={(e) => setEndpoint(e.target.value)}
+      />
+      <select
+        className="select select-bordered w-full"
+        value={network}
+        onChange={(e) => setNetwork(e.target.value as ClusterNetwork)}
+      >
+        <option value={undefined}>Select a network</option>
+        <option value={ClusterNetwork.Devnet}>Devnet</option>
+        <option value={ClusterNetwork.Testnet}>Testnet</option>
+        <option value={ClusterNetwork.Mainnet}>Mainnet</option>
+      </select>
+    </AppModal>
+  )
+}
+export function ClusterUiTable() {
+  const { clusters, setCluster, deleteCluster } = useCluster()
+  return (
+    <div className="overflow-x-auto">
+      <table className="table border-4 border-separate border-base-300">
+        <thead>
+          <tr>
+            <th>Name/ Network / Endpoint</th>
+            <th className="text-center">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {clusters.map((item) => (
+            <tr key={item.name} className={item?.active ? 'bg-base-200' : ''}>
+              <td className="space-y-2">
+                <div className="whitespace-nowrap space-x-2">
+                  <span className="text-xl">
+                    {item?.active ? (
+                      item.name
+                    ) : (
+                      <button title="Select cluster" className="link link-secondary" onClick={() => setCluster(item)}>
+                        {item.name}
+                      </button>
+                    )}
+                  </span>
+                </div>
+                <span className="text-xs">Network: {item.network ?? 'custom'}</span>
+                <div className="whitespace-nowrap text-gray-500 text-xs">{item.endpoint}</div>
+              </td>
+              <td className="space-x-2 whitespace-nowrap text-center">
+                <button
+                  disabled={item?.active}
+                  className="btn btn-xs btn-default btn-outline"
+                  onClick={() => {
+                    if (!window.confirm('Are you sure?')) return
+                    deleteCluster(item)
+                  }}
+                >
+                  <IconTrash size={16} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+src/components/dashboard/dashboard-feature.tsx:
+import { AppHero } from '../ui/ui-layout'
+const links: { label: string; href: string }[] = [
+  { label: 'Solana Docs', href: 'https://docs.solana.com/' },
+  { label: 'Solana Faucet', href: 'https://faucet.solana.com/' },
+  { label: 'Solana Cookbook', href: 'https://solanacookbook.com/' },
+  { label: 'Solana Stack Overflow', href: 'https://solana.stackexchange.com/' },
+  { label: 'Solana Developers GitHub', href: 'https://github.com/solana-developers/' },
+]
+export default function DashboardFeature() {
+  return (
+    <div>
+      <AppHero title="gm" subtitle="Say hi to your new Solana dApp." />
+      <div className="max-w-xl mx-auto py-6 sm:px-6 lg:px-8 text-center">
+        <div className="space-y-2">
+          <p>Here are some helpful links to get you started.</p>
+          {links.map((link, index) => (
+            <div key={index}>
+              <a href={link.href} className="link" target="_blank" rel="noopener noreferrer">
+                {link.label}
+              </a>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+src/components/solana/solana-provider.tsx:
+import { AnchorProvider } from '@coral-xyz/anchor'
+import { WalletError } from '@solana/wallet-adapter-base'
+import {
+  AnchorWallet,
+  ConnectionProvider,
+  useConnection,
+  useWallet,
+  WalletProvider,
+} from '@solana/wallet-adapter-react'
+import { WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui'
+import { ReactNode, useCallback, useMemo } from 'react'
+import { useCluster } from '../cluster/cluster-data-access'
+import('@solana/wallet-adapter-react-ui/styles.css')
+export const WalletButton = WalletMultiButton
+export function SolanaProvider({ children }: { children: ReactNode }) {
+  const { cluster } = useCluster()
+  const endpoint = useMemo(() => cluster.endpoint, [cluster])
+  const onError = useCallback((error: WalletError) => {
+    console.error(error)
+  }, [])
+  return (
+    <ConnectionProvider endpoint={endpoint}>
+      <WalletProvider wallets={[]} onError={onError} autoConnect={true}>
+        <WalletModalProvider>{children}</WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
+  )
+}
+export function useAnchorProvider() {
+  const { connection } = useConnection()
+  const wallet = useWallet()
+  return new AnchorProvider(connection, wallet as AnchorWallet, { commitment: 'confirmed' })
+}
+src/components/ui/ui-layout.tsx:
+import { ReactNode, Suspense, useEffect, useRef } from 'react'
+import toast, { Toaster } from 'react-hot-toast'
+import { Link, useLocation } from 'react-router-dom'
+import { AccountChecker } from '../account/account-ui'
+import { ClusterChecker, ClusterUiSelect, ExplorerLink } from '../cluster/cluster-ui'
+import { WalletButton } from '../solana/solana-provider'
+export function UiLayout({ children, links }: { children: ReactNode; links: { label: string; path: string }[] }) {
+  const pathname = useLocation().pathname
+  return (
+    <div className="h-full flex flex-col">
+      <div className="navbar bg-base-300 dark:text-neutral-content flex-col md:flex-row space-y-2 md:space-y-0">
+        <div className="flex-1">
+          <Link className="btn btn-ghost normal-case text-xl" to="/">
+            Scaffold
+          </Link>
+          <ul className="menu menu-horizontal px-1 space-x-2">
+            {links.map(({ label, path }) => (
+              <li key={path}>
+                <Link className={pathname.startsWith(path) ? 'active' : ''} to={path}>
+                  {label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="flex-none space-x-2">
+          <WalletButton />
+          <ClusterUiSelect />
+        </div>
+      </div>
+      <ClusterChecker>
+        <AccountChecker />
+      </ClusterChecker>
+      <div className="flex-grow mx-4 lg:mx-auto">
+        <Suspense
+          fallback={
+            <div className="text-center my-32">
+              <span className="loading loading-spinner loading-lg"></span>
+            </div>
+          }
+        >
+          {children}
+        </Suspense>
+        <Toaster position="bottom-right" />
+      </div>
+      <footer className="footer footer-center p-4 bg-base-300 text-base-content">
+        <aside>
+          <p>
+            Generated by{' '}
+            <a
+              className="link hover:text-white"
+              href="https://github.com/solana-developers/create-solana-dapp"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              create-solana-dapp
+            </a>
+          </p>
+        </aside>
+      </footer>
+    </div>
+  )
+}
+export function AppModal({
+  children,
+  title,
+  hide,
+  show,
+  submit,
+  submitDisabled,
+  submitLabel,
+}: {
+  children: ReactNode
+  title: string
+  hide: () => void
+  show: boolean
+  submit?: () => void
+  submitDisabled?: boolean
+  submitLabel?: string
+}) {
+  const dialogRef = useRef<HTMLDialogElement | null>(null)
+  useEffect(() => {
+    if (!dialogRef.current) return
+    if (show) {
+      dialogRef.current.showModal()
+    } else {
+      dialogRef.current.close()
+    }
+  }, [show, dialogRef])
+  return (
+    <dialog className="modal" ref={dialogRef}>
+      <div className="modal-box space-y-5">
+        <h3 className="font-bold text-lg">{title}</h3>
+        {children}
+        <div className="modal-action">
+          <div className="join space-x-2">
+            {submit ? (
+              <button className="btn btn-xs lg:btn-md btn-primary" onClick={submit} disabled={submitDisabled}>
+                {submitLabel || 'Save'}
+              </button>
+            ) : null}
+            <button onClick={hide} className="btn">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+  )
+}
+export function AppHero({
+  children,
+  title,
+  subtitle,
+}: {
+  children?: ReactNode
+  title: ReactNode
+  subtitle: ReactNode
+}) {
+  return (
+    <div className="hero py-[64px]">
+      <div className="hero-content text-center">
+        <div className="max-w-2xl">
+          {typeof title === 'string' ? <h1 className="text-5xl font-bold">{title}</h1> : title}
+          {typeof subtitle === 'string' ? <p className="py-6">{subtitle}</p> : subtitle}
+          {children}
+        </div>
+      </div>
+    </div>
+  )
+}
+export function ellipsify(str = '', len = 4) {
+  if (str.length > 30) {
+    return str.substring(0, len) + '..' + str.substring(str.length - len, str.length)
+  }
+  return str
+}
+export function useTransactionToast() {
+  return (signature: string) => {
+    toast.success(
+      <div className={'text-center'}>
+        <div className="text-lg">Transaction sent</div>
+        <ExplorerLink path={`tx/${signature}`} label={'View Transaction'} className="btn btn-xs btn-primary" />
+      </div>,
+    )
+  }
+}
+src/components/WalletConnectButton.tsx:
+import React from "react";
+import { useWallet } from '@solana/wallet-adapter-react';
+import { WalletConnectWalletAdapter } from '@solana/wallet-adapter-walletconnect'; // or use @walletconnect/modal + Solana provider
+// Add this to your adapters array
+const walletConnectAdapter = new WalletConnectWalletAdapter({
+  options: {
+    projectId: 'YOUR_WALLETCONNECT_PROJECT_ID', // get free at cloud.walletconnect.com
+    metadata: {
+      name: 'Drift Perp Trading',
+      description: 'Solana perp trading',
+      url: 'your-app-url',
+      icons: ['your-icon-url']
+    }
+  }
+});
+// Then in your connect button / component:
+const { connect, publicKey } = useWallet();
+<button onClick={() => connect()}>Connect Phantom (via WalletConnect)</button>
+src/hooks/useDriftClient.ts:
+import { useEffect, useState } from 'react';
+import { useConnection } from '@solana/wallet-adapter-react';
+import { DriftClient } from '@drift-labs/sdk';
+import { getDriftClient } from '../lib/driftConfig';
+export const useDriftClient = (customWallet: any) => {
+  const { connection } = useConnection();
+  const [driftClient, setDriftClient] = useState<DriftClient | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'connecting' | 'connected' | 'error'>('idle');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  useEffect(() => {
+    if (!customWallet?.publicKey || !connection) {
+      setStatus('idle');
+      setDriftClient(null);
+      setIsSubscribed(false);
+      return;
+    }
+    setStatus('connecting');
+    setErrorMsg(null);
+    const client = getDriftClient(connection, customWallet);
+    const initDrift = async (attempt = 1) => {
+      try {
+        console.log(`Drift websocket subscribe attempt ${attempt}...`);
+        await client.subscribe();
+       
+        setDriftClient(client);
+        setIsSubscribed(true);
+        setStatus('connected');
+        console.log('✅ Drift client subscribed via WebSocket');
+      } catch (err: any) {
+        console.error(`Drift subscribe failed (attempt ${attempt}):`, err);
+       
+        if (attempt < 3) {
+          setTimeout(() => initDrift(attempt + 1), 2500);
+        } else {
+          setErrorMsg(err.message || 'Failed to subscribe (try again or upgrade RPC)');
+          setStatus('error');
+        }
+      }
+    };
+    initDrift();
+    return () => {
+      if (client) client.unsubscribe();
+    };
+  }, [connection, customWallet]);
+  return { driftClient, isSubscribed, status, errorMsg };
+};
+src/lib/driftConfig.ts:
+import { initialize, DriftClient, Wallet } from '@drift-labs/sdk';
+import { Connection, PublicKey } from '@solana/web3.js';
+export const getDriftConfig = () => {
+  return initialize({
+    env: 'devnet', // ← Now on devnet (beta.drift.trade)
+  });
+};
+export const getDriftClient = (connection: Connection, wallet: Wallet) => {
+  const sdkConfig = getDriftConfig();
+  return new DriftClient({
+    connection,
+    wallet,
+    programID: new PublicKey(sdkConfig.DRIFT_PROGRAM_ID),
+    accountSubscription: {
+      type: 'websocket',
+    },
+    opts: {
+      commitment: 'confirmed',
+    },
+  });
+};
+src/index.css:
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+html,
+body,
+#root {
+  height: 100%;
+}
+.wallet-adapter-button-trigger {
+  background: rgb(100, 26, 230) !important;
+  border-radius: 8px !important;
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+}
+.wallet-adapter-dropdown-list,
+.wallet-adapter-button {
+  font-family: inherit !important;
+}
+src/main.tsx:
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.tsx';
+import './index.css';
+import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
+import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
+import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
+import { WalletAdapterNetwork } from '@solana/wallet-adapter-base';
+const network = WalletAdapterNetwork.Devnet;
+const endpoint = 'https://api.devnet.solana.com';
+const wallets = [
+  new PhantomWalletAdapter(),
+  new SolflareWalletAdapter({ network }),
+];
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <ConnectionProvider endpoint={endpoint}>
+      <WalletProvider wallets={wallets} autoConnect>
+        <WalletModalProvider>
+          <App />
+        </WalletModalProvider>
+      </WalletProvider>
+    </ConnectionProvider>
+  </React.StrictMode>
+);
+src/vite-env.d.ts:
+/// <reference types="vite/client" />
+tailwind.config.ts:
+import type { Config } from 'tailwindcss'
+const config: Config = {
+  content: [
+    './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/components/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [require('daisyui')],
+}
+export default config
+tsconfig.json:
+{
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
+}
+vite.config.ts:
+import { NodeGlobalsPolyfillPlugin } from '@esbuild-plugins/node-globals-polyfill'
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
+import viteTsconfigPaths from 'vite-tsconfig-paths' // https://vitejs.dev/config/
+// https://vitejs.dev/config/
+export default defineConfig({
+  server: {
+    hmr: { overlay: true },
+    watch: {
+      usePolling: true,
+      interval: 500,
+    },
+  },
+  build: {
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          coral: ['@coral-xyz/anchor'],
+          jotai: ['jotai'],
+          react: ['react', 'react-dom'],
+          reactHotToast: ['react-hot-toast'],
+          reactRouter: ['react-router', 'react-router-dom'],
+          solanaWalletAdapters: [
+            '@solana/wallet-adapter-base',
+            '@solana/wallet-adapter-react',
+            '@solana/wallet-adapter-react-ui',
+          ],
+          tabler: ['@tabler/icons-react'],
+          tanstack: ['@tanstack/react-query'],
+        },
+      },
+    },
+  },
+  define: {
+    global: 'globalThis',
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      plugins: [
+        NodeGlobalsPolyfillPlugin({
+          process: true,
+        }),
+      ],
+    },
+  },
+  plugins: [viteTsconfigPaths(), react(), nodePolyfills()],
+})
+=== LAMBY HOST ENVIRONMENT (READ-ONLY — NEVER MODIFY OR SUGGEST CHANGES TO) ===
+This context is from Lamby — your local Electron/PWA coding IDE.
+Lamby source repo: https://github.com/aidenrichtwitter-glitch/guardian-ai
+Scan this repo to understand Lamby's full capabilities: its code parser (search/replace blocks, unified diffs, fenced code blocks), file structure, preview system, dependency installer, and command runner.
+Important runtime facts (use these to make smart choices, but do NOT propose edits to them):
+- All user projects are sandboxed in /projects/<project-name>/ (isolated from Lamby's src/, public/, supabase/, etc.).
+- Preview: App auto-runs via Vite dev server inside a sandboxed iframe or embedded browser view in Lamby.
+  - Supports HMR for live updates.
+  - Responsive design assumed; fit viewport.
+  - Browser APIs only (Web Audio, Canvas, Three.js, mic access via getUserMedia).
+  - No Electron/node APIs in target app.
+- Lamby auto-handles: One-click clone from suggested GitHub URL, safe parsing/applying of copied code/diffs/deps/commands, dep install with safeguards, run/build commands.
+- You may choose ANY framework or tech stack that runs in a browser and can be previewed via Vite dev server. There are no framework restrictions — pick whatever best fits the user's request.
+- Strict rule: You are ONLY building the ACTIVE PROJECT above. NEVER suggest changes to Lamby itself (clipboard logic, context gen, parser, UI, Supabase bridge, etc.). Ignore any self-referential ideas.
+STRICT INSTRUCTION: Respond only to the ACTIVE PROJECT section. Treat the HOST section as fixed background knowledge.
