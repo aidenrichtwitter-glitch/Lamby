@@ -1,0 +1,245 @@
+=== LAMBY BRIDGE API REFERENCE ===
+You are Grok-4 with full bridge-relay access. Your ONLY web tool is browse_page (GET requests only).
+
+PATIENCE PROTOCOL — after any file WRITE (grok-write, grok-create), wait 15 seconds before
+your next action. File changes take time to propagate through the desktop dev server.
+  EXCEPTION: grok-create-chunk calls do NOT need waiting between them — chunks buffer in memory
+  and the file doesn't exist until the final chunk. Send all chunks back-to-back, then wait 15s
+  after the LAST chunk before doing anything else.
+
+=== ENDPOINTS ===
+READ FILES — grok-read:
+  GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-read?project=groks-app&path=src/App.tsx
+
+WRITE/EDIT FILES — grok-write (search/replace with auto-verify):
+  GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-write?project=groks-app&path=FILE&search=ENCODED_OLD&replace=ENCODED_NEW
+  URL-encode search and replace values. The relay has smartDecode (handles single + double encoding).
+
+CREATE SMALL FILES — grok-create (for content < 600 raw chars):
+  GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-create?project=groks-app&path=FILE&content=ENCODED_CONTENT
+  URL-encode the content. For content > 600 raw chars, use grok-create-chunk instead.
+
+CREATE LARGE FILES — grok-create-chunk (for content > 600 raw chars):
+  GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-create-chunk?project=groks-app&path=FILE&content=ENCODED_CHUNK&chunk=0&total=5
+  Split into ~500 raw-char chunks. URL-encode each chunk.
+  Encoding adds ~1.7x overhead. ~500 raw → ~850 encoded → fits in URL.
+  chunk=0 starts file. File written to disk when final chunk (chunk=total-1) arrives.
+  Send ALL chunks back-to-back. No waiting between chunks. Verify ONCE after last chunk.
+
+DELETE FILES — grok-delete:
+  GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-delete?project=groks-app&path=FILE
+
+FILE TREE — grok-tree:
+  GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-tree?project=groks-app
+
+GIT — grok-git:
+  ?action=status | add&args=. | commit&message=MSG | log&count=5 | diff
+  ?action=checkout&args=HASH%20--%20path  (restore file from specific commit)
+  ?action=checkout&paths=file1,file2      (restore from HEAD)
+  ?action=checkout&ref=branch             (switch branch)
+  git reset --hard is sanitized to --soft.
+
+SCREENSHOT:
+  GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/screenshot/groks-app?fullPage=true&waitMs=8000
+
+RUN COMMANDS — grok-run:
+  GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-run?project=groks-app&command=COMMAND
+  Param is "command" not "cmd". Windows PowerShell. Only npm/node/echo allowed.
+
+CONSOLE ERRORS — grok-proxy:
+  GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-proxy?project=groks-app&payload=ENCODED_JSON
+  payload: {"actions":[{"type":"get_console_errors","project":"groks-app"}]}
+
+SEARCH — grok-search:
+  GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-search?project=groks-app&q=PATTERN
+
+COORD — post progress notes:
+  GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/coord?note=YOUR_MESSAGE&from=grok
+  Post ONCE per phase/step. Do NOT duplicate. Keep under 200 chars.
+
+=== RULES ===
+1. URL-ENCODE all content/search/replace params. Raw newlines are SILENTLY STRIPPED by HTTP.
+   The relay has smartDecode — both single and double encoding work correctly.
+
+2. LARGE FILES (>600 raw chars): Use grok-create-chunk with ~500 raw-char chunks.
+   grok-create FAILS SILENTLY on large content (URL too long for browse_page).
+
+3. grok-write ON WINDOWS: Single-line searches work. Multi-line searches FAIL SILENTLY
+   due to \r\n vs \n mismatch. For multi-line edits, use grok-create (full file rewrite).
+
+4. VERIFY after writes: grok-read the file to confirm changes landed.
+
+5. If grok-write returns replacements:0, the search text wasn't found. Do NOT retry
+   blindly — read the file first to see the actual content.
+
+6. ALL ENDPOINTS ARE GET. Do NOT attempt POST requests.
+
+7. Each level's instructions override these defaults where they conflict.
+   Follow the level instructions.
+
+=== END SHARED HEADER ===
+
+Project name: groks-app
+
+=== LEVEL 3: MULTI-FILE + GIT COMMIT TEST ===
+=== OBJECTIVE: Create a new page, wire it into routing and navigation, commit to git ===
+
+You will create Metrics.tsx, add it to App.tsx routing, add it to Navigation.tsx, and git commit.
+
+STOP RULES:
+- Maximum 30 browse_page calls. If you exceed 30, STOP.
+- Once you post "L3 REVIEW", you are DONE. No more browse_page calls.
+- Do NOT retry any step more than once.
+
+THIS TEST HAS 4 PHASES. Complete each phase fully before starting the next.
+
+==============================
+PHASE 1 — READ (4 calls)
+==============================
+Gather all information. No writes. No decisions yet.
+
+1a. CLEANUP — restore files to KNOWN CLEAN state (3 calls):
+    *** DO NOT use "git checkout" without a commit hash — HEAD may contain previous L3 commits! ***
+    *** Always restore from the known-clean commit: af7629a ***
+
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-git?project=groks-app&action=checkout&args=af7629a%20--%20src/components/App.tsx
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-git?project=groks-app&action=checkout&args=af7629a%20--%20src/components/Navigation.tsx
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-git?project=groks-app&action=checkout&args=af7629a%20--%20src/pages/Dashboard.tsx
+
+    Also delete stale Metrics if it exists (1 call):
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-delete?project=groks-app&path=src/pages/Metrics.tsx
+    → "File not found" = success. Do NOT retry.
+
+1b. READ App.tsx (1 call):
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-read?project=groks-app&path=src/components/App.tsx
+    → Save the FULL CONTENT in memory — you will modify and rewrite it in Phase 3.
+
+1c. READ Navigation.tsx (1 call):
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-read?project=groks-app&path=src/components/Navigation.tsx
+    → Note the NAV_ITEMS array. Note that Activity icon is ALREADY imported.
+
+→ Post to coord: "L3-P1: reads done, App [N chars], Nav [N chars]"
+
+==============================
+PHASE 2 — PLAN (0 calls)
+==============================
+Do ALL planning in your head. Do NOT call browse_page during this phase.
+
+Plan A — Metrics.tsx content:
+  Generate a complete Metrics.tsx component with:
+  - Named export: export const Metrics: React.FC = () => { ... }
+  - Default export: export default Metrics (MUST be the LAST line)
+  - At least 3 metric cards (bridge latency, uptime, requests)
+  - useState and useEffect hooks
+  - TypeScript types (interface MetricCard)
+  - Dark mode support (dark: classes)
+  - At least 80 lines of real code
+
+  Then split the content into chunks of ~500 raw characters each.
+  Count the total number of chunks. You will URL-encode each chunk in Phase 3.
+
+Plan B — Updated App.tsx content:
+  Take the App.tsx you read in Phase 1 and modify it:
+  a) Add import: import { Metrics } from '../pages/Metrics'
+  b) Add to PAGES map: metrics: Metrics
+  Prepare the FULL updated file content. You will URL-encode it in Phase 3.
+  (~920 chars raw → ~1500 encoded → fits in one grok-create URL)
+
+Plan C — Navigation.tsx edit:
+  You will use grok-write with a SINGLE-LINE search/replace:
+  Search: { id: 'settings', label: 'Settings', icon: Settings }
+  Replace: { id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }
+  DO NOT add an Activity import — it is ALREADY imported.
+  This will be exactly ONE grok-write call. No retries.
+
+==============================
+PHASE 3 — EXECUTE (fast burst, ~10 calls)
+==============================
+Fire all writes back-to-back. No thinking between calls. No verification between calls.
+
+3a. Send ALL Metrics.tsx chunks (5-7 calls):
+    For each chunk, URL-encode the content and send:
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-create-chunk?project=groks-app&path=src/pages/Metrics.tsx&content=ENCODED_CHUNK&chunk=N&total=TOTAL
+
+    ENCODING IS MANDATORY — raw newlines in URLs are SILENTLY STRIPPED by HTTP.
+    Encoding adds ~1.7x overhead. ~500 raw chars → ~850 encoded → fits in URL.
+    Send ALL chunks back-to-back. No waiting. No verifying individual chunks.
+
+3b. Write App.tsx (1 call):
+    URL-encode the full updated App.tsx content from Plan B:
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-create?project=groks-app&path=src/components/App.tsx&content=ENCODED_FULL_CONTENT
+
+3c. Write Navigation.tsx (1 call — EXACTLY ONE, never more):
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-write?project=groks-app&path=src/components/Navigation.tsx&search=SEARCH_TEXT&replace=REPLACE_TEXT
+    If this returns replacements:0, do NOT retry. You will fix it in Phase 4.
+    If this returns replacements:1, it worked.
+
+→ Post to coord: "L3-P3: all writes sent"
+→ Wait 15 seconds for file changes to propagate before Phase 4.
+
+==============================
+PHASE 4 — VERIFY & COMMIT (~8 calls)
+==============================
+Now verify everything and fix any issues.
+
+4a. VERIFY Metrics.tsx (1 call):
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-read?project=groks-app&path=src/pages/Metrics.tsx
+    Check ALL of these:
+    - File exists
+    - Contains "export const Metrics"
+    - Contains "export default Metrics"
+    - At least 80 lines
+    → If ANY fail: file is TRUNCATED. Delete it, resend ALL chunks from 3a. Retry ONCE only.
+
+4b. VERIFY App.tsx (1 call):
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-read?project=groks-app&path=src/components/App.tsx
+    - Contains "import { Metrics }"
+    - Contains "metrics: Metrics" in PAGES map
+    - File is >900 chars
+    → If broken: rewrite with grok-create again.
+
+4c. VERIFY Navigation.tsx (1 call):
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-read?project=groks-app&path=src/components/Navigation.tsx
+    - Count occurrences of "'metrics'" — must be EXACTLY 1.
+    - If count > 1: duplicates exist. Read full file, remove duplicates, rewrite with grok-create.
+    - If count = 0: grok-write failed. Read full file, add the metrics entry manually, rewrite with grok-create.
+    - No duplicate Activity imports.
+
+4d. CONSOLE CHECK (1 call):
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-proxy?project=groks-app&payload=ENCODED_JSON
+    payload: {"actions":[{"type":"get_console_errors","project":"groks-app"}]}
+    → Must be 0 errors. If errors: fix before committing.
+
+4e. GIT ADD + COMMIT (2 calls):
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-git?project=groks-app&action=add&args=.
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-git?project=groks-app&action=commit&message=L3:%20Add%20Metrics%20page%20with%20routing%20and%20navigation
+
+4f. VERIFY COMMIT (1 call):
+    GET https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev/api/grok-git?project=groks-app&action=log&count=3
+    → Confirm new commit is present.
+
+4g. FINAL REVIEW:
+    → Post to coord: "L3 REVIEW: [PASS/FAIL] — Metrics [present/missing/truncated], App [updated/unchanged], Nav [updated/unchanged/duplicates], console [clean/errors]"
+
+    *** TEST IS NOW DONE. STOP. NO MORE BROWSE_PAGE CALLS. ***
+
+=== PASS CRITERIA ===
+- Metrics.tsx exists with 80+ lines, named + default exports
+- App.tsx has Metrics import AND metrics entry in PAGES map
+- Navigation.tsx has EXACTLY 1 metrics nav item, no duplicate imports
+- Console is clean (0 errors)
+- Git commit exists with insertions
+- Total browse_page calls ≤ 30
+
+=== ENCODING REFERENCE ===
+- All content/search/replace params MUST be URL-encoded (encodeURIComponent)
+- Raw newlines (\n) in URLs are SILENTLY STRIPPED by HTTP — files will be corrupted without encoding
+- The relay has smartDecode — handles both single and double encoding correctly
+- ~500 raw chars → ~850 encoded → fits safely in a 2000-char URL
+- App.tsx is ~920 raw chars → ~1500 encoded → fits in one grok-create URL
+
+=== APPROACH REFERENCE ===
+- Metrics.tsx: grok-create-chunk (too large for single URL)
+- App.tsx: grok-create (full rewrite — grok-write fails due to Windows \r\n line endings)
+- Navigation.tsx: grok-write (single-line search works fine, ONE call only)
+- Activity icon: ALREADY imported in Navigation.tsx — do NOT add duplicate

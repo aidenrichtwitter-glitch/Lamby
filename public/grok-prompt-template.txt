@@ -1,132 +1,299 @@
-=== ACTIVE PROJECT (BUILD THIS ONLY) ===
-=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS — USE IT) ===
-You are Grok-4 working inside Lamby with full bridge-relay access. Your ONLY web tool is browse_page (GET-only).
+=== LAMBY BRIDGE API REFERENCE ===
+You are Grok-4 with full bridge-relay access. Your ONLY web tool is browse_page (GET requests only).
 
-CRITICAL PATIENCE PROTOCOL (MANDATORY — APPLY EVERY TIME):
-- Desktop connections and Vite dev server reloads take 5–20 seconds. You MUST wait a full 15 seconds after ANY edit (grok-edit, grok-write, or grok-proxy) before taking a screenshot or performing the next action.
-- Never perform an edit and a screenshot in the same logical step or rapid succession. Always do: edit → wait 15s → screenshot.
-- For the screenshot tool: ALWAYS use the full URL with ?fullPage=true&waitMs=8000 (minimum 8000ms, use 10000ms for safety on complex pages). Never use the default 3000ms or no wait param.
-- If you rush or ignore the 15-second wait, the preview may still be loading and changes will appear broken. Slow down every time.
+=== AGENT EXECUTION RULES (CRITICAL — READ THIS FIRST) ===
+ONLY the Leader/primary agent may execute browse_page calls and code execution.
+All other agents (teammates, sub-agents) must ONLY think, plan, and advise.
+They must NOT call browse_page, execute code, or take any actions independently.
 
-DISCOVERY — CALL FIRST (confirms all endpoints are live + gives ready-to-use URLs):
-  GET {{RELAY_BASE}}/api/grok → legacy docs page
-  GET {{RELAY_BASE}}/api/diag?project={{PROJECT}}
+WHY: Your agents run in parallel. If multiple agents call browse_page or execute code,
+they will race — writing to the same files simultaneously, sending duplicate API calls,
+and corrupting each other's work. This has caused every L3 failure so far.
 
-=== SMART BRIDGE ENDPOINTS (PREFERRED) ===
+RULES:
+1. Leader reads the level instructions and announces the plan.
+2. Agents may discuss, suggest edits, or draft content — but NEVER execute.
+3. Leader executes ALL browse_page calls and code executions SEQUENTIALLY, one at a time.
+4. If an agent calls browse_page or runs code: THAT IS A BUG. Stop and correct it.
+5. Do NOT use chatroom_send to "pause" agents — they don't actually stop. Instead,
+   simply never assign execution to them in the first place.
+
+PATIENCE PROTOCOL — after any file WRITE (grok-write, grok-create), wait 15 seconds before
+your next action. File changes take time to propagate through the desktop dev server.
+  EXCEPTION: grok-create-chunk calls do NOT need waiting between them — chunks buffer in memory
+  and the file doesn't exist until the final chunk. Send all chunks back-to-back, then wait 15s
+  after the LAST chunk before doing anything else.
+
+=== ENDPOINTS ===
 READ FILES — grok-read:
   GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/App.tsx
 
-WRITE/EDIT FILES — grok-write (search/replace with automatic verify):
-  GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=src/App.tsx&search=OLD_TEXT&replace=NEW_TEXT
-  (URL-encode search and replace; supports \n)
+WRITE/EDIT FILES — grok-write (search/replace with auto-verify):
+  GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=FILE&search=ENCODED_OLD&replace=ENCODED_NEW
+  URL-encode search and replace values. The relay has smartDecode (handles single + double encoding).
 
-CREATE NEW FILES — grok-create (simple GET, NO encoding needed):
-  GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/newfile.tsx&content=FILE_CONTENT
-  URL-encode the content param. No base64. No JSON payload. Just a simple GET URL.
-  SIZE LIMIT: Keep content under ~5KB per URL. For larger files, use grok-create-chunk.
+CREATE SMALL FILES — grok-create (for content < 600 raw chars):
+  GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=FILE&content=ENCODED_CONTENT
+  URL-encode the content. For content > 600 raw chars, use grok-create-chunk instead.
 
-CREATE LARGE FILES — grok-create-chunk (for content >5KB):
-  Split content into chunks. Send each as a separate GET request:
-  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=CHUNK_TEXT&chunk=0&total=3
-  chunk=0 creates the file. chunk=1+ appends. File is complete when chunk=total-1 arrives.
-  Keep each chunk under ~1500 chars of content. URL-encode each chunk's content.
+CREATE LARGE FILES — grok-create-chunk (for content > 600 raw chars):
+  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=ENCODED_CHUNK&chunk=0&total=5
+  Split into ~500 raw-char chunks. URL-encode each chunk.
+  Encoding adds ~1.7x overhead. ~500 raw → ~850 encoded → fits in URL.
+  chunk=0 starts file. File written to disk when final chunk (chunk=total-1) arrives.
+  Send ALL chunks back-to-back. No waiting between chunks. Verify ONCE after last chunk.
 
-DELETE FILES — grok-delete (simple GET):
-  GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/oldfile.tsx
+DELETE FILES — grok-delete:
+  GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=FILE
 
 FILE TREE — grok-tree:
   GET {{RELAY_BASE}}/api/grok-tree?project={{PROJECT}}
 
 GIT — grok-git:
-  GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=status
-  GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=add&args=.
-  GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=commit&message=YOUR_MESSAGE
-  GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=log&count=5
-  GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=diff
-  (actions: status, add, commit, diff, log, branch, checkout, stash, stash-pop, push, pull, merge, reset, revert, tag, init)
-  WARNING: git reset --hard is sanitized to --soft. You cannot do destructive resets. Use grok-delete + grok-create to manually revert.
+  ?action=status | add&args=. | commit&message=MSG | log&count=5 | diff
+  ?action=checkout&args=HASH%20--%20path  (restore file from specific commit)
+  ?action=checkout&paths=file1,file2      (restore from HEAD)
+  ?action=checkout&ref=branch             (switch branch)
+  git reset --hard is sanitized to --soft.
 
 SCREENSHOT:
   GET {{RELAY_BASE}}/api/screenshot/{{PROJECT}}?fullPage=true&waitMs=8000
 
 RUN COMMANDS — grok-run:
   GET {{RELAY_BASE}}/api/grok-run?project={{PROJECT}}&command=COMMAND
-  NOTE: Uses param "command" not "cmd". Windows PowerShell.
-  ALLOWED: npm, node, echo commands. BLOCKED: dir, cd, type, Get-ChildItem, ls, and most filesystem commands.
-  For file listing use grok-tree instead. For file reading use grok-read instead.
+  Param is "command" not "cmd". Windows PowerShell. Only npm/node/echo allowed.
 
-CONSOLE ERRORS — grok-proxy (raw JSON, no base64 needed):
-  GET {{RELAY_BASE}}/api/grok-proxy?project={{PROJECT}}&payload={"actions":[{"type":"get_console_errors","project":"{{PROJECT}}"}]}
-  URL-encode the payload value. No base64 needed — grok-proxy now accepts raw JSON.
-  ALWAYS check this after edits to verify no import/compile errors.
+CONSOLE ERRORS — grok-proxy:
+  GET {{RELAY_BASE}}/api/grok-proxy?project={{PROJECT}}&payload=ENCODED_JSON
+  payload: {"actions":[{"type":"get_console_errors","project":"{{PROJECT}}"}]}
 
 SEARCH — grok-search:
-  GET {{RELAY_BASE}}/api/grok-search?project={{PROJECT}}&q=SEARCH_PATTERN
-  (optional: &type=symbol)
+  GET {{RELAY_BASE}}/api/grok-search?project={{PROJECT}}&q=PATTERN
 
-EDIT WITH BASE64 — grok-edit (for HTML/special characters):
-  GET {{RELAY_BASE}}/api/grok-edit?project={{PROJECT}}&path=FILE&searchB64=B64&replaceB64=B64
-
-AGENT COORDINATION — coord:
+COORD — post progress notes:
   GET {{RELAY_BASE}}/api/coord?note=YOUR_MESSAGE&from=grok
-  GET {{RELAY_BASE}}/api/coord
+  Post ONCE per phase/step. Do NOT duplicate. Keep under 200 chars.
 
-MACROS:
-  GET {{RELAY_BASE}}/api/grok-macro/project-status?project={{PROJECT}}
-  GET {{RELAY_BASE}}/api/grok-macro/read-context?project={{PROJECT}}&path=src/App.tsx
+=== RULES ===
+1. URL-ENCODE all content/search/replace params. Raw newlines are SILENTLY STRIPPED by HTTP.
+   The relay has smartDecode — both single and double encoding work correctly.
 
-PROCESS MANAGEMENT — grok-process:
-  GET {{RELAY_BASE}}/api/grok-process?project={{PROJECT}}&action=list
-  (supported actions: start, start-named, stop, list, logs, monitor, stop-all, restart)
-  NOTE: "ports" is NOT a supported action. Use grok-proxy + get_preview_url instead.
+2. LARGE FILES (>600 raw chars): Use grok-create-chunk with ~500 raw-char chunks.
+   grok-create FAILS SILENTLY on large content (URL too long for browse_page).
 
-DIAGNOSTICS — diag:
-  GET {{RELAY_BASE}}/api/diag?project={{PROJECT}}
+3. grok-write ON WINDOWS: Single-line searches work. Multi-line searches FAIL SILENTLY
+   due to \r\n vs \n mismatch. For multi-line edits, use grok-create (full file rewrite).
 
-YOUR WORKFLOW (RECOMMENDED):
-  1. CALL /api/diag to confirm bridge is live and get readyUrls
-  2. CHECK /api/coord for any pending instructions
-  3. READ project status via grok-macro/project-status
-  4. READ specific files via grok-read or grok-macro/read-context
-  5. EDIT via grok-write (search/replace) or grok-create (new/overwrite files)
-  5.5. After any edit: WAIT FULL 15 SECONDS
-  6. CHECK console errors via grok-proxy (raw JSON) + get_console_errors
-  7. SCREENSHOT with waitMs=8000+
-  8. VERIFY via grok-read
-  9. COMMIT via grok-git
-  10. POST status to /api/coord
+4. VERIFY after writes: grok-read the file to confirm changes landed.
 
-=== CRITICAL RULES (STRESS-TESTED AND VERIFIED) ===
-1. USE SMART ENDPOINTS: For file create/delete, use grok-create and grok-delete (simple GET URLs, no encoding). Only fall back to grok-proxy for get_console_errors or batched operations.
+5. If grok-write returns replacements:0, the search text wasn't found. Do NOT retry
+   blindly — read the file first to see the actual content.
 
-2. ENCODING: Smart endpoints (grok-create, grok-delete, grok-read, grok-write) need only URL-encoding of params. For grok-proxy: you can now pass raw JSON (URL-encoded) in the payload= param — no base64 needed.
+6. ALL ENDPOINTS ARE GET. Do NOT attempt POST requests.
 
-3. LARGE FILES (>5KB content): Use grok-create-chunk. Split into ~1500-char chunks.
+7. Each level's instructions override these defaults where they conflict.
+   Follow the level instructions.
 
-4. ENTRY POINT: Before writing App.tsx, ALWAYS read src/index.tsx first. Projects often import from 'components/App' not 'App', so the real file may be src/components/App.tsx. Writing to the wrong path has zero visible effect.
-
-5. SEARCH_REPLACE ZERO MATCHES: If grok-write returns {replacements:0} in the results array, the exact string was NOT found. Response format: {"results":[{"path":"file","replacements":0}]}. Read the file first, copy the exact text (including whitespace), then retry.
-
-6. ALWAYS VERIFY: After any file write/delete, ALWAYS check console errors and grok-read the file to confirm.
-
-7. DELETE SAFETY: Before deleting any file, read the importing file (usually App.tsx) to verify nothing depends on the file you're deleting. If something does, update the import first or write a replacement file first.
-
-8. WINDOWS SHELL: run_command runs on Windows. Use PowerShell syntax for the limited commands that are allowed (npm, node, echo).
-
-9. GIT LIMITATIONS: git reset --hard is sanitized to --soft by the bridge. To truly revert, you must manually restore files via grok-create/grok-delete.
-
-10. BATCH LIMIT: Up to 10 actions per grok-proxy request. All execute sequentially.
-
-11. ALL ENDPOINTS ARE GET: Do NOT attempt POST requests. Everything goes through GET URLs.
-
-12. NEVER CLAIM SUCCESS WITHOUT VERIFICATION: Always confirm edits with grok-read or console errors before telling the user it's done.
-
-KNOWN UNTESTED SCENARIOS (exercise caution):
-- Concurrent/parallel browse_page calls to the bridge (bridge is a serial queue — avoid parallel requests)
-- Bridge timeout/disconnect behavior during long operations (relay has 30s timeout)
-- Bulk operations (bulk_write, bulk_delete, apply_patch) — not stress-tested
-- grok-interact actions beyond evaluate — click/type/select may require specific selectors
-=== END WORKSPACE API ===
+=== END SHARED HEADER ===
 
 Project name: {{PROJECT}}
-{{TASK}}
+
+=== LEVEL 3: MULTI-FILE + GIT COMMIT TEST ===
+=== OBJECTIVE: Create a new page, wire it into routing and navigation, commit to git ===
+
+You will create Metrics.tsx, add it to App.tsx routing, add it to Navigation.tsx, and git commit.
+
+*** SINGLE-EXECUTOR RULE — APPLIES TO ENTIRE TEST ***
+*** ONLY the Leader executes. All agents/teammates THINK ONLY — no browse_page, no code execution. ***
+*** If you have sub-agents: they draft content and suggest plans. YOU execute every action. ***
+*** Agents calling browse_page in parallel has caused EVERY prior L3 failure (duplicates, corruption, race conditions). ***
+
+STOP RULES:
+- Maximum 30 browse_page calls. If you exceed 30, STOP.
+- Once you post "L3 REVIEW", you are DONE. No more browse_page calls.
+- Do NOT retry any step more than once.
+
+THIS TEST HAS 4 PHASES. Complete each phase fully before starting the next.
+
+==============================
+PHASE 1 — READ (4 calls)
+==============================
+Gather all information. No writes. No decisions yet.
+
+1a. CLEANUP — restore files to KNOWN CLEAN state (3 calls):
+    *** DO NOT use "git checkout" without a commit hash — HEAD may contain previous L3 commits! ***
+    *** Always restore from the known-clean commit: af7629a ***
+
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&args=af7629a%20--%20src/components/App.tsx
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&args=af7629a%20--%20src/components/Navigation.tsx
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&args=af7629a%20--%20src/pages/Dashboard.tsx
+
+    Also delete stale Metrics if it exists (1 call):
+    GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/pages/Metrics.tsx
+    → "File not found" = success. Do NOT retry.
+
+1b. READ App.tsx (1 call):
+    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/App.tsx
+    → Save the FULL CONTENT in memory — you will modify and rewrite it in Phase 3.
+
+1c. READ Navigation.tsx (1 call):
+    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
+    → Note the NAV_ITEMS array. Note that Activity icon is ALREADY imported.
+
+→ Post to coord: "L3-P1: reads done, App [N chars], Nav [N chars]"
+
+==============================
+PHASE 2 — PLAN (0 calls)
+==============================
+Do ALL planning in your head. Do NOT call browse_page during this phase.
+
+Plan A — Metrics.tsx content:
+  Generate a complete Metrics.tsx component with:
+  - Named export: export const Metrics: React.FC = () => { ... }
+  - Default export: export default Metrics (MUST be the LAST line)
+  - At least 3 metric cards (bridge latency, uptime, requests)
+  - useState and useEffect hooks
+  - TypeScript types (interface MetricCard)
+  - Dark mode support (dark: classes)
+  - At least 80 lines of real code
+
+  Then split the content into chunks of ~500 raw characters each.
+  Count the total number of chunks. You will URL-encode each chunk in Phase 3.
+
+Plan B — Updated App.tsx content:
+  Take the App.tsx you read in Phase 1 and modify it:
+  a) Add import: import { Metrics } from '../pages/Metrics'
+  b) Add to PAGES map: metrics: Metrics
+  Prepare the FULL updated file content. You will URL-encode it in Phase 3.
+  (~920 chars raw → ~1500 encoded → fits in one grok-create URL)
+
+Plan C — Navigation.tsx edit:
+  You will use grok-write with a SINGLE-LINE search/replace:
+  Search: { id: 'settings', label: 'Settings', icon: Settings }
+  Replace: { id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }
+  DO NOT add an Activity import — it is ALREADY imported.
+  This will be exactly ONE grok-write call. No retries.
+
+==============================
+PHASE 3 — EXECUTE (3 browse_page calls + 1 code execution)
+==============================
+*** CRITICAL: Chunks MUST be sent from a SINGLE Python script using your code execution tool.
+    Do NOT use multiple browse_page calls for chunks — your agents will fight over them. ***
+
+3a. Send ALL Metrics.tsx chunks ATOMICALLY (1 code execution — NOT browse_page):
+    Write and execute a Python script that sends all chunks sequentially.
+    This is ONE code execution action. No agents can interfere.
+
+    ```python
+    import urllib.request, urllib.parse, json, time
+
+    RELAY = "{{RELAY_BASE}}"
+    PROJECT = "{{PROJECT}}"
+    PATH = "src/pages/Metrics.tsx"
+
+    # Your full Metrics.tsx content from Plan A — paste it here as a Python string
+    content = """YOUR METRICS.TSX CONTENT HERE"""
+
+    # URL-encode the full content, then split into ~500-char chunks
+    encoded = urllib.parse.quote(content, safe='')
+    chunk_size = 500
+    chunks = [encoded[i:i+chunk_size] for i in range(0, len(encoded), chunk_size)]
+    total = len(chunks)
+
+    print(f"Sending {total} chunks for {PATH}...")
+    for i, chunk in enumerate(chunks):
+        url = f"{RELAY}/api/grok-create-chunk?project={PROJECT}&path={PATH}&content={chunk}&chunk={i+1}&total={total}"
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                result = json.loads(resp.read().decode())
+                status = result.get('results', [{}])[0].get('status', 'unknown')
+                print(f"  Chunk {i+1}/{total}: {status}")
+        except Exception as e:
+            print(f"  Chunk {i+1}/{total}: ERROR - {e}")
+        time.sleep(0.5)  # small gap between chunks
+
+    print("All chunks sent!")
+    ```
+
+    *** The content variable must contain your COMPLETE Metrics.tsx code as a Python string.
+    Use triple-quotes. Escape any backslashes or triple-quotes inside the content. ***
+
+3b. Write App.tsx (1 browse_page call):
+    URL-encode the full updated App.tsx content from Plan B:
+    GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/components/App.tsx&content=ENCODED_FULL_CONTENT
+
+3c. Write Navigation.tsx (1 browse_page call — EXACTLY ONE, never more):
+    GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=src/components/Navigation.tsx&search=SEARCH_TEXT&replace=REPLACE_TEXT
+    If this returns replacements:0, do NOT retry. You will fix it in Phase 4.
+    If this returns replacements:1, it worked.
+
+→ Post to coord: "L3-P3: all writes sent"
+→ Wait 15 seconds for file changes to propagate before Phase 4.
+
+==============================
+PHASE 4 — VERIFY & COMMIT (~8 calls)
+==============================
+Now verify everything and fix any issues.
+
+4a. VERIFY Metrics.tsx (1 call):
+    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/pages/Metrics.tsx
+    Check ALL of these:
+    - File exists
+    - Contains "export const Metrics"
+    - Contains "export default Metrics"
+    - At least 80 lines
+    → If ANY fail: file is TRUNCATED. Delete it, resend ALL chunks from 3a. Retry ONCE only.
+
+4b. VERIFY App.tsx (1 call):
+    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/App.tsx
+    - Contains "import { Metrics }"
+    - Contains "metrics: Metrics" in PAGES map
+    - File is >900 chars
+    → If broken: rewrite with grok-create again.
+
+4c. VERIFY Navigation.tsx (1 call):
+    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
+    - Count occurrences of "'metrics'" — must be EXACTLY 1.
+    - If count > 1: duplicates exist. Read full file, remove duplicates, rewrite with grok-create.
+    - If count = 0: grok-write failed. Read full file, add the metrics entry manually, rewrite with grok-create.
+    - No duplicate Activity imports.
+
+4d. CONSOLE CHECK (1 call):
+    GET {{RELAY_BASE}}/api/grok-proxy?project={{PROJECT}}&payload=ENCODED_JSON
+    payload: {"actions":[{"type":"get_console_errors","project":"{{PROJECT}}"}]}
+    → Must be 0 errors. If errors: fix before committing.
+
+4e. GIT ADD + COMMIT (2 calls):
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=add&args=.
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=commit&message=L3:%20Add%20Metrics%20page%20with%20routing%20and%20navigation
+
+4f. VERIFY COMMIT (1 call):
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=log&count=3
+    → Confirm new commit is present.
+
+4g. FINAL REVIEW:
+    → Post to coord: "L3 REVIEW: [PASS/FAIL] — Metrics [present/missing/truncated], App [updated/unchanged], Nav [updated/unchanged/duplicates], console [clean/errors]"
+
+    *** TEST IS NOW DONE. STOP. NO MORE BROWSE_PAGE CALLS. ***
+
+=== PASS CRITERIA ===
+- Metrics.tsx exists with 80+ lines, named + default exports
+- App.tsx has Metrics import AND metrics entry in PAGES map
+- Navigation.tsx has EXACTLY 1 metrics nav item, no duplicate imports
+- Console is clean (0 errors)
+- Git commit exists with insertions
+- Total browse_page calls ≤ 30
+
+=== ENCODING REFERENCE ===
+- All content/search/replace params MUST be URL-encoded (encodeURIComponent)
+- Raw newlines (\n) in URLs are SILENTLY STRIPPED by HTTP — files will be corrupted without encoding
+- The relay has smartDecode — handles both single and double encoding correctly
+- ~500 raw chars → ~850 encoded → fits safely in a 2000-char URL
+- App.tsx is ~920 raw chars → ~1500 encoded → fits in one grok-create URL
+
+=== APPROACH REFERENCE ===
+- Metrics.tsx: Python script via code execution → sends grok-create-chunk URLs atomically (NEVER use multiple browse_page calls for chunks — your agents will fight over them)
+- App.tsx: grok-create via browse_page (full rewrite — grok-write fails due to Windows \r\n line endings)
+- Navigation.tsx: grok-write via browse_page (single-line search works fine, ONE call only)
+- Activity icon: ALREADY imported in Navigation.tsx — do NOT add duplicate
