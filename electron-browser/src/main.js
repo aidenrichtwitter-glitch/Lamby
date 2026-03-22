@@ -96,7 +96,7 @@ function createWindow() {
       contextIsolation: false,
       webviewTag: true,
     },
-    title: 'Guardian AI - Lamby',
+    title: 'Lamby',
   });
 
   mainWindow.loadURL(`http://localhost:${VITE_PORT}`);

@@ -1,9 +1,9 @@
 {
-  "name": "guardian-ai",
+  "name": "lamby",
   "private": true,
   "version": "1.0.0",
-  "description": "Guardian AI - Recursive IDE with parallax 3D interface",
-  "author": "Guardian AI",
+  "description": "Lamby - Desktop Application",
+  "author": "Lamby",
   "type": "module",
   "scripts": {
     "dev": "vite",
