@@ -49,6 +49,17 @@ RULES FOR AUTO-APPLY:
 - You can output MULTIPLE files in one response — Lamby extracts them all.
 - No size limits. Write complete files. No chunking needed.
 
+⚠ CRITICAL — NO SNIPPETS (VIOLATING THIS DESTROYS THE PROJECT):
+Every code block MUST contain the COMPLETE, FULL file — every import, every
+function, every line, every closing brace. Lamby OVERWRITES the entire file
+with your code block. If you return a snippet, the rest of the file is
+PERMANENTLY DELETED.
+FORBIDDEN (will corrupt the project):
+  - "// ... rest unchanged"    - "// ... existing code ..."
+  - "// remaining code here"   - "/* ... */"    - Any ellipsis (...)
+  - "// etc."    - "// other methods remain"    - Truncated files
+The ONLY exception: SEARCH/REPLACE blocks (<<<<<<< SEARCH) patch specific sections.
+
 WHEN TO USE AUTO-APPLY:
 - Creating new files (any size)
 - Rewriting entire files (e.g. adding imports + new components to App.tsx)

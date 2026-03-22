@@ -351,7 +351,7 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `- If you rush or ignore the 15-second wait, the preview may still be loading and changes will appear broken. Slow down every time.\n\n`;
 
   if (!bridgeOnline) {
-    section += `⚠ WARNING: The desktop app may be temporarily offline — API calls might fail until it reconnects. If calls fail, fall back to // file: blocks (see OUTPUT FORMAT section below).\n\n`;
+    section += `⚠ WARNING: The desktop app may be temporarily offline — API calls might fail until it reconnects. If calls fail, fall back to // file: blocks (see OUTPUT FORMAT section below). Every // file: block MUST be the COMPLETE file — never snippets.\n\n`;
   }
 
   section += `DISCOVERY — CALL FIRST (confirms all endpoints are live + gives you ready-to-use URLs):\n`;
@@ -544,7 +544,7 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `  10. POST status to /api/coord for feedback: ?note=Done: updated styles&from=grok\n\n`;
 
   section += `IMPORTANT RULES:\n`;
-  section += `  - ALWAYS use browse_page on these URLs to read files and make changes. For LARGE files that exceed bridge write limits, output // file: blocks in your response instead — Lamby auto-applies them (see OUTPUT FORMAT section below).\n`;
+  section += `  - ALWAYS use browse_page on these URLs to read files and make changes. For LARGE files that exceed bridge write limits, output // file: blocks in your response instead — Lamby auto-applies them (see OUTPUT FORMAT section below). ⚠ Every // file: block MUST contain the COMPLETE file — never snippets.\n`;
   section += `  - ALL endpoints are GET-based. Do NOT attempt POST requests.\n`;
   section += `  - Prefer smart endpoints (grok-read, grok-write, grok-create, grok-delete, grok-tree) over grok-proxy — they're simpler and don't need any encoding beyond URL-encoding.\n`;
   section += `  - Use grok-macro/project-status FIRST to understand the current state before making changes.\n`;
@@ -552,7 +552,7 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `  - After making visual changes, take a screenshot_preview and share the screenshotUrl with the user.\n`;
   section += `  - ENFORCE PATIENCE: Wait 15 seconds after every edit before screenshot or next action. Never work faster than the computer can respond.\n`;
   section += `  - Never claim a change happened unless you saw {"success":true}.\n`;
-  section += `  - If an API call fails 3 times, report honestly and fall back to // file: blocks.\n`;
+  section += `  - If an API call fails 3 times, report honestly and fall back to // file: blocks. When using // file: fallback, you MUST output the COMPLETE file — never snippets or partial code.\n`;
 
   section += `=== END WORKSPACE API ===\n`;
   return section;
@@ -2661,9 +2661,11 @@ const GrokBridge: React.FC = () => {
       prompt += `Respond with a \`\`\`json code block containing {"actions": [...]} so Lamby auto-executes your fix.\n`;
       prompt += `Do NOT just describe the fix in text — actually apply it via the API.\n\n`;
     } else {
-      prompt += `Fix the issue and provide updated code blocks for affected files only.\n`;
+      prompt += `Fix the issue and provide COMPLETE, FULL file content for every affected file.\n`;
+      prompt += `⚠ NO SNIPPETS: Every code block must contain the ENTIRE file — all imports, all functions, all closing braces. Lamby OVERWRITES the file with your output. Returning a snippet permanently deletes the rest of the file.\n`;
+      prompt += `FORBIDDEN: "// ... rest unchanged", "// remaining code", ellipsis (...), any abbreviated/truncated content.\n`;
       prompt += `Use this format for each file:\n`;
-      prompt += `// file: path/to/file.tsx\n\`\`\`tsx\n// corrected content\n\`\`\`\n`;
+      prompt += `// file: path/to/file.tsx\n\`\`\`tsx\n[COMPLETE file content — every line]\n\`\`\`\n`;
     }
 
     return prompt;
@@ -2694,7 +2696,7 @@ const GrokBridge: React.FC = () => {
           visionPrompt += `4. run_command or check console logs to verify no build errors after your fix\n`;
           visionPrompt += `Respond with a \`\`\`json code block containing {"actions": [...]} so Lamby auto-executes your fix.\n`;
         } else {
-          visionPrompt += `Please fix these visual problems. Provide updated code blocks for affected files.`;
+          visionPrompt += `Please fix these visual problems. Provide COMPLETE, FULL file content for every affected file. ⚠ NO SNIPPETS — Lamby overwrites files entirely. Never use "// ... rest unchanged" or partial code.`;
         }
         if (mode === 'api') {
           setInput(visionPrompt);
@@ -5035,8 +5037,16 @@ const GrokBridge: React.FC = () => {
         active += `[new replacement code]\n`;
         active += `>>>>>>> REPLACE\n\n`;
         active += `RULES:\n`;
+        active += `⚠ CRITICAL — NO SNIPPETS RULE (ABSOLUTE — VIOLATING THIS DESTROYS THE PROJECT):\n`;
+        active += `Every code block MUST contain the COMPLETE, FULL file — every import, every function, every line, every closing brace.\n`;
+        active += `NEVER output partial files, snippets, or abbreviated code. The following are ALL FORBIDDEN:\n`;
+        active += `  - "// ... rest unchanged"    - "// ... existing code ..."    - "// remaining code here"\n`;
+        active += `  - "/* ... */"                - Any ellipsis (...)             - "// etc."\n`;
+        active += `  - "// other methods remain"  - "// keep existing code"       - Truncated files\n`;
+        active += `WHY: Lamby OVERWRITES the entire file with your code block. If you return a snippet, the rest of the file is permanently deleted.\n`;
+        active += `The ONLY exception is SEARCH/REPLACE blocks (<<<<<<< SEARCH), which patch specific sections.\n\n`;
         active += `1. Every code block MUST have a // file: header OUTSIDE and BEFORE the fenced code block. No exceptions. Lamby auto-applies blocks with headers.\n`;
-        active += `2. For FULL replacement: provide COMPLETE file content. Do NOT use "// ... rest unchanged" or partial snippets.\n`;
+        active += `2. For FULL replacement: provide the COMPLETE file — every single line from first import to last closing brace. No shortcuts.\n`;
         active += `3. For SEARCH/REPLACE: the SEARCH section must match existing code EXACTLY (including whitespace). The REPLACE section is the new code.\n`;
         active += `4. Only cite real, published npm packages — never invent package names.\n`;
         active += `5. Keep explanations brief BEFORE the code blocks. Focus on what changed and why.\n`;
@@ -5364,8 +5374,10 @@ const GrokBridge: React.FC = () => {
       errorPrompt += `5. Fetch console logs to confirm errors are gone\n`;
       errorPrompt += `Respond with \`\`\`json {"actions": [...]} so Lamby auto-executes your fix.\n\n`;
     } else {
-      errorPrompt += `Please fix these errors. Return the corrected files using this format:\n` +
-        `// file: path/to/file.tsx\n\`\`\`tsx\n// corrected content\n\`\`\`\n\n`;
+      errorPrompt += `Please fix these errors. Return COMPLETE, FULL file content for every affected file.\n` +
+        `⚠ NO SNIPPETS: Lamby OVERWRITES files entirely — returning a snippet permanently deletes the rest of the file.\n` +
+        `FORBIDDEN: "// ... rest unchanged", "// remaining code", ellipsis (...), any abbreviated content.\n` +
+        `Use this format:\n// file: path/to/file.tsx\n\`\`\`tsx\n[COMPLETE file content — every line]\n\`\`\`\n\n`;
     }
     if (!errBridgeOnline && projectContext) {
       errorPrompt += `Current project context:\n${projectContext.slice(0, 3000)}`;
@@ -5470,7 +5482,7 @@ const GrokBridge: React.FC = () => {
         id: 'errors',
         label: 'Copy Errors',
         content: errors.length > 0
-          ? `Fix these build/runtime issues and return patch-ready code blocks with file paths:\n\n${errors.join('\n')}`
+          ? `Fix these build/runtime issues. Return COMPLETE, FULL file content (never snippets) for each affected file with // file: headers:\n\n${errors.join('\n')}`
           : `No captured validation errors yet. Ask targeted debugging questions and suggest the fastest next verification step for this app.`,
       },
       {
