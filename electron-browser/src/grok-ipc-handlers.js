@@ -23,46 +23,55 @@ function findGrokWebviewContents() {
 }
 
 const SELECTORS = {
+  // Grok stop button: inside form input area at bottom, in div.ms-auto container
+  // Selector from DOM: form > div > div > div.ps-11 > div...div.ms-auto > button (SVG icon, no text)
   stop: [
     'form div.ms-auto button',
     'button[aria-label="Stop"]',
     'button[aria-label="Stop generating"]',
-    'button[data-testid="stop-button"]',
   ],
+  // Grok copy-response button: 4th button inside div.action-buttons on last response
+  // Selector from DOM: div.action-buttons.last-response > div > button:nth-child(4) > span > svg
   copy: [
     'div.action-buttons.last-response > div > button:nth-child(4)',
     'div.action-buttons > div > button:nth-child(4)',
   ],
+  // Action button toolbar that appears below each completed response
+  // Has class "last-response" on the most recent one
   actionButtons: [
     'div.action-buttons.last-response',
     'div.action-buttons',
   ],
+  // Like/dislike buttons: 1st and 2nd buttons in action-buttons bar
   reaction: [
     'div.action-buttons.last-response > div > button:nth-child(1)',
     'div.action-buttons.last-response > div > button:nth-child(2)',
     'div.action-buttons > div > button:nth-child(1)',
     'div.action-buttons > div > button:nth-child(2)',
   ],
+  // Follow-up suggestion pills (still data-testid based — Grok may show these below responses)
   followUp: [
     'button[data-testid="suggested-prompt"]',
     'button[data-testid="follow-up"]',
     '[data-testid="suggestion-pill"]',
     '[data-testid="followup-suggestion"]',
   ],
+  // Grok chat input: a div inside the form's input area
+  // Selector from DOM: form > div > div > div.ps-11 > div.relative > div > div > div
   textarea: [
     'form div[class*="ps-11"] div[class*="relative"] div[contenteditable]',
     'form div[class*="ps-11"] div[class*="relative"] div > div > div',
     'div[contenteditable="true"][role="textbox"]',
     'textarea[placeholder*="Ask"]',
-    'textarea[data-testid="chat-input"]',
   ],
+  // Send button: same ms-auto area as stop, only visible when not generating
+  // Selector from DOM: form > div > div > div.ps-11 > div...div.ms-auto > button
   sendButton: [
     'form div.ms-auto button',
-    'button[aria-label="Send"]',
-    'button[aria-label="Send message"]',
-    'button[data-testid="send-button"]',
     'button[type="submit"]',
   ],
+  // Response containers: each response has id="response-{uuid}"
+  // Selector from DOM: #response-424db704-... (UUID-based)
   response: [
     'div[id^="response-"]',
     '[data-testid="message-text"]',
