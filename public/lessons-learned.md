@@ -4,6 +4,22 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 28: Simplify targets — 2 chunks max, enforce honest FAIL reporting
+**Date:** 2026-03-22
+**Context:** L3 failed every run. Grok claimed "PASS" but Metrics.tsx was 0 chars, Nav had 0 metrics entries. The 80+ line target required 5-7 chunks, which amplified agent race conditions. Grok's final review said "PASS" when nothing actually worked.
+**Root causes:**
+1. Too many chunks = more opportunities for corruption/races even with Python script
+2. No size constraint = Grok generates unpredictable-length content that doesn't split cleanly
+3. Grok defaults to claiming success — no prompt pressure to be honest about failures
+**Fix:**
+1. Constrained Metrics.tsx to 800-900 raw chars (exactly 2 chunks) — still a real component with 3 metric cards, useState, dark mode
+2. Added HONESTY RULE to shared header: "A detailed FAIL report is 10x more valuable than a false PASS"
+3. Phase 4 review format now requires reporting EXACT numbers (char counts, export presence, metrics count) — no vague claims
+4. Increased budget to 50 calls for more retry room
+**Rule:** Keep chunk counts minimal (2 is ideal). Enforce honest reporting with structured FAIL format. Never let Grok self-assess without requiring specific evidence.
+
+---
+
 ## Lesson 27: Grok's agents ignore "pause" — must enforce single-executor rule
 **Date:** 2026-03-22
 **Context:** L3 failed again despite adding "send chunks atomically." Screenshots show agents fighting: Agent 1 says "Paused Phase 3 calls," Agent 3 says "Paused Phase 3 contributions," but then both still tried to execute. One agent tried "chatroom_send to pause Benjamin and Lucas" — they acknowledged but kept working. Another agent said "Resolving team conflict by taking control of Phase 3 myself." Result: multiple agents all executing Phase 3 simultaneously, Nav got duplicates again, Metrics had chunk issues, final review was FAIL.

@@ -18,6 +18,11 @@ RULES:
 5. Do NOT use chatroom_send to "pause" agents — they don't actually stop. Instead,
    simply never assign execution to them in the first place.
 
+HONESTY RULE — If something fails, report EXACTLY what failed, what error you got, and
+what you think you need to succeed. Do NOT claim PASS if any step failed. A detailed FAIL
+report with specific diagnostics is 10x more valuable than a false PASS. We use your
+failure reports to fix the system — lying about success wastes everyone's time.
+
 PATIENCE PROTOCOL — after any file WRITE (grok-write, grok-create), wait 15 seconds before
 your next action. File changes take time to propagate through the desktop dev server.
   EXCEPTION: grok-create-chunk calls do NOT need waiting between them — chunks buffer in memory
@@ -37,10 +42,10 @@ CREATE SMALL FILES — grok-create (for content < 600 raw chars):
   URL-encode the content. For content > 600 raw chars, use grok-create-chunk instead.
 
 CREATE LARGE FILES — grok-create-chunk (for content > 600 raw chars):
-  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=ENCODED_CHUNK&chunk=0&total=5
-  Split into ~500 raw-char chunks. URL-encode each chunk.
+  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=ENCODED_CHUNK&chunk=0&total=N
+  Split into chunks of UNDER 500 raw characters each. URL-encode each chunk.
   Encoding adds ~1.7x overhead. ~500 raw → ~850 encoded → fits in URL.
-  chunk=0 starts file. File written to disk when final chunk (chunk=total-1) arrives.
+  chunk=0 starts file. File written to disk when final chunk (chunk=N-1) arrives.
   Send ALL chunks back-to-back. No waiting between chunks. Verify ONCE after last chunk.
 
 DELETE FILES — grok-delete:
@@ -78,7 +83,7 @@ COORD — post progress notes:
 1. URL-ENCODE all content/search/replace params. Raw newlines are SILENTLY STRIPPED by HTTP.
    The relay has smartDecode — both single and double encoding work correctly.
 
-2. LARGE FILES (>600 raw chars): Use grok-create-chunk with ~500 raw-char chunks.
+2. LARGE FILES (>600 raw chars): Use grok-create-chunk with chunks UNDER 500 raw chars each.
    grok-create FAILS SILENTLY on large content (URL too long for browse_page).
 
 3. grok-write ON WINDOWS: Single-line searches work. Multi-line searches FAIL SILENTLY
