@@ -381,7 +381,7 @@ function registerGrokIpcHandlers(getWebviewContents) {
       if (result.success) {
         await new Promise(r => setTimeout(r, 200));
 
-        await wc.executeJavaScript(`(() => {
+        const sendMethod = await wc.executeJavaScript(`(() => {
           const form = document.querySelector('form');
           if (form) {
             const sendBtns = form.querySelectorAll('div.ms-auto button');
@@ -404,9 +404,15 @@ function registerGrokIpcHandlers(getWebviewContents) {
           }
           return 'no-send';
         })()`);
+
+        result.sendMethod = sendMethod;
+        if (sendMethod === 'no-send') {
+          result.success = false;
+          result.error = 'Could not find send button or form';
+        }
       }
 
-      console.log(`${LOG} grok-send-prompt: success=${result.success}, inputTag=${result.inputTag || 'n/a'}, baseline: copy=${result.preCopyCount}, reactions=${result.preReactionCount}, followUps=${result.preFollowUpCount}, error=${result.error || 'none'}`);
+      console.log(`${LOG} grok-send-prompt: success=${result.success}, inputTag=${result.inputTag || 'n/a'}, sendMethod=${result.sendMethod || 'n/a'}, baseline: copy=${result.preCopyCount}, reactions=${result.preReactionCount}, followUps=${result.preFollowUpCount}, error=${result.error || 'none'}`);
       return result;
     } catch (err) {
       console.error(`${LOG} grok-send-prompt error:`, err.message);
