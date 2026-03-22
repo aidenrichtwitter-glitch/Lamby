@@ -75,6 +75,8 @@ import { ParallaxPortal, useParallax } from '@/lib/parallax-context';
 
 const MAX_LOG_ENTRIES = 200;
 
+const DESKTOP_PROJECT = 'groks-app';
+
 const isElectron = typeof window !== 'undefined' && typeof (window as any).require === 'function';
 
 type Mode = 'api' | 'browser';
@@ -626,7 +628,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
   const [showLevelPicker, setShowLevelPicker] = useState(false);
   const [levelPassHistory, setLevelPassHistory] = useState<Record<number, { passes: number; lastResult: 'pass' | 'fail' | null }>>(() => {
     try {
-      const stored = localStorage.getItem(`lamby-test-levels-${activeProject || 'groks-app'}`);
+      const stored = localStorage.getItem(`lamby-test-levels-${DESKTOP_PROJECT}`);
       return stored ? JSON.parse(stored) : {};
     } catch { return {}; }
   });
@@ -649,14 +651,14 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           lastResult: result,
         },
       };
-      try { localStorage.setItem(`lamby-test-levels-${activeProject || 'groks-app'}`, JSON.stringify(updated)); } catch {}
+      try { localStorage.setItem(`lamby-test-levels-${DESKTOP_PROJECT}`, JSON.stringify(updated)); } catch {}
       return updated;
     });
   }, [activeProject]);
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(`lamby-test-levels-${activeProject || 'groks-app'}`);
+      const stored = localStorage.getItem(`lamby-test-levels-${DESKTOP_PROJECT}`);
       setLevelPassHistory(stored ? JSON.parse(stored) : {});
     } catch { setLevelPassHistory({}); }
   }, [activeProject]);
@@ -686,7 +688,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
         const [headerResp, levelResp, freshEndpoints] = await Promise.all([
           fetch('/stress-test-phase123/levels/shared-header.txt'),
           fetch(`/stress-test-phase123/levels/${level.file}`),
-          fetchFreshBridgeEndpoints(activeProject || 'groks-app'),
+          fetchFreshBridgeEndpoints(DESKTOP_PROJECT),
         ]);
         if (!headerResp.ok || !levelResp.ok) {
           const ev = { event: 'error', data: { error: `Failed to load level ${level.id} prompt files` }, ts: Date.now() };
@@ -698,7 +700,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
         const header = await headerResp.text();
         const levelTask = await levelResp.text();
         const relayBase = extractBaseUrl(freshEndpoints.cmdUrl || freshEndpoints.snapUrl || freshEndpoints.proxyUrl || '');
-        const proj = activeProject || 'groks-app';
+        const proj = DESKTOP_PROJECT;
         promptText = (header + '\n' + levelTask)
           .replace(/\{\{RELAY_BASE\}\}/g, relayBase)
           .replace(/\{\{PROJECT\}\}/g, proj);
@@ -721,7 +723,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
         body: JSON.stringify({
           prompt: promptText,
           model: 'grok-4-0709',
-          project: activeProject || 'groks-app',
+          project: DESKTOP_PROJECT,
           saveToFile: `public/stress-test-phase123/phase3-browse-${Date.now()}.json`,
         }),
         signal: controller.signal,
@@ -1273,11 +1275,11 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
                   const [headerResp, levelResp, freshEndpoints] = await Promise.all([
                     fetch('/stress-test-phase123/levels/shared-header.txt'),
                     fetch(`/stress-test-phase123/levels/${level.file}`),
-                    fetchFreshBridgeEndpoints(activeProject || 'groks-app'),
+                    fetchFreshBridgeEndpoints(DESKTOP_PROJECT),
                   ]);
                   if (!headerResp.ok || !levelResp.ok) { alert('Could not load level prompt files'); return; }
                   const relayBase = extractBaseUrl(freshEndpoints.cmdUrl || freshEndpoints.snapUrl || freshEndpoints.proxyUrl || '');
-                  const proj = activeProject || 'groks-app';
+                  const proj = DESKTOP_PROJECT;
                   promptText = ((await headerResp.text()) + '\n' + (await levelResp.text()))
                     .replace(/\{\{RELAY_BASE\}\}/g, relayBase)
                     .replace(/\{\{PROJECT\}\}/g, proj);
@@ -4693,8 +4695,9 @@ const GrokBridge: React.FC = () => {
         }
         if (templateText) {
           const taskLine = task ? `Primary task right now: ${task}` : '';
+          const projName = customPromptTemplate.trim() ? activeProject : DESKTOP_PROJECT;
           const result = templateText
-            .replace(/\{\{PROJECT\}\}/gi, activeProject)
+            .replace(/\{\{PROJECT\}\}/gi, projName)
             .replace(/\{\{RELAY_BASE\}\}/gi, relayBase)
             .replace(/\{\{TASK\}\}/gi, taskLine);
           setProjectContext(result);
