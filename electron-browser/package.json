@@ -13,6 +13,7 @@
   "build": {
     "appId": "com.guardian-ai.desktop",
     "productName": "Guardian AI",
+    "asar": false,
     "directories": {
       "output": "dist-electron"
     },
@@ -22,12 +23,8 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis",
+      "target": "portable",
       "icon": null
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
     },
     "linux": {
       "target": ["AppImage"],
