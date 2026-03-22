@@ -70,23 +70,55 @@ Plan C — Navigation.tsx edit:
   This will be exactly ONE grok-write call. No retries.
 
 ==============================
-PHASE 3 — EXECUTE (fast burst, ~10 calls)
+PHASE 3 — EXECUTE (3 browse_page calls + 1 code execution)
 ==============================
-Fire all writes back-to-back. No thinking between calls. No verification between calls.
+*** CRITICAL: Chunks MUST be sent from a SINGLE Python script using your code execution tool.
+    Do NOT use multiple browse_page calls for chunks — your agents will fight over them. ***
 
-3a. Send ALL Metrics.tsx chunks (5-7 calls):
-    For each chunk, URL-encode the content and send:
-    GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=ENCODED_CHUNK&chunk=N&total=TOTAL
+3a. Send ALL Metrics.tsx chunks ATOMICALLY (1 code execution — NOT browse_page):
+    Write and execute a Python script that sends all chunks sequentially.
+    This is ONE code execution action. No agents can interfere.
 
-    ENCODING IS MANDATORY — raw newlines in URLs are SILENTLY STRIPPED by HTTP.
-    Encoding adds ~1.7x overhead. ~500 raw chars → ~850 encoded → fits in URL.
-    Send ALL chunks back-to-back. No waiting. No verifying individual chunks.
+    ```python
+    import urllib.request, urllib.parse, json, time
 
-3b. Write App.tsx (1 call):
+    RELAY = "{{RELAY_BASE}}"
+    PROJECT = "{{PROJECT}}"
+    PATH = "src/pages/Metrics.tsx"
+
+    # Your full Metrics.tsx content from Plan A — paste it here as a Python string
+    content = """YOUR METRICS.TSX CONTENT HERE"""
+
+    # URL-encode the full content, then split into ~500-char chunks
+    encoded = urllib.parse.quote(content, safe='')
+    chunk_size = 500
+    chunks = [encoded[i:i+chunk_size] for i in range(0, len(encoded), chunk_size)]
+    total = len(chunks)
+
+    print(f"Sending {total} chunks for {PATH}...")
+    for i, chunk in enumerate(chunks):
+        url = f"{RELAY}/api/grok-create-chunk?project={PROJECT}&path={PATH}&content={chunk}&chunk={i+1}&total={total}"
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                result = json.loads(resp.read().decode())
+                status = result.get('results', [{}])[0].get('status', 'unknown')
+                print(f"  Chunk {i+1}/{total}: {status}")
+        except Exception as e:
+            print(f"  Chunk {i+1}/{total}: ERROR - {e}")
+        time.sleep(0.5)  # small gap between chunks
+
+    print("All chunks sent!")
+    ```
+
+    *** The content variable must contain your COMPLETE Metrics.tsx code as a Python string.
+    Use triple-quotes. Escape any backslashes or triple-quotes inside the content. ***
+
+3b. Write App.tsx (1 browse_page call):
     URL-encode the full updated App.tsx content from Plan B:
     GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/components/App.tsx&content=ENCODED_FULL_CONTENT
 
-3c. Write Navigation.tsx (1 call — EXACTLY ONE, never more):
+3c. Write Navigation.tsx (1 browse_page call — EXACTLY ONE, never more):
     GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=src/components/Navigation.tsx&search=SEARCH_TEXT&replace=REPLACE_TEXT
     If this returns replacements:0, do NOT retry. You will fix it in Phase 4.
     If this returns replacements:1, it worked.
@@ -156,7 +188,7 @@ Now verify everything and fix any issues.
 - App.tsx is ~920 raw chars → ~1500 encoded → fits in one grok-create URL
 
 === APPROACH REFERENCE ===
-- Metrics.tsx: grok-create-chunk (too large for single URL)
-- App.tsx: grok-create (full rewrite — grok-write fails due to Windows \r\n line endings)
-- Navigation.tsx: grok-write (single-line search works fine, ONE call only)
+- Metrics.tsx: Python script via code execution → sends grok-create-chunk URLs atomically (NEVER use multiple browse_page calls for chunks — your agents will fight over them)
+- App.tsx: grok-create via browse_page (full rewrite — grok-write fails due to Windows \r\n line endings)
+- Navigation.tsx: grok-write via browse_page (single-line search works fine, ONE call only)
 - Activity icon: ALREADY imported in Navigation.tsx — do NOT add duplicate

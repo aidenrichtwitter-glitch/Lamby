@@ -4,6 +4,22 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 26: Grok's multi-agent system causes concurrent chunk writes — use atomic Python script
+**Date:** 2026-03-22
+**Context:** L3 test failed again. Grok has multiple internal agents (Agent 1, Agent 3, "Benjamin", "Lucas", "Harper") that execute browse_page calls in parallel. When L3 Phase 3 says "send all chunks back-to-back," each agent independently tries to send chunks — they fight over the chunk buffer, corrupt each other's writes, and waste browse_page calls negotiating who gets to write.
+**Evidence from screenshots:**
+- "Pausing Benjamin and Lucas via chatroom_send to avoid concurrent Phase 3 writes"
+- "Resolving team conflict by taking control of Phase 3 to generate and split Metrics.tsx myself"
+- "Preparing to halt teammate actions and execute Phase 3 independently to prevent chunk conflicts"
+- Agent 1 and Agent 3 both paused, but still posted conflicting L3 REVIEW results
+- Nav got duplicates again (multiple agents each called grok-write)
+- Final result: "FAIL due to Metrics read issue despite tree presence"
+**Root cause:** We cannot control Grok's agent parallelism. Multiple browse_page calls = multiple agents racing. Chunks are the worst case because ordering matters and agents don't coordinate.
+**Fix:** Replace multiple browse_page chunk calls with ONE Python script execution. Grok can use its code execution tool to run a Python script that sends all chunk URLs sequentially via urllib. One agent runs one script — no race conditions, no agent conflicts, guaranteed sequential ordering.
+**Rule:** For ANY operation requiring multiple sequential API calls (like chunks), ALWAYS use a single Python script via code execution. NEVER use multiple browse_page calls — Grok's agents will parallelize them and cause corruption.
+
+---
+
 ## Lesson 25: Grok MUST URL-encode content — raw newlines are silently stripped by HTTP
 **Date:** 2026-03-22
 **Context:** L3 test failed 3 times. Raw (unencoded) JSX in URLs loses all newlines — HTTP strips `\n` from query parameters. File appears to write successfully but content is one giant line with missing line breaks.
