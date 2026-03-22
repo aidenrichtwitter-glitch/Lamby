@@ -92,6 +92,7 @@ Fire all writes back-to-back. No thinking between calls. No verification between
     If this returns replacements:1, it worked.
 
 → Post to coord: "L3-P3: all writes sent"
+→ Wait 15 seconds for file changes to propagate before Phase 4.
 
 ==============================
 PHASE 4 — VERIFY & COMMIT (~8 calls)
