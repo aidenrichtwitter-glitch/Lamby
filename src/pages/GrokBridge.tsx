@@ -2619,7 +2619,7 @@ const GrokBridge: React.FC = () => {
 
     const lastResponse = lastFullResponseRef.current;
     if (lastResponse) {
-      const sanitized = lastResponse.slice(0, 2000).replace(/```[\w]*/g, '---code-block---');
+      const sanitized = lastResponse.slice(0, 2000).replace(/`{3,}[^\n]*/g, '---code-block---');
       prompt += `Previous suggestion from you was:\n${sanitized}${lastResponse.length > 2000 ? '\n...(truncated)' : ''}\n\n`;
     }
 
@@ -2658,7 +2658,7 @@ const GrokBridge: React.FC = () => {
       prompt += `4. For LARGE fixes (rewriting most of the file): output COMPLETE // file: code blocks — Lamby auto-applies them\n`;
       prompt += `5. VERIFY via grok-read or wait for Lamby's screenshot response\n\n`;
     }
-    prompt += `⚠ OUTPUT FORMAT FOR FILE CHANGES:\n`;
+    prompt += `⚠ OUTPUT FORMAT (when using // file: code blocks instead of grok-write):\n`;
     prompt += `Every code block MUST contain the COMPLETE, FULL file — every import, every function, every closing brace.\n`;
     prompt += `Lamby OVERWRITES the entire file with your code block. Returning a snippet permanently deletes the rest.\n`;
     prompt += `FORBIDDEN: "// ... rest unchanged", "// remaining code", ellipsis (...), any abbreviated content.\n`;
@@ -5369,7 +5369,7 @@ const GrokBridge: React.FC = () => {
       errorPrompt += `4. For LARGE fixes (rewriting most of the file): output COMPLETE // file: code blocks — Lamby auto-applies them\n`;
       errorPrompt += `5. VERIFY via grok-read or wait for Lamby's screenshot response\n\n`;
     }
-    errorPrompt += `⚠ OUTPUT FORMAT FOR FILE CHANGES:\n` +
+    errorPrompt += `⚠ OUTPUT FORMAT (when using // file: code blocks instead of grok-write):\n` +
       `Every code block MUST contain the COMPLETE, FULL file — every import, every function, every closing brace.\n` +
       `Lamby OVERWRITES the entire file with your code block. Returning a snippet permanently deletes the rest.\n` +
       `FORBIDDEN: "// ... rest unchanged", "// remaining code", ellipsis (...), any abbreviated content.\n` +
