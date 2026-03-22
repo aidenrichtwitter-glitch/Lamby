@@ -32,6 +32,9 @@ const SELECTORS = {
     'button[data-testid="stop-generating"]',
   ],
   copy: [
+    'div.action-buttons.last-response button:nth-child(4)',
+    'div.action-buttons.last-response button:last-child',
+    'div.action-buttons button:nth-child(4)',
     'button[aria-label="Copy"]',
     'button[aria-label="Copy to clipboard"]',
     'button[aria-label="Copy response"]',
@@ -39,6 +42,10 @@ const SELECTORS = {
     'button[aria-label="Copy text"]',
     'button[data-testid="copy-button"]',
     'button[data-testid="copy-code-button"]',
+  ],
+  responseCopy: [
+    'div.action-buttons.last-response button',
+    'div.action-buttons button',
   ],
   reaction: [
     'button[aria-label="Good response"]',
@@ -204,8 +211,86 @@ function registerGrokIpcHandlers(getWebviewContents) {
       const wc = resolveWc();
       if (!wc) return { success: false, error: 'No webview' };
 
-      const result = await wc.executeJavaScript(`(() => {
-        const responseSelectors = ${JSON.stringify(buildSelectorChain(SELECTORS.response))};
+      const copySel = buildSelectorChain(SELECTORS.copy);
+      const responseSel = buildSelectorChain(SELECTORS.response);
+
+      const { clipboard } = require('electron');
+
+      clipboard.writeText('__CLIPBOARD_CLEAR__');
+
+      const clickResult = await wc.executeJavaScript(`(async () => {
+        const actionBar = document.querySelector('div.action-buttons.last-response')
+                       || document.querySelector('div.action-buttons');
+
+        if (actionBar) {
+          const btns = actionBar.querySelectorAll('button');
+          if (btns.length >= 4) {
+            btns[3].click();
+            return { clicked: true, strategy: 'action-buttons-nth4', btnCount: btns.length };
+          }
+          if (btns.length > 0) {
+            btns[btns.length - 1].click();
+            return { clicked: true, strategy: 'action-buttons-last', btnCount: btns.length };
+          }
+        }
+
+        const copySel = ${JSON.stringify(copySel)};
+        let copyBtns = document.querySelectorAll(copySel);
+        if (copyBtns.length === 0) {
+          const allButtons = document.querySelectorAll('button');
+          const found = [];
+          for (const btn of allButtons) {
+            const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+            const tooltip = (btn.getAttribute('title') || '').toLowerCase();
+            const svg = btn.querySelector('svg');
+            const svgTitle = svg ? (svg.querySelector('title')?.textContent || '').toLowerCase() : '';
+            if (label.includes('copy') || label.includes('clipboard') ||
+                tooltip.includes('copy') || tooltip.includes('clipboard') ||
+                svgTitle.includes('copy')) {
+              found.push(btn);
+            }
+          }
+          copyBtns = found;
+        }
+
+        if (copyBtns.length > 0) {
+          const lastCopyBtn = copyBtns[copyBtns.length - 1];
+          lastCopyBtn.click();
+          return { clicked: true, strategy: 'selector-match', count: copyBtns.length };
+        }
+
+        return { clicked: false, error: 'no-copy-buttons-found' };
+      })()`);
+
+      if (clickResult.clicked) {
+        await new Promise(r => setTimeout(r, 400));
+
+        let clipText = null;
+        try {
+          clipText = await wc.executeJavaScript(`(async () => {
+            try {
+              const t = await navigator.clipboard.readText();
+              return t || null;
+            } catch { return null; }
+          })()`);
+        } catch {}
+
+        if (!clipText || clipText === '__CLIPBOARD_CLEAR__' || clipText.trim().length < 10) {
+          clipText = clipboard.readText();
+        }
+
+        if (clipText && clipText !== '__CLIPBOARD_CLEAR__' && clipText.trim().length > 10) {
+          console.log(`${LOG} grok-copy-last-response: success=true, len=${clipText.length}, method=copy-click-${clickResult.strategy}`);
+          return { success: true, text: clipText.trim(), findMethod: `copy-click-${clickResult.strategy}` };
+        }
+        console.log(`${LOG} grok-copy-last-response: copy button clicked (strategy=${clickResult.strategy}) but clipboard empty/unchanged. Falling back to DOM scrape.`);
+      } else {
+        console.log(`${LOG} grok-copy-last-response: ${clickResult.error}. Falling back to DOM scrape.`);
+      }
+
+      console.log(`${LOG} grok-copy-last-response: copy-button click did not yield clipboard text (clickResult: clicked=${clickResult.clicked}, method=${clickResult.method}). Falling back to DOM scrape.`);
+      const domResult = await wc.executeJavaScript(`(() => {
+        const responseSelectors = ${JSON.stringify(responseSel)};
         let messages = document.querySelectorAll(responseSelectors);
 
         if (messages.length === 0) {
@@ -236,36 +321,6 @@ function registerGrokIpcHandlers(getWebviewContents) {
         }
 
         if (messages.length === 0) {
-          const copyButtons = document.querySelectorAll(${JSON.stringify(buildSelectorChain(SELECTORS.copy))});
-          if (copyButtons.length > 0) {
-            const lastCopy = copyButtons[copyButtons.length - 1];
-            let container = lastCopy.parentElement;
-            for (let i = 0; i < 10 && container; i++) {
-              const text = container.innerText || '';
-              if (text.length > 100) {
-                return { success: true, text: text.trim(), findMethod: 'copy-button-ancestor' };
-              }
-              container = container.parentElement;
-            }
-          }
-          const allButtons = document.querySelectorAll('button');
-          for (let i = allButtons.length - 1; i >= 0; i--) {
-            const label = (allButtons[i].getAttribute('aria-label') || '').toLowerCase();
-            if (label.includes('copy') || label.includes('clipboard')) {
-              let container = allButtons[i].parentElement;
-              for (let j = 0; j < 10 && container; j++) {
-                const text = container.innerText || '';
-                if (text.length > 100) {
-                  return { success: true, text: text.trim(), findMethod: 'copy-label-ancestor' };
-                }
-                container = container.parentElement;
-              }
-              break;
-            }
-          }
-        }
-
-        if (messages.length === 0) {
           return { success: false, error: 'No response messages found in DOM' };
         }
 
@@ -274,11 +329,11 @@ function registerGrokIpcHandlers(getWebviewContents) {
         if (!text || text.length < 5) {
           return { success: false, error: 'Last response is empty or too short' };
         }
-        return { success: true, text, findMethod: 'selector-match' };
+        return { success: true, text, findMethod: 'dom-scrape-fallback' };
       })()`);
 
-      console.log(`${LOG} grok-copy-last-response: success=${result.success}, len=${result.text ? result.text.length : 0}, method=${result.findMethod || 'n/a'}, error=${result.error || 'none'}`);
-      return result;
+      console.log(`${LOG} grok-copy-last-response: success=${domResult.success}, len=${domResult.text ? domResult.text.length : 0}, method=${domResult.findMethod || 'n/a'}, error=${domResult.error || 'none'}`);
+      return domResult;
     } catch (err) {
       console.error(`${LOG} grok-copy-last-response error:`, err.message);
       return { success: false, error: err.message };
