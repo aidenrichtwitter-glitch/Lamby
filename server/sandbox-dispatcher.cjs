@@ -166,42 +166,6 @@ process.on("exit", _closePersistentBrowser);
 process.on("SIGINT", () => { _closePersistentBrowser(); process.exit(0); });
 process.on("SIGTERM", () => { _closePersistentBrowser(); process.exit(0); });
 
-let _screenshotDesktopChecked = false;
-let _screenshotDesktopModule = null;
-function _getScreenshotDesktop() {
-  if (_screenshotDesktopChecked) return _screenshotDesktopModule;
-  _screenshotDesktopChecked = true;
-  try { _screenshotDesktopModule = require("screenshot-desktop"); } catch {}
-  return _screenshotDesktopModule;
-}
-
-async function _fastMethod1_ScreenshotDesktop(outputPath) {
-  const sd = _getScreenshotDesktop();
-  if (!sd) return null;
-  try {
-    const img = await sd({ format: "png" });
-    fs.writeFileSync(outputPath, img);
-    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 100) {
-      return { captured: true, method: "screenshot-desktop" };
-    }
-  } catch {}
-  return null;
-}
-
-function _fastMethod2_PowerShell(outputPath) {
-  if (process.platform !== "win32") return null;
-  const psScript = `Add-Type -AssemblyName System.Windows.Forms,System.Drawing;$s=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds;$b=New-Object System.Drawing.Bitmap($s.Width,$s.Height);$g=[System.Drawing.Graphics]::FromImage($b);$g.CopyFromScreen($s.Location,[System.Drawing.Point]::Empty,$s.Size);$b.Save('${outputPath.replace(/'/g, "''")}');$g.Dispose();$b.Dispose()`;
-  try {
-    childProcess.execSync(`powershell -NoProfile -NonInteractive -Command "${psScript.replace(/"/g, '\\"')}"`, {
-      timeout: 10000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"],
-    });
-    if (fs.existsSync(outputPath) && fs.statSync(outputPath).size > 100) {
-      return { captured: true, method: "powershell-copyfromscreen" };
-    }
-  } catch {}
-  return null;
-}
-
 async function _fastMethod3_CDPConnect(outputPath, opts) {
   const puppeteerCorePath = findPuppeteerPath();
   if (!puppeteerCorePath) return null;
@@ -305,11 +269,8 @@ async function fastScreenshot(outputPath, opts) {
   const r4 = await _fastMethod4_PersistentPuppeteer(outputPath, opts);
   if (r4) { r4.ms = Date.now() - t0; return r4; }
 
-  const r2 = _fastMethod2_PowerShell(outputPath);
-  if (r2) { r2.ms = Date.now() - t0; return r2; }
-
-  const r1 = await _fastMethod1_ScreenshotDesktop(outputPath);
-  if (r1) { r1.ms = Date.now() - t0; return r1; }
+  const r5 = _fastMethod5_ColdstartPuppeteer(outputPath, opts);
+  if (r5) { r5.ms = Date.now() - t0; return r5; }
 
   return { captured: false, method: "none", ms: Date.now() - t0 };
 }
