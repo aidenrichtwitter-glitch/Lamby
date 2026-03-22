@@ -1000,17 +1000,35 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
     }
   }, [extractFromText]);
 
+  const lastInjectTimeRef = useRef<number>(0);
+
   useEffect(() => {
     extractFromTextRef.current = extractFromText;
-    if (injectTextRef) injectTextRef.current = autoDetectEnabled ? extractFromText : null;
+    if (injectTextRef) {
+      const wrappedInject = autoDetectEnabled ? (text: string) => {
+        lastInjectTimeRef.current = Date.now();
+        extractFromText(text);
+      } : null;
+      injectTextRef.current = wrappedInject;
+    }
     return () => { if (injectTextRef) injectTextRef.current = null; };
   }, [extractFromText, injectTextRef, autoDetectEnabled]);
 
   useEffect(() => {
-    if (!isElectron && autoDetectEnabled) {
+    if (!autoDetectEnabled) return;
+
+    const poll = () => {
+      if (isElectron) {
+        const timeSinceInject = Date.now() - lastInjectTimeRef.current;
+        if (timeSinceInject < 10000) return;
+      }
       readClipboard();
-    }
-  }, []);
+    };
+
+    poll();
+    const intervalId = setInterval(poll, 2000);
+    return () => clearInterval(intervalId);
+  }, [autoDetectEnabled, readClipboard]);
 
   const validate = (block: ExtractedBlock) => {
     const checks = validateChange(block.code, block.filePath || 'unknown.ts');
