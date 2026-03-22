@@ -1,7 +1,7 @@
 {
-  "name": "guardian-ai-electron",
-  "description": "Guardian AI Desktop Application",
-  "author": "Guardian AI",
+  "name": "lamby",
+  "description": "Lamby Desktop Application",
+  "author": "Lamby",
   "private": true,
   "version": "1.0.0",
   "type": "commonjs",
@@ -11,8 +11,8 @@
     "electron-builder": "^26.0.0"
   },
   "build": {
-    "appId": "com.guardian-ai.desktop",
-    "productName": "Guardian AI",
+    "appId": "com.lamby.desktop",
+    "productName": "Lamby",
     "asar": false,
     "directories": {
       "output": "../exe"
