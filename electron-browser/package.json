@@ -35,9 +35,9 @@
       "shortcutName": "Lamby",
       "artifactName": "Lamby-Setup-${version}.${ext}",
       "perMachine": false,
-      "menuCategory": "Lamby",
       "uninstallDisplayName": "Lamby",
-      "deleteAppDataOnUninstall": false
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh"
     },
     "linux": {
       "target": ["AppImage"],
