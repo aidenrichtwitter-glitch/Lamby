@@ -207,16 +207,17 @@ PHASE 3 — EXECUTE (2 browse_page calls + 1 code execution)
     # Your full Metrics.tsx content from Plan A — paste it here as a Python string
     content = """YOUR METRICS.TSX CONTENT HERE"""
 
-    # URL-encode the full content, then split into 2 chunks
-    encoded = urllib.parse.quote(content, safe='')
-    mid = len(encoded) // 2
-    chunks = [encoded[:mid], encoded[mid:]]
+    # Split RAW content into 2 chunks FIRST, then URL-encode each independently
+    # (splitting encoded text can break %xx sequences across chunk boundaries)
+    mid = len(content) // 2
+    raw_chunks = [content[:mid], content[mid:]]
 
-    print(f"Content: {len(content)} raw chars, {len(encoded)} encoded chars")
+    print(f"Content: {len(content)} raw chars")
     print(f"Sending 2 chunks for {PATH}...")
-    for i, chunk in enumerate(chunks):
-        url = f"{RELAY}/api/grok-create-chunk?project={PROJECT}&path={PATH}&content={chunk}&chunk={i}&total=2"
-        print(f"  Chunk {i}/1: {len(chunk)} encoded chars, URL length: {len(url)}")
+    for i, raw_chunk in enumerate(raw_chunks):
+        encoded_chunk = urllib.parse.quote(raw_chunk, safe='')
+        url = f"{RELAY}/api/grok-create-chunk?project={PROJECT}&path={PATH}&content={encoded_chunk}&chunk={i}&total=2"
+        print(f"  Chunk {i}/1: {len(raw_chunk)} raw chars, {len(encoded_chunk)} encoded, URL length: {len(url)}")
         try:
             req = urllib.request.Request(url)
             with urllib.request.urlopen(req, timeout=15) as resp:
