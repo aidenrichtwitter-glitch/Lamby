@@ -44,6 +44,6 @@ console.log(`\n=== Step 4/4: Packaging ${isLinux ? 'Linux' : 'Windows'} app ===`
 run(`npx electron-builder ${platform}`, ELECTRON_DIR);
 
 console.log('\n=== BUILD COMPLETE ===');
-const outputDir = path.join(ELECTRON_DIR, 'dist-electron');
+const outputDir = path.join(ROOT, 'exe');
 console.log(`Output: ${outputDir}`);
-console.log(isLinux ? 'Look for the AppImage/deb in the folder above.' : 'Look for the .exe installer in the folder above.');
+console.log(isLinux ? 'Look for the AppImage in the exe/ folder.' : 'Look for the Setup .exe installer in the exe/ folder.');

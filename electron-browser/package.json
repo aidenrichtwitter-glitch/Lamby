@@ -15,7 +15,7 @@
     "productName": "Guardian AI",
     "asar": false,
     "directories": {
-      "output": "dist-electron"
+      "output": "../exe"
     },
     "files": [
       "src/**/*",
@@ -23,8 +23,13 @@
       "package.json"
     ],
     "win": {
-      "target": "portable",
-      "icon": null
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": null,
+      "uninstallerIcon": null
     },
     "linux": {
       "target": ["AppImage"],
