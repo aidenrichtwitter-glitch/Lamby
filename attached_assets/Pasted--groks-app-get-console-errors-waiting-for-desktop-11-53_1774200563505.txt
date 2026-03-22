@@ -1,0 +1,1224 @@
+
+[groks-app] get_console_errors
+waiting for desktop…
+11:53:31
+[groks-app] get_console_errors
+waiting for desktop…
+11:55:59
+[groks-app] search_replace: src/pages/Dashboard.tsx
+search: import React from 'react' export const Dashboard: React.FC = () => { return (
+11:56:59
+[groks-app] search_replace: src/pages/Dashboard.tsx
+search: import React from 'react' export const Dashboard: React.FC = () => { return (
+11:58:01
+[groks-app] search_replace → src/pages/Dashboard.tsx (1 replacement)
+1 replacement in src/pages/Dashboard.tsx
+23.5s
+11:59:45
+[groks-app] ⚠ search_replace — ZERO matches in src/pages/Dashboard.tsx
+0 replacements in src/pages/Dashboard.tsx
+78ms
+12:07:41
+Desktop socket error — groks-app
+write EPIPE
+12:07:41
+Desktop disconnected — groks-app
+connection closed
+12:07:58
+Desktop connected — groks-app
+groks-app
+12:07:58
+Desktop connected — groks-app
+groks-app
+12:07:58
+Desktop disconnected — groks-app
+connection closed
+12:08:01
+Desktop connected — groks-app
+groks-app
+12:08:01
+Desktop disconnected — groks-app
+connection closed
+12:08:03
+Desktop connected — groks-app
+groks-app
+12:08:03
+Desktop disconnected — groks-app
+connection closed
+12:08:05
+Desktop connected — groks-app
+groks-app
+12:08:05
+Desktop disconnected — groks-app
+connection closed
+12:08:08
+Desktop connected — groks-app
+groks-app
+12:08:08
+Desktop disconnected — groks-app
+connection closed
+12:08:10
+Desktop connected — groks-app
+groks-app
+12:08:10
+Desktop disconnected — groks-app
+connection closed
+12:08:12
+Desktop connected — groks-app
+groks-app
+12:08:12
+Desktop disconnected — groks-app
+connection closed
+12:08:15
+Desktop connected — groks-app
+groks-app
+12:08:15
+Desktop disconnected — groks-app
+connection closed
+12:08:17
+Desktop connected — groks-app
+groks-app
+12:08:17
+Desktop disconnected — groks-app
+connection closed
+12:08:19
+Desktop connected — groks-app
+groks-app
+12:08:19
+Desktop disconnected — groks-app
+connection closed
+12:08:22
+Desktop connected — groks-app
+groks-app
+12:08:22
+Desktop disconnected — groks-app
+connection closed
+12:08:24
+Desktop connected — groks-app
+groks-app
+12:08:24
+Desktop disconnected — groks-app
+connection closed
+12:08:26
+Desktop connected — groks-app
+groks-app
+12:08:26
+Desktop disconnected — groks-app
+connection closed
+12:08:29
+Desktop connected — groks-app
+groks-app
+12:08:29
+Desktop disconnected — groks-app
+connection closed
+12:08:31
+Desktop connected — groks-app
+groks-app
+12:08:31
+Desktop disconnected — groks-app
+connection closed
+12:08:33
+Desktop connected — groks-app
+groks-app
+12:08:33
+Desktop disconnected — groks-app
+connection closed
+12:08:35
+Desktop connected — groks-app
+groks-app
+12:08:36
+Desktop disconnected — groks-app
+connection closed
+12:08:38
+Desktop connected — groks-app
+groks-app
+12:08:38
+Desktop disconnected — groks-app
+connection closed
+12:08:40
+Desktop connected — groks-app
+groks-app
+12:09:33
+[groks-app] get_console_errors
+ok
+76ms
+12:10:40
+Desktop disconnected — groks-app
+connection closed
+12:10:42
+Desktop connected — groks-app
+groks-app
+12:10:42
+Desktop disconnected — groks-app
+connection closed
+12:10:44
+Desktop connected — groks-app
+groks-app
+12:10:44
+Desktop disconnected — groks-app
+connection closed
+12:10:47
+Desktop connected — groks-app
+groks-app
+12:10:47
+Desktop disconnected — groks-app
+connection closed
+12:10:49
+Desktop connected — groks-app
+groks-app
+12:10:49
+Desktop disconnected — groks-app
+connection closed
+12:10:51
+Desktop connected — groks-app
+groks-app
+12:10:51
+Desktop disconnected — groks-app
+connection closed
+12:10:54
+Desktop connected — groks-app
+groks-app
+12:10:54
+Desktop disconnected — groks-app
+connection closed
+12:10:56
+Desktop connected — groks-app
+groks-app
+12:10:56
+Desktop disconnected — groks-app
+connection closed
+12:10:58
+Desktop connected — groks-app
+groks-app
+12:10:59
+Desktop disconnected — groks-app
+connection closed
+12:11:01
+Desktop connected — groks-app
+groks-app
+12:11:01
+Desktop disconnected — groks-app
+connection closed
+12:11:03
+Desktop connected — groks-app
+groks-app
+12:11:03
+Desktop disconnected — groks-app
+connection closed
+12:11:06
+Desktop connected — groks-app
+groks-app
+12:11:06
+Desktop disconnected — groks-app
+connection closed
+12:11:08
+Desktop connected — groks-app
+groks-app
+12:11:08
+Desktop disconnected — groks-app
+connection closed
+12:11:10
+Desktop connected — groks-app
+groks-app
+12:11:10
+Desktop disconnected — groks-app
+connection closed
+12:11:13
+Desktop connected — groks-app
+groks-app
+12:11:13
+Desktop disconnected — groks-app
+connection closed
+12:11:15
+Desktop connected — groks-app
+groks-app
+12:11:15
+Desktop disconnected — groks-app
+connection closed
+12:11:17
+Desktop connected — groks-app
+groks-app
+12:11:17
+Desktop disconnected — groks-app
+connection closed
+12:11:20
+Desktop connected — groks-app
+groks-app
+12:11:20
+Desktop disconnected — groks-app
+connection closed
+12:11:22
+Desktop connected — groks-app
+groks-app
+12:11:22
+Desktop disconnected — groks-app
+connection closed
+12:11:24
+Desktop connected — groks-app
+groks-app
+12:11:32
+Desktop disconnected — groks-app
+connection closed
+12:11:34
+Desktop connected — groks-app
+groks-app
+12:11:34
+Desktop disconnected — groks-app
+connection closed
+12:11:36
+Desktop connected — groks-app
+groks-app
+12:11:36
+Desktop disconnected — groks-app
+connection closed
+12:11:39
+Desktop connected — groks-app
+groks-app
+12:11:39
+Desktop disconnected — groks-app
+connection closed
+12:11:41
+Desktop connected — groks-app
+groks-app
+12:11:41
+Desktop disconnected — groks-app
+connection closed
+12:11:43
+Desktop connected — groks-app
+groks-app
+12:11:44
+Desktop disconnected — groks-app
+connection closed
+12:11:46
+Desktop connected — groks-app
+groks-app
+12:11:46
+Desktop disconnected — groks-app
+connection closed
+12:11:48
+Desktop connected — groks-app
+groks-app
+12:11:48
+Desktop disconnected — groks-app
+connection closed
+12:11:51
+Desktop connected — groks-app
+groks-app
+12:11:51
+Desktop disconnected — groks-app
+connection closed
+12:11:53
+Desktop connected — groks-app
+groks-app
+12:11:53
+Desktop disconnected — groks-app
+connection closed
+12:11:55
+Desktop connected — groks-app
+groks-app
+12:11:55
+Desktop disconnected — groks-app
+connection closed
+12:11:58
+Desktop connected — groks-app
+groks-app
+12:11:58
+Desktop disconnected — groks-app
+connection closed
+12:12:00
+Desktop connected — groks-app
+groks-app
+12:12:00
+Desktop disconnected — groks-app
+connection closed
+12:12:02
+Desktop connected — groks-app
+groks-app
+12:12:02
+Desktop disconnected — groks-app
+connection closed
+12:12:05
+Desktop connected — groks-app
+groks-app
+12:12:05
+Desktop disconnected — groks-app
+connection closed
+12:12:07
+Desktop connected — groks-app
+groks-app
+12:12:07
+Desktop disconnected — groks-app
+connection closed
+12:12:09
+Desktop connected — groks-app
+groks-app
+12:12:09
+Desktop disconnected — groks-app
+connection closed
+12:12:12
+Desktop connected — groks-app
+groks-app
+12:12:12
+Desktop disconnected — groks-app
+connection closed
+12:12:14
+Desktop connected — groks-app
+groks-app
+12:12:14
+Desktop disconnected — groks-app
+connection closed
+12:12:16
+Desktop connected — groks-app
+groks-app
+12:12:17
+Desktop disconnected — groks-app
+connection closed
+12:12:19
+Desktop connected — groks-app
+groks-app
+12:12:19
+Desktop disconnected — groks-app
+connection closed
+12:12:21
+Desktop connected — groks-app
+groks-app
+12:12:21
+Desktop disconnected — groks-app
+connection closed
+12:12:23
+Desktop connected — groks-app
+groks-app
+12:12:24
+Desktop disconnected — groks-app
+connection closed
+12:12:26
+Desktop connected — groks-app
+groks-app
+12:12:26
+Desktop disconnected — groks-app
+connection closed
+12:12:28
+Desktop connected — groks-app
+groks-app
+12:12:28
+Desktop disconnected — groks-app
+connection closed
+12:12:31
+Desktop connected — groks-app
+groks-app
+12:12:31
+Desktop disconnected — groks-app
+connection closed
+12:12:33
+Desktop connected — groks-app
+groks-app
+12:12:33
+Desktop disconnected — groks-app
+connection closed
+12:12:35
+Desktop connected — groks-app
+groks-app
+12:12:35
+Desktop disconnected — groks-app
+connection closed
+12:12:38
+Desktop connected — groks-app
+groks-app
+12:12:38
+Desktop disconnected — groks-app
+connection closed
+12:12:40
+Desktop connected — groks-app
+groks-app
+12:12:40
+Desktop disconnected — groks-app
+connection closed
+12:12:42
+Desktop connected — groks-app
+groks-app
+12:12:42
+Desktop disconnected — groks-app
+connection closed
+12:12:45
+Desktop connected — groks-app
+groks-app
+12:12:45
+Desktop disconnected — groks-app
+connection closed
+12:12:47
+Desktop connected — groks-app
+groks-app
+12:12:47
+Desktop disconnected — groks-app
+connection closed
+12:12:50
+Desktop connected — groks-app
+groks-app
+12:12:50
+Desktop disconnected — groks-app
+connection closed
+12:12:52
+Desktop connected — groks-app
+groks-app
+12:12:52
+Desktop disconnected — groks-app
+connection closed
+12:12:54
+Desktop connected — groks-app
+groks-app
+12:12:54
+Desktop disconnected — groks-app
+connection closed
+12:12:57
+Desktop connected — groks-app
+groks-app
+12:12:57
+Desktop disconnected — groks-app
+connection closed
+12:12:59
+Desktop connected — groks-app
+groks-app
+12:12:59
+Desktop disconnected — groks-app
+connection closed
+12:13:01
+Desktop connected — groks-app
+groks-app
+12:13:01
+Desktop disconnected — groks-app
+connection closed
+12:13:04
+Desktop connected — groks-app
+groks-app
+12:13:04
+Desktop disconnected — groks-app
+connection closed
+12:13:06
+Desktop connected — groks-app
+groks-app
+12:13:06
+Desktop disconnected — groks-app
+connection closed
+12:13:07
+[groks-app] Read file: src/components/Navigation.tsx
+19 lines, 754 chars
+106ms
+12:13:08
+[groks-app] Read file: src/components/App.tsx
+19 lines, 356 chars
+106ms
+12:13:08
+Desktop connected — groks-app
+groks-app
+12:13:08
+Desktop disconnected — groks-app
+connection closed
+12:13:09
+[groks-app] Read file: src/components/Navigation.tsx
+1 lines, 0 chars
+84ms
+12:13:10
+[groks-app] Read file: src/components/App.tsx
+35 lines, 944 chars
+85ms
+12:13:11
+[groks-app] Read file: src/components/Navigation.tsx
+1 lines, 0 chars
+94ms
+12:13:11
+Desktop connected — groks-app
+groks-app
+12:13:11
+Desktop disconnected — groks-app
+connection closed
+12:13:12
+[groks-app] Read file: src/components/App.tsx
+19 lines, 356 chars
+89ms
+12:13:13
+Desktop connected — groks-app
+groks-app
+12:13:13
+Desktop disconnected — groks-app
+connection closed
+12:13:15
+Desktop connected — groks-app
+groks-app
+12:13:16
+Desktop disconnected — groks-app
+connection closed
+12:13:18
+Desktop connected — groks-app
+groks-app
+12:13:18
+Desktop disconnected — groks-app
+connection closed
+12:13:20
+Desktop connected — groks-app
+groks-app
+12:13:20
+Desktop disconnected — groks-app
+connection closed
+12:13:22
+Desktop connected — groks-app
+groks-app
+12:13:23
+Desktop disconnected — groks-app
+connection closed
+12:13:25
+Desktop connected — groks-app
+groks-app
+12:13:25
+Desktop disconnected — groks-app
+connection closed
+12:13:27
+Desktop connected — groks-app
+groks-app
+12:13:27
+Desktop disconnected — groks-app
+connection closed
+12:13:29
+Desktop connected — groks-app
+groks-app
+12:13:30
+Desktop disconnected — groks-app
+connection closed
+12:13:32
+Desktop connected — groks-app
+groks-app
+12:13:32
+Desktop disconnected — groks-app
+connection closed
+12:13:34
+Desktop connected — groks-app
+groks-app
+12:13:34
+Desktop disconnected — groks-app
+connection closed
+12:13:37
+Desktop connected — groks-app
+groks-app
+12:13:37
+Desktop disconnected — groks-app
+connection closed
+12:13:39
+Desktop connected — groks-app
+groks-app
+12:13:39
+Desktop disconnected — groks-app
+connection closed
+12:13:41
+Desktop connected — groks-app
+groks-app
+12:13:41
+Desktop disconnected — groks-app
+connection closed
+12:13:44
+Desktop connected — groks-app
+groks-app
+12:13:44
+Desktop disconnected — groks-app
+connection closed
+12:13:46
+Desktop connected — groks-app
+groks-app
+12:13:46
+Desktop disconnected — groks-app
+connection closed
+12:13:48
+Desktop connected — groks-app
+groks-app
+12:13:49
+Desktop disconnected — groks-app
+connection closed
+12:13:51
+Desktop connected — groks-app
+groks-app
+12:13:51
+Desktop disconnected — groks-app
+connection closed
+12:13:53
+Desktop connected — groks-app
+groks-app
+12:13:53
+Desktop disconnected — groks-app
+connection closed
+12:13:56
+Desktop connected — groks-app
+groks-app
+12:13:56
+Desktop disconnected — groks-app
+connection closed
+12:13:58
+Desktop connected — groks-app
+groks-app
+12:13:58
+Desktop disconnected — groks-app
+connection closed
+12:14:00
+Desktop connected — groks-app
+groks-app
+12:14:00
+Desktop disconnected — groks-app
+connection closed
+12:14:03
+Desktop connected — groks-app
+groks-app
+12:14:03
+Desktop disconnected — groks-app
+connection closed
+12:14:05
+Desktop connected — groks-app
+groks-app
+12:14:05
+Desktop disconnected — groks-app
+connection closed
+12:14:07
+Desktop connected — groks-app
+groks-app
+12:14:07
+Desktop disconnected — groks-app
+connection closed
+12:14:10
+Desktop connected — groks-app
+groks-app
+12:14:10
+Desktop disconnected — groks-app
+connection closed
+12:14:12
+Desktop connected — groks-app
+groks-app
+12:14:12
+Desktop disconnected — groks-app
+connection closed
+12:14:14
+Desktop connected — groks-app
+groks-app
+12:14:14
+Desktop disconnected — groks-app
+connection closed
+12:14:17
+Desktop connected — groks-app
+groks-app
+12:14:17
+Desktop disconnected — groks-app
+connection closed
+12:14:19
+Desktop connected — groks-app
+groks-app
+12:14:19
+Desktop disconnected — groks-app
+connection closed
+12:14:21
+Desktop connected — groks-app
+groks-app
+12:14:22
+Desktop disconnected — groks-app
+connection closed
+12:14:24
+Desktop connected — groks-app
+groks-app
+12:14:24
+Desktop disconnected — groks-app
+connection closed
+12:14:26
+Desktop connected — groks-app
+groks-app
+12:14:26
+Desktop disconnected — groks-app
+connection closed
+12:14:28
+Desktop connected — groks-app
+groks-app
+12:14:29
+Desktop disconnected — groks-app
+connection closed
+12:14:31
+Desktop connected — groks-app
+groks-app
+12:14:31
+Desktop disconnected — groks-app
+connection closed
+12:14:33
+Desktop connected — groks-app
+groks-app
+12:14:33
+Desktop disconnected — groks-app
+connection closed
+12:14:36
+Desktop connected — groks-app
+groks-app
+12:14:36
+Desktop disconnected — groks-app
+connection closed
+12:14:38
+Desktop connected — groks-app
+groks-app
+12:14:38
+Desktop disconnected — groks-app
+connection closed
+12:14:40
+Desktop connected — groks-app
+groks-app
+12:14:41
+Desktop disconnected — groks-app
+connection closed
+12:14:43
+Desktop connected — groks-app
+groks-app
+12:14:43
+Desktop disconnected — groks-app
+connection closed
+12:14:45
+Desktop connected — groks-app
+groks-app
+12:14:45
+Desktop disconnected — groks-app
+connection closed
+12:14:48
+Desktop connected — groks-app
+groks-app
+12:14:48
+Desktop disconnected — groks-app
+connection closed
+12:14:50
+Desktop connected — groks-app
+groks-app
+12:14:50
+Desktop disconnected — groks-app
+connection closed
+12:14:52
+Desktop connected — groks-app
+groks-app
+12:14:52
+Desktop disconnected — groks-app
+connection closed
+12:14:55
+Desktop connected — groks-app
+groks-app
+12:14:55
+Desktop disconnected — groks-app
+connection closed
+12:14:57
+Desktop connected — groks-app
+groks-app
+12:14:57
+Desktop disconnected — groks-app
+connection closed
+12:14:59
+Desktop connected — groks-app
+groks-app
+12:14:59
+Desktop disconnected — groks-app
+connection closed
+12:15:02
+Desktop connected — groks-app
+groks-app
+12:15:02
+Desktop disconnected — groks-app
+connection closed
+12:15:04
+Desktop connected — groks-app
+groks-app
+12:15:04
+Desktop disconnected — groks-app
+connection closed
+12:15:06
+Desktop connected — groks-app
+groks-app
+12:15:06
+Desktop disconnected — groks-app
+connection closed
+12:15:09
+Desktop connected — groks-app
+groks-app
+12:15:09
+Desktop disconnected — groks-app
+connection closed
+12:15:11
+Desktop connected — groks-app
+groks-app
+12:15:11
+Desktop disconnected — groks-app
+connection closed
+12:15:13
+Desktop connected — groks-app
+groks-app
+12:15:13
+Desktop disconnected — groks-app
+connection closed
+12:15:16
+Desktop connected — groks-app
+groks-app
+12:15:16
+Desktop disconnected — groks-app
+connection closed
+12:15:18
+Desktop connected — groks-app
+groks-app
+12:15:18
+Desktop disconnected — groks-app
+connection closed
+12:15:20
+Desktop connected — groks-app
+groks-app
+12:15:21
+Desktop disconnected — groks-app
+connection closed
+12:15:23
+Desktop connected — groks-app
+groks-app
+12:15:23
+Desktop disconnected — groks-app
+connection closed
+12:15:25
+Desktop connected — groks-app
+groks-app
+12:15:25
+Desktop disconnected — groks-app
+connection closed
+12:15:28
+Desktop connected — groks-app
+groks-app
+12:15:28
+Desktop disconnected — groks-app
+connection closed
+12:15:30
+Desktop connected — groks-app
+groks-app
+12:15:30
+Desktop disconnected — groks-app
+connection closed
+12:15:32
+Desktop connected — groks-app
+groks-app
+12:15:32
+Desktop disconnected — groks-app
+connection closed
+12:15:35
+Desktop connected — groks-app
+groks-app
+12:15:35
+Desktop disconnected — groks-app
+connection closed
+12:15:37
+Desktop connected — groks-app
+groks-app
+12:15:37
+Desktop disconnected — groks-app
+connection closed
+12:15:39
+Desktop connected — groks-app
+groks-app
+12:15:39
+Desktop disconnected — groks-app
+connection closed
+12:15:42
+Desktop connected — groks-app
+groks-app
+12:15:42
+Desktop disconnected — groks-app
+connection closed
+12:15:44
+Desktop connected — groks-app
+groks-app
+12:15:44
+Desktop disconnected — groks-app
+connection closed
+12:15:46
+Desktop connected — groks-app
+groks-app
+12:15:46
+Desktop disconnected — groks-app
+connection closed
+12:15:48
+[groks-app] Read file: src/components/App.tsx
+19 lines, 356 chars
+84ms
+12:15:48
+[groks-app] Read file: src/components/Navigation.tsx
+19 lines, 754 chars
+84ms
+12:15:49
+Desktop connected — groks-app
+groks-app
+12:15:49
+Desktop disconnected — groks-app
+connection closed
+12:15:49
+[groks-app] Read file: src/components/App.tsx
+35 lines, 1250 chars
+78ms
+12:15:49
+[groks-app] Read file: src/components/Navigation.tsx
+1 lines, 0 chars
+78ms
+12:15:50
+[groks-app] Read file: src/components/App.tsx
+35 lines, 1250 chars
+81ms
+12:15:50
+[groks-app] Read file: src/components/Navigation.tsx
+1 lines, 0 chars
+81ms
+12:15:51
+Desktop connected — groks-app
+groks-app
+12:15:51
+Desktop disconnected — groks-app
+connection closed
+12:15:53
+[groks-app] Write file: src/components/App.tsx
+ok
+110ms
+12:15:53
+[groks-app] Write file: src/components/App.tsx
+ok
+88ms
+12:15:53
+Desktop connected — groks-app
+groks-app
+12:15:53
+[groks-app] Write file: src/components/App.tsx
+ok
+188ms
+12:15:53
+[groks-app] Write file: src/components/App.tsx
+ok
+187ms
+12:15:53
+[groks-app] Write file: src/components/App.tsx
+ok
+227ms
+12:15:54
+Desktop disconnected — groks-app
+connection closed
+12:15:54
+[groks-app] Write file: src/components/App.tsx
+ok
+107ms
+12:15:54
+[groks-app] Write file: src/components/App.tsx
+ok
+85ms
+12:15:54
+[groks-app] Write file: src/components/App.tsx
+ok
+84ms
+12:15:54
+[groks-app] Write file: src/components/App.tsx
+ok
+99ms
+12:15:56
+[groks-app] Write file: src/components/App.tsx
+ok
+97ms
+12:15:56
+[groks-app] Write file: src/components/Navigation.tsx
+ok
+97ms
+12:15:56
+Desktop connected — groks-app
+groks-app
+12:15:56
+Desktop disconnected — groks-app
+connection closed
+12:15:57
+[groks-app] Write file: src/components/App.tsx
+ok
+81ms
+12:15:57
+[groks-app] Write file: src/components/Navigation.tsx
+ok
+81ms
+12:15:58
+Desktop connected — groks-app
+groks-app
+12:15:58
+Desktop disconnected — groks-app
+connection closed
+12:16:01
+Desktop connected — groks-app
+groks-app
+12:16:01
+Desktop disconnected — groks-app
+connection closed
+12:16:02
+[groks-app] Read file: src/components/App.tsx
+35 lines, 936 chars
+82ms
+12:16:02
+[groks-app] Read file: src/components/Navigation.tsx
+66 lines, 2225 chars
+82ms
+12:16:03
+Desktop connected — groks-app
+groks-app
+12:16:03
+Desktop disconnected — groks-app
+connection closed
+12:16:05
+Desktop connected — groks-app
+groks-app
+12:16:05
+Desktop disconnected — groks-app
+connection closed
+12:16:08
+Desktop connected — groks-app
+groks-app
+12:16:08
+Desktop disconnected — groks-app
+connection closed
+12:16:10
+Desktop connected — groks-app
+groks-app
+12:16:10
+Desktop disconnected — groks-app
+connection closed
+12:16:12
+Desktop connected — groks-app
+groks-app
+12:16:13
+Desktop disconnected — groks-app
+connection closed
+12:16:15
+Desktop connected — groks-app
+groks-app
+12:16:15
+Desktop disconnected — groks-app
+connection closed
+12:16:17
+Desktop connected — groks-app
+groks-app
+12:16:17
+Desktop disconnected — groks-app
+connection closed
+12:16:19
+Desktop connected — groks-app
+groks-app
+12:16:20
+Desktop disconnected — groks-app
+connection closed
+12:16:22
+Desktop connected — groks-app
+groks-app
+12:16:22
+Desktop disconnected — groks-app
+connection closed
+12:16:24
+Desktop connected — groks-app
+groks-app
+12:16:24
+Desktop disconnected — groks-app
+connection closed
+12:16:27
+Desktop connected — groks-app
+groks-app
+12:16:27
+Desktop disconnected — groks-app
+connection closed
+12:16:29
+Desktop connected — groks-app
+groks-app
+12:16:29
+Desktop disconnected — groks-app
+connection closed
+12:16:31
+Desktop connected — groks-app
+groks-app
+12:16:31
+Desktop disconnected — groks-app
+connection closed
+12:16:34
+Desktop connected — groks-app
+groks-app
+12:16:34
+Desktop disconnected — groks-app
+connection closed
+12:16:35
+[groks-app] Read file: src/components/App.tsx
+35 lines, 936 chars
+82ms
+12:16:35
+[groks-app] Read file: src/components/Navigation.tsx
+58 lines, 1816 chars
+82ms
+12:16:36
+Desktop connected — groks-app
+groks-app
+12:16:36
+Desktop disconnected — groks-app
+connection closed
+12:16:38
+Desktop connected — groks-app
+groks-app
+12:16:39
+Desktop disconnected — groks-app
+connection closed
+12:16:41
+Desktop connected — groks-app
+groks-app
+12:16:41
+Desktop disconnected — groks-app
+connection closed
+12:16:43
+Desktop connected — groks-app
+groks-app
+12:16:43
+Desktop disconnected — groks-app
+connection closed
+12:16:45
+Desktop connected — groks-app
+groks-app
+12:16:46
+Desktop disconnected — groks-app
+connection closed
+12:16:48
+Desktop connected — groks-app
+groks-app
+12:16:48
+Desktop disconnected — groks-app
+connection closed
+12:16:50
+Desktop connected — groks-app
+groks-app
+12:16:50
+Desktop disconnected — groks-app
+connection closed
+12:16:53
+Desktop connected — groks-app
+groks-app
+12:16:53
+Desktop disconnected — groks-app
+connection closed
+12:16:55
+Desktop connected — groks-app
+groks-app
+12:16:55
+Desktop disconnected — groks-app
+connection closed
+12:18:00
+[groks-app] Read file: src/components/App.tsx
+35 lines, 936 chars
+82ms
+12:19:03
+[groks-app] List dir: root
+0 entries
+81ms
+12:19:34
+[groks-app] Read file: src/components/App.tsx
+35 lines, 936 chars
+84ms
+12:23:01
+[groks-app] Read file: src/components/App.tsx
+35 lines, 936 chars
+86ms
+12:24:06
+[groks-app] Read file: src/components/App.tsx
+35 lines, 936 chars
+78ms
+12:28:40
+Desktop socket error — groks-app
+write EPIPE
+12:28:40
+Desktop disconnected — groks-app
