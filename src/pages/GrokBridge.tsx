@@ -4610,6 +4610,9 @@ const GrokBridge: React.FC = () => {
       } catch {
         attempts++;
       }
+      if (continuous && attempts > 3) {
+        setBridgeStatus('disconnected');
+      }
       if (!continuous && attempts > 20 && pollDesktopBridgeStatusRef.current) {
         clearInterval(pollDesktopBridgeStatusRef.current);
         pollDesktopBridgeStatusRef.current = null;
