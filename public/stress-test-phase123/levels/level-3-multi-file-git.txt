@@ -104,10 +104,15 @@ STEPS (do them in order, post to coord after each):
    - The file only appears on disk when the last chunk (chunk=total-1) arrives
    - DO NOT send chunks out of order or in parallel
 
+   *** SPEED: Send ALL chunks back-to-back WITHOUT waiting between them. ***
+   *** Chunks are NOT edits — they buffer in memory. The 15-second wait rule does NOT apply to chunks. ***
+   *** Do NOT check or verify individual chunks. Just send them all, then verify ONCE after the last chunk. ***
+
    DO NOT use grok-create (single URL) for this — it WILL fail because the URL is too long.
-   → Post to coord: "L3-S4: Metrics.tsx chunks sent"
+   → Post to coord: "L3-S4: Metrics.tsx chunks sent" (post ONCE after ALL chunks are sent)
 
 5. VERIFY METRICS: Call grok-read for src/pages/Metrics.tsx
+   → This is the ONLY verification needed — do NOT verify individual chunks.
    → Confirm the first line is "import React"
    → Confirm it has "export const Metrics" and "export default Metrics"
    → Post to coord: "L3-S5: Metrics.tsx verified"

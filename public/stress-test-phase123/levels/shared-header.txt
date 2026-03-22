@@ -31,13 +31,13 @@ CREATE NEW FILES — grok-create (simple GET, for SMALL files only):
   *** grok-create with large content WILL FAIL SILENTLY via browse_page. ***
 
 CREATE FILES — grok-create-chunk (USE THIS for any content > 1000 chars):
-  Split content into chunks. Send each as a separate GET request:
+  Split content into chunks of ~800 raw chars. Send each as a separate GET request:
   GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=CHUNK_TEXT&chunk=0&total=3
-  DO NOT URL-ENCODE the chunk content yourself — browse_page does it automatically.
-  If you pre-encode, it gets DOUBLE-ENCODED and the file will be corrupted or missing.
+  DO NOT URL-ENCODE the chunk content — browse_page handles encoding automatically.
   chunk=0 starts the file. chunk=1+ appends. File is written to disk when chunk=total-1 arrives.
-  Keep each chunk under ~800 chars of RAW content so the full URL stays under ~2000 chars.
-  AFTER the final chunk: IMMEDIATELY grok-read the file to verify it exists and has correct content.
+  SPEED: Send ALL chunks back-to-back. Do NOT wait between chunks. Do NOT verify individual chunks.
+  Chunks buffer in memory — the 15-second wait rule does NOT apply. Verify ONCE after the last chunk.
+  AFTER the final chunk: grok-read the file to verify it exists and has correct content.
 
 DELETE FILES — grok-delete (simple GET):
   GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/oldfile.tsx
