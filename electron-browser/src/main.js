@@ -6,6 +6,8 @@ const { spawn, execSync } = require('child_process');
 const os = require('os');
 const { registerGrokIpcHandlers, BROWSER_MODE_VERSION } = require('./grok-ipc-handlers');
 
+if (require('electron-squirrel-startup')) app.quit();
+
 process.on('uncaughtException', (err) => {
   if (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED') return;
   if (app.isReady()) {

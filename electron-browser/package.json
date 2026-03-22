@@ -6,6 +6,9 @@
   "version": "1.0.0",
   "type": "commonjs",
   "main": "src/main.js",
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.1"
+  },
   "devDependencies": {
     "electron": "^33.0.0",
     "electron-builder": "^26.0.0"
@@ -21,23 +24,15 @@
     "files": [
       "src/**/*",
       "dist/**/*",
+      "node_modules/**/*",
       "package.json"
     ],
     "win": {
-      "target": "nsis",
+      "target": "squirrel",
       "icon": "build/icon.ico"
     },
-    "nsis": {
-      "oneClick": true,
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico",
-      "shortcutName": "Lamby",
-      "artifactName": "Lamby-Setup-${version}.${ext}",
-      "perMachine": false,
-      "uninstallDisplayName": "Lamby",
-      "deleteAppDataOnUninstall": false,
-      "include": "build/installer.nsh"
+    "squirrelWindows": {
+      "loadingGif": "build/installing.gif"
     },
     "linux": {
       "target": ["AppImage"],
