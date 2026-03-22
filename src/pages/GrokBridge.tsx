@@ -340,7 +340,10 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
 
   let section = '\n=== LAMBY WORKSPACE API (YOU HAVE FULL READ/WRITE ACCESS — USE IT) ===\n';
   section += `You are Grok-4 working inside Lamby with full bridge-relay access. Your ONLY web tool is browse_page (GET-only).\n`;
-  section += `DO NOT expect file contents in this prompt. Use the Smart Bridge endpoints below to read files yourself.\n\n`;
+  if (bridgeOnline) {
+    section += `DO NOT expect file contents in this prompt. Use the Smart Bridge endpoints below to read files yourself.\n`;
+  }
+  section += `\n`;
   section += `CRITICAL PATIENCE PROTOCOL (MANDATORY — APPLY EVERY TIME):\n`;
   section += `- Desktop connections and Vite dev server reloads take 5–20 seconds. You MUST wait a full 15 seconds after ANY edit (grok-edit, grok-write, or grok-proxy) before taking a screenshot or performing the next action.\n`;
   section += `- Never perform an edit and a screenshot in the same logical step or rapid succession. Always do: edit → wait 15s → screenshot.\n`;
