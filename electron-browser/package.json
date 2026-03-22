@@ -6,9 +6,6 @@
   "version": "1.0.0",
   "type": "commonjs",
   "main": "src/main.js",
-  "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
-  },
   "devDependencies": {
     "electron": "^33.0.0",
     "electron-builder": "^26.0.0"
@@ -24,16 +21,14 @@
     "files": [
       "src/**/*",
       "dist/**/*",
-      "node_modules/**/*",
       "package.json"
     ],
     "win": {
-      "target": "squirrel",
+      "target": "portable",
       "icon": "build/icon.ico"
     },
-    "squirrelWindows": {
-      "iconUrl": "file://build/icon.ico",
-      "loadingGif": "build/installing.gif"
+    "portable": {
+      "artifactName": "Lamby.${ext}"
     },
     "linux": {
       "target": ["AppImage"],

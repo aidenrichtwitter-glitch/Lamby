@@ -48,4 +48,4 @@ const outputDir = path.join(ROOT, 'exe');
 const pkg = JSON.parse(fs.readFileSync(path.join(ELECTRON_DIR, 'package.json'), 'utf8'));
 const version = pkg.version || '1.0.0';
 console.log(`Output: ${outputDir}`);
-console.log(isLinux ? 'Look for the AppImage in the exe/ folder.' : `Look for Lamby-Setup-${version}.exe in the exe/ folder.`);
+console.log(isLinux ? 'Look for the AppImage in the exe/ folder.' : 'Look for Lamby.exe in the exe/ folder.');

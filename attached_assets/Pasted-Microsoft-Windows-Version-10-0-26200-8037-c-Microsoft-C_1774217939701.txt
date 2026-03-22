@@ -1,0 +1,141 @@
+Microsoft Windows [Version 10.0.26200.8037]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\Lamby>npm cache clean --force
+npm warn using --force Recommended protections disabled.
+
+C:\Users\Aiden\Desktop\Lamby>npm run build
+
+> lamby@1.0.0 build
+> node scripts/build-electron.cjs
+
+=== Step 1/4: Building web assets (vite build) ===
+
+> npx vite build
+
+vite v5.4.19 building for production...
+✓ 3300 modules transformed.
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/self-source.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/components/AIChat.tsx, C:/Users/Aiden/Desktop/Lamby/src/components/ChangeLog.tsx, C:/Users/Aiden/Desktop/Lamby/src/components/CodeViewer.tsx, C:/Users/Aiden/Desktop/Lamby/src/components/FileTree.tsx, C:/Users/Aiden/Desktop/Lamby/src/lib/autonomy-engine.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/explorer-store.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/recursion-engine.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/verification-engine.ts, C:/Users/Aiden/Desktop/Lamby/src/pages/GrokBridge.tsx, C:/Users/Aiden/Desktop/Lamby/src/pages/Index.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/safety-engine.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/components/ChangeLog.tsx, C:/Users/Aiden/Desktop/Lamby/src/components/CodeViewer.tsx, C:/Users/Aiden/Desktop/Lamby/src/components/FileEditor.tsx, C:/Users/Aiden/Desktop/Lamby/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/maturity-test.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/ollama-safety-guard.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/self-test-runner.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/verification-engine.ts, C:/Users/Aiden/Desktop/Lamby/src/pages/GrokBridge.tsx, C:/Users/Aiden/Desktop/Lamby/src/pages/Index.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/memory-consolidation.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/self-test-runner.ts, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/verification-engine.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/autonomy-engine.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/self-repair.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/self-test-runner.ts, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/rule-engine.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/autonomy-engine.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/maturity-test.ts, C:/Users/Aiden/Desktop/Lamby/src/pages/Evolution.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/anomaly-detection.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/autonomy-engine.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/self-repair.ts, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/pattern-recognition.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/autonomy-engine.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/life-proof.ts, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-forecasting.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/autonomy-engine.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/Lamby/src/pages/Evolution.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/self-documentation.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/autonomy-engine.ts, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/task-decomposition.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/autonomy-engine.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/maturity-test.ts, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/autonomy-engine.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/life-proof.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/maturity-test.ts, C:/Users/Aiden/Desktop/Lamby/src/pages/Evolution.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/code-parser.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/ollama-toaster.ts, C:/Users/Aiden/Desktop/Lamby/src/lib/ollama-toaster.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/pages/GrokBridge.tsx, dynamic import will not move module into another chunk.
+
+[plugin:vite:reporter] [plugin vite:reporter]
+(!) C:/Users/Aiden/Desktop/Lamby/src/lib/github-discovery.ts is dynamically imported by C:/Users/Aiden/Desktop/Lamby/src/lib/evolution-bridge.ts but also statically imported by C:/Users/Aiden/Desktop/Lamby/src/pages/GrokBridge.tsx, dynamic import will not move module into another chunk.
+
+dist/registerSW.js                       0.13 kB
+dist/manifest.webmanifest                0.31 kB
+dist/index.html                          2.02 kB │ gzip:   0.79 kB
+dist/assets/index-DgUCojnc.css          88.35 kB │ gzip:  15.24 kB
+dist/assets/self-repair-M_Y0LgKX.js      2.98 kB │ gzip:   1.33 kB
+dist/assets/index-CBX9WJxV.js        1,692.46 kB │ gzip: 506.09 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 6.11s
+
+PWA v1.2.0
+mode      generateSW
+precache  17 entries (2712.47 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-8c29f6e4.js
+
+=== Step 2/4: Copying dist → electron-browser/dist ===
+Done.
+
+=== Step 3/4: Installing electron-browser dependencies ===
+
+> npm install
+
+
+added 3 packages, and audited 370 packages in 1s
+
+64 packages are looking for funding
+  run `npm fund` for details
+
+1 moderate severity vulnerability
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+
+=== Step 4/4: Packaging Windows app ===
+
+> npx electron-builder --win --x64
+
+  • electron-builder  version=26.8.1 os=10.0.26200
+  • loaded configuration  file=package.json ("build" field)
+  • writing effective config  file=C:\Users\Aiden\Desktop\Lamby\exe\builder-effective-config.yaml
+  • executing @electron/rebuild  electronVersion=33.4.11 arch=x64 buildFromSource=false workspaceRoot=C:\Users\Aiden\Desktop\Lamby\electron-browser projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=33.4.11 appOutDir=C:\Users\Aiden\Desktop\Lamby\exe\win-unpacked
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • searching for node modules  pm=npm searchDir=C:\Users\Aiden\Desktop\Lamby\electron-browser
+(node:13908) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • signing with signtool.exe  path=C:\Users\Aiden\Desktop\Lamby\exe\win-unpacked\Lamby.exe
+  • building        target=Squirrel.Windows arch=x64 file=C:\Users\Aiden\Desktop\Lamby\exe\squirrel-windows\Lamby Setup 1.0.0.exe
+  ⨯ squirrelWindows.iconUrl is not specified, please see https://www.electron.build/squirrel-windows#SquirrelWindowsOptions-iconUrl
+node:child_process:1000
+    throw err;
+    ^
+
+Error: Command failed: npx electron-builder --win --x64
+    at genericNodeError (node:internal/errors:998:15)
+    at wrappedFn (node:internal/errors:543:14)
+    at checkExecSyncError (node:child_process:925:11)
+    at execSync (node:child_process:997:15)
+    at run (C:\Users\Aiden\Desktop\Lamby\scripts\build-electron.cjs:25:3)
+    at Object.<anonymous> (C:\Users\Aiden\Desktop\Lamby\scripts\build-electron.cjs:44:1)
+    at Module._compile (node:internal/modules/cjs/loader:1803:14)
+    at Object..js (node:internal/modules/cjs/loader:1934:10)
+    at Module.load (node:internal/modules/cjs/loader:1524:32)
+    at Module._load (node:internal/modules/cjs/loader:1326:12) {
+  status: 1,
+  signal: null,
+  output: [ null, null, null ],
+  pid: 17268,
+  stdout: null,
+  stderr: null
+}
+
+Node.js v25.4.0
+
+C:\Users\Aiden\Desktop\Lamby>
