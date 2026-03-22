@@ -52,35 +52,22 @@ if (isLinux) {
   console.log(`\n=== Step 4/${totalSteps}: Packaging Windows app (unpacked) ===`);
   run('npx electron-builder --win --x64', ELECTRON_DIR);
 
-  console.log(`\n=== Step 5/${totalSteps}: Creating Inno Setup installer ===`);
+  console.log(`\n=== Step 5/${totalSteps}: Compiling Inno Setup installer ===`);
   const issPath = path.join(ELECTRON_DIR, 'build', 'installer.iss');
   const winUnpacked = path.join(OUTPUT_DIR, 'win-unpacked');
   if (!fs.existsSync(winUnpacked)) {
     console.error('ERROR: win-unpacked directory not found at ' + winUnpacked);
-    console.error('electron-builder --dir must produce exe/win-unpacked/ before Inno Setup can run.');
     process.exit(1);
   }
 
-  try {
-    run(`iscc "${issPath}"`, ELECTRON_DIR);
-  } catch (e) {
-    console.log('\n--- Inno Setup (iscc) not found on PATH ---');
-    console.log('To create the installer, install Inno Setup 6 from:');
-    console.log('  https://jrsoftware.org/isdl.php');
-    console.log('Then either:');
-    console.log('  1. Add ISCC.exe to your PATH, or');
-    console.log('  2. Run manually: iscc electron-browser\\build\\installer.iss');
-    console.log('\nThe unpacked app is ready at: exe\\win-unpacked\\');
-    console.log('You can run Lamby.exe directly from there without installing.\n');
-  }
-
-  console.log('\n=== BUILD COMPLETE ===');
-  console.log(`Output: ${OUTPUT_DIR}`);
-  const setupExe = path.join(OUTPUT_DIR, 'Lamby-Setup.exe');
-  if (fs.existsSync(setupExe)) {
+  const innoCompiler = require(path.join(ELECTRON_DIR, 'node_modules', 'innosetup-compiler'));
+  innoCompiler(issPath, { gui: false, verbose: true }, function (err) {
+    if (err) {
+      console.error('Inno Setup compilation failed:', err.message);
+      process.exit(1);
+    }
+    console.log('\n=== BUILD COMPLETE ===');
+    console.log(`Output: ${OUTPUT_DIR}`);
     console.log('Installer: exe/Lamby-Setup.exe');
-  } else {
-    console.log('Unpacked app: exe/win-unpacked/Lamby.exe');
-    console.log('(Run iscc to create the installer — see instructions above)');
-  }
+  });
 }
