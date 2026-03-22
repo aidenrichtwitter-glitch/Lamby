@@ -89,7 +89,8 @@ src/
 ├── components/
 │   ├── ErrorBoundary.tsx       # React error boundary with auto-recovery UI
 electron-browser/              # Grok Desktop Electron app (based on AnRkey/Grok-Desktop)
-├── src/main.js                # Electron main process
+├── src/main.js                # Electron main process — creates BrowserWindow, registers all IPC handlers, starts local server
+├── src/grok-ipc-handlers.js   # Grok DOM monitoring IPC handlers (v26.2) — multi-pattern selector fallback chains
 ├── src/preload.js             # Preload script
 ├── src/renderer.js            # Renderer process
 ├── src/custom-tabs.js         # Tab management
