@@ -38,7 +38,8 @@
       "shortcutName": "Lamby",
       "artifactName": "Lamby-Setup-${version}.${ext}",
       "perMachine": false,
-      "menuCategory": "Lamby"
+      "menuCategory": "Lamby",
+      "uninstallDisplayName": "Lamby"
     },
     "linux": {
       "target": ["AppImage"],

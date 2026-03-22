@@ -22,6 +22,8 @@ nsis:
   installerHeaderIcon: build/icon.ico
   shortcutName: Lamby
   artifactName: Lamby-Setup-${version}.${ext}
+  perMachine: false
+  menuCategory: Lamby
 linux:
   target:
     - AppImage
