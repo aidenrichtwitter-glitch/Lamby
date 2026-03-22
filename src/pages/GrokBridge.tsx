@@ -140,7 +140,7 @@ const BROWSER_SITES = [
 ];
 
 
-const BROWSER_MODE_VERSION = 'v26.1';
+const BROWSER_MODE_VERSION = 'v26.2';
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/grok-chat`;
 

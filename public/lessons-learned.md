@@ -4,6 +4,14 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 31: Grok DOM selectors rot — use multi-pattern fallback chains with visible logging
+**Date:** 2026-03-22
+**Context:** Desktop logs showed `grok-snapshot-baseline: copy=0, reactions=0, followUps=0, generating=false` — all DOM signal detection returned zero even when Grok was actively generating. Root cause: the IPC handlers in `main.js` used hardcoded DOM selectors (e.g. `button[aria-label="Copy"]`) that no longer matched the current Grok UI. Grok.com frequently updates its DOM structure, breaking exact selector matches. Additionally, `main.js` was never committed to the workspace — only existed on the user's desktop.
+**Fix:** Created `electron-browser/src/grok-ipc-handlers.js` as a standalone module with multi-pattern selector chains: each handler tries 6-8 specific selectors (aria-label variants, data-testid patterns), then falls back to scanning all buttons by text content and aria-label substring matching, then tries ancestor-walking from known elements. Every handler logs what it found and how. The module auto-discovers the Grok webview via `webContents.getAllWebContents()` if no getter is provided.
+**Key insight:** Never hardcode a single DOM selector for a third-party UI. Always use ordered fallback chains: specific selectors first, then attribute substring scans, then structural heuristics. Log which method matched so you can see when selectors start failing before they fail completely.
+
+---
+
 ## Lesson 30: Auto-apply beats bridge executor — let Grok write code normally
 **Date:** 2026-03-22
 **Context:** The bridge executor (`bridge_executor.py`) was a Python script that Grok fetched via `urllib.request.urlopen` and ran via `exec()`. Problem: Grok's Python code execution tool cannot make HTTP requests — `urlopen` fails silently or is blocked. The entire executor approach was fundamentally broken. Meanwhile, Lamby already has auto-apply: Grok outputs fenced code blocks with file path comments, Lamby's ClipboardExtractor + parseCodeBlocks extracts them, and auto-apply writes them to disk. Tested end-to-end: 3 code blocks → 3 files written → vite build passes (32 modules, 0 errors). A 1,368-char Metrics.tsx landed perfectly — no chunking, no URL encoding, no executor needed.

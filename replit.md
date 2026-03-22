@@ -114,7 +114,8 @@ supabase/
 - All code changes must be tested and validated for the Electron context.
 - `local-server.js` and `vite.config.ts` must ALWAYS be 1:1 mirrors (IPC handlers in `main.js` are Electron-only — exempt from mirror rule).
 - When making changes to browser-mode IPC handlers in `main.js`, always add visible logging so the user can see what's happening in Electron DevTools.
-- Include `BROWSER_MODE_VERSION` (currently `v26.1`) in both `main.js` and `GrokBridge.tsx` — version mismatch warnings appear in status bar and console when Electron hasn't been rebuilt with latest code.
+- Include `BROWSER_MODE_VERSION` (currently `v26.2`) in both `grok-ipc-handlers.js` and `GrokBridge.tsx` — version mismatch warnings appear in status bar and console when Electron hasn't been rebuilt with latest code.
+- `grok-ipc-handlers.js` is a standalone module exporting `registerGrokIpcHandlers(getWebviewContents?)`. If no getter is passed, it auto-finds the Grok webview via `webContents.getAllWebContents()`. User's `main.js` must `require('./grok-ipc-handlers')` and call `registerGrokIpcHandlers()` after app ready.
 - **Browser automation API**: `window.__grokBrowserAutomation.sendAndCapture(prompt, label)` — exposed by GrokBridge, returns `{success, responseText, error}`. Used by evolution-bridge for browser-based evolution cycles.
 - **Evolution sandbox**: `ensureEvolutionSandbox()` in `project-manager.ts` creates `evolution-sandbox` project via `duplicateProject()`. Browser-evolve writes to sandbox instead of main project.
 - **Grok 4 default**: Evolution cycles default to `grok-4` model. The model selector still lists all Grok models for interactive chat.
