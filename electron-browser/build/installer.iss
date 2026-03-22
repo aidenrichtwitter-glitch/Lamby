@@ -23,6 +23,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 WizardImageFile=wizardimage.bmp
 WizardSmallImageFile=wizardsmallimage.bmp
+WindowVisible=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -39,3 +40,34 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+procedure InitializeWizard();
+begin
+  WizardForm.Color := $181218;
+  WizardForm.MainPanel.Color := $181218;
+  WizardForm.InnerPage.Color := $181218;
+  WizardForm.OuterNotebook.Color := $181218;
+  WizardForm.InnerNotebook.Color := $181218;
+
+  WizardForm.WelcomeLabel1.Font.Color := $FFFFFF;
+  WizardForm.WelcomeLabel2.Font.Color := $CCCCCC;
+  WizardForm.PageNameLabel.Font.Color := $FFFFFF;
+  WizardForm.PageDescriptionLabel.Font.Color := $CCCCCC;
+
+  WizardForm.ReadyLabel.Font.Color := $CCCCCC;
+  WizardForm.FinishedLabel.Font.Color := $CCCCCC;
+  WizardForm.FinishedHeadingLabel.Font.Color := $FFFFFF;
+
+  WizardForm.SelectDirLabel.Font.Color := $CCCCCC;
+  WizardForm.SelectDirBrowseLabel.Font.Color := $CCCCCC;
+  WizardForm.DirEdit.Color := $282228;
+  WizardForm.DirEdit.Font.Color := $FFFFFF;
+
+  WizardForm.TasksList.Color := $282228;
+  WizardForm.TasksList.Font.Color := $CCCCCC;
+
+  WizardForm.StatusLabel.Font.Color := $CCCCCC;
+  WizardForm.FilenameLabel.Font.Color := $999999;
+  WizardForm.ProgressGauge.BackColor := $282228;
+end;
