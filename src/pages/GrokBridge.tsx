@@ -4577,50 +4577,75 @@ const GrokBridge: React.FC = () => {
   }, []);
 
   const pollDesktopBridgeStatusRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollOneshotRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const pollDesktopBridgeStatus = useCallback((continuous = false) => {
-    if (pollDesktopBridgeStatusRef.current) {
-      clearInterval(pollDesktopBridgeStatusRef.current);
-    }
-    let attempts = 0;
-    let wasConnected = false;
-    const poll = async () => {
-      try {
-        const res = await fetch('http://localhost:4999/health');
-        if (res.ok) {
-          const data = await res.json();
-          const newStatus = data.bridge === 'connected' ? 'connected' : 'connecting';
-          setBridgeStatus(newStatus);
-          if (newStatus === 'connected' && !wasConnected) {
-            setStatusMessage('Bridge connected (desktop connector)');
-            wasConnected = true;
-          } else if (newStatus !== 'connected') {
-            wasConnected = false;
-          }
-          if (newStatus === 'connected' && !continuous) {
-            if (pollDesktopBridgeStatusRef.current) {
-              clearInterval(pollDesktopBridgeStatusRef.current);
-              pollDesktopBridgeStatusRef.current = null;
+    if (continuous) {
+      if (pollDesktopBridgeStatusRef.current) {
+        clearInterval(pollDesktopBridgeStatusRef.current);
+      }
+      let wasConnected = false;
+      let attempts = 0;
+      const poll = async () => {
+        try {
+          const res = await fetch('http://localhost:4999/health');
+          if (res.ok) {
+            const data = await res.json();
+            const newStatus = data.bridge === 'connected' ? 'connected' : 'connecting';
+            setBridgeStatus(newStatus);
+            if (newStatus === 'connected' && !wasConnected) {
+              setStatusMessage('Bridge connected (desktop connector)');
+              wasConnected = true;
+            } else if (newStatus !== 'connected') {
+              wasConnected = false;
             }
+            attempts = 0;
+          } else {
+            attempts++;
           }
-          attempts = 0;
-        } else {
+        } catch {
           attempts++;
         }
-      } catch {
-        attempts++;
+        if (attempts > 3) {
+          setBridgeStatus('disconnected');
+        }
+      };
+      poll();
+      pollDesktopBridgeStatusRef.current = setInterval(poll, 5000);
+    } else {
+      if (pollOneshotRef.current) {
+        clearInterval(pollOneshotRef.current);
       }
-      if (continuous && attempts > 3) {
-        setBridgeStatus('disconnected');
-      }
-      if (!continuous && attempts > 20 && pollDesktopBridgeStatusRef.current) {
-        clearInterval(pollDesktopBridgeStatusRef.current);
-        pollDesktopBridgeStatusRef.current = null;
-        setBridgeStatus('disconnected');
-      }
-    };
-    poll();
-    pollDesktopBridgeStatusRef.current = setInterval(poll, continuous ? 5000 : 1500);
+      let attempts = 0;
+      const poll = async () => {
+        try {
+          const res = await fetch('http://localhost:4999/health');
+          if (res.ok) {
+            const data = await res.json();
+            const newStatus = data.bridge === 'connected' ? 'connected' : 'connecting';
+            setBridgeStatus(newStatus);
+            if (newStatus === 'connected') {
+              if (pollOneshotRef.current) {
+                clearInterval(pollOneshotRef.current);
+                pollOneshotRef.current = null;
+              }
+            }
+            attempts = 0;
+          } else {
+            attempts++;
+          }
+        } catch {
+          attempts++;
+        }
+        if (attempts > 20 && pollOneshotRef.current) {
+          clearInterval(pollOneshotRef.current);
+          pollOneshotRef.current = null;
+          setBridgeStatus('disconnected');
+        }
+      };
+      poll();
+      pollOneshotRef.current = setInterval(poll, 1500);
+    }
   }, []);
 
   useEffect(() => {
@@ -4705,6 +4730,10 @@ const GrokBridge: React.FC = () => {
         if (pollDesktopBridgeStatusRef.current) {
           clearInterval(pollDesktopBridgeStatusRef.current);
           pollDesktopBridgeStatusRef.current = null;
+        }
+        if (pollOneshotRef.current) {
+          clearInterval(pollOneshotRef.current);
+          pollOneshotRef.current = null;
         }
       };
     }
