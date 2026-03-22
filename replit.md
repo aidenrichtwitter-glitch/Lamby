@@ -112,6 +112,7 @@ supabase/
 ## CRITICAL: User Environment
 - **The user ALWAYS works in the desktop Electron app, NEVER in the Replit web preview.**
 - **Code delivery**: The user uses the **Download Source** button in Replit to get the latest code onto their Windows machine. After any code changes, remind them to re-download.
+- **NEVER tell Grok to respond with JSON `{"actions":[...]}` format.** That is a dead format. Grok's output rules: (1) READ files via bridge grok-read endpoints, (2) SMALL edits via grok-write search/replace, (3) LARGE file rewrites via `// file: path\n```tsx\n[COMPLETE content]\n``` ` auto-apply blocks. This rule applies to ALL prompt builders: diagnose-fix, error feedback, vision fix.
 - All code changes must be tested and validated for the Electron context.
 - `local-server.js` and `vite.config.ts` must ALWAYS be 1:1 mirrors (IPC handlers in `main.js` are Electron-only — exempt from mirror rule).
 - When making changes to browser-mode IPC handlers in `main.js`, always add visible logging so the user can see what's happening in Electron DevTools.
