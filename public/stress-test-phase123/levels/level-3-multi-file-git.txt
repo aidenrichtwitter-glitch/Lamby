@@ -9,7 +9,7 @@ You will create Metrics.tsx, add it to App.tsx routing, add it to Navigation.tsx
 *** Agents calling browse_page in parallel has caused EVERY prior L3 failure (duplicates, corruption, race conditions). ***
 
 STOP RULES:
-- Maximum 50 browse_page calls. If you exceed 50, STOP and post your FAIL report.
+- Maximum 30 browse_page calls. If you exceed 30, STOP and post your FAIL report.
 - Once you post "L3 REVIEW", you are DONE. No more browse_page calls.
 - You may retry failed steps up to 3 times each.
 
@@ -40,10 +40,6 @@ Gather all information. No writes yet.
     GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
     → Note the NAV_ITEMS array. Note that Activity icon is ALREADY imported.
 
-1d. OPTIONAL — Browse for inspiration (1-2 calls):
-    You may browse the web for React metric/dashboard card examples to inspire your component.
-    This is optional — skip if you already know what to write.
-
 → Post to coord: "L3-P1: reads done, App [N chars], Nav [N chars]"
 
 ==============================
@@ -52,8 +48,7 @@ PHASE 2 — PLAN (0 browse_page calls)
 Do ALL planning in your head. Do NOT call browse_page during this phase.
 
 Plan A — Metrics.tsx content:
-  Generate a Metrics.tsx component that is BETWEEN 800 AND 900 CHARACTERS total.
-  This size constraint is critical — keep it focused.
+  Generate a Metrics.tsx component. No size constraint — write a real, complete component.
 
   Requirements:
   - Named export: export const Metrics: React.FC = () => { ... }
@@ -70,95 +65,94 @@ Plan B — Updated App.tsx content:
   Prepare the FULL updated file content.
 
 Plan C — Navigation.tsx edit:
-  You will use a search/replace edit:
+  You will use a search/replace edit via bridge:
   Search: { id: 'settings', label: 'Settings', icon: Settings }
   Replace: { id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }
   DO NOT add an Activity import — it is ALREADY imported.
 
 ==============================
-PHASE 3 — EXECUTE (1 code execution — that's it!)
+PHASE 3 — EXECUTE (auto-apply + bridge)
 ==============================
-*** USE THE BRIDGE EXECUTOR — do NOT write your own Python script ***
-*** Do NOT use browse_page for any writes — use the executor for EVERYTHING ***
+*** OUTPUT FILES AS CODE BLOCKS — Lamby's auto-apply writes them automatically ***
+*** Use bridge only for the Nav edit (small search/replace) and git operations ***
 
-Run ONE code execution with all your file operations as a plan.
-The executor handles chunking, encoding, verification, git, and honest reporting automatically.
+Step 1 — Output Metrics.tsx and App.tsx as code blocks:
+  Respond with TWO fenced code blocks. Each must have the file path as a comment on line 1.
 
-```python
-RELAY = "{{RELAY_BASE}}"
-PROJECT = "{{PROJECT}}"
+  ```tsx
+  // src/pages/Metrics.tsx
+  YOUR COMPLETE METRICS COMPONENT FROM PLAN A
+  ```
 
-plan = [
-    # Step 1: Create Metrics.tsx (executor auto-chunks if >450 chars)
-    {"action": "create", "path": "src/pages/Metrics.tsx", "content": """YOUR METRICS.TSX CONTENT FROM PLAN A"""},
+  ```tsx
+  // src/components/App.tsx
+  YOUR COMPLETE UPDATED APP.TSX FROM PLAN B
+  ```
 
-    # Step 2: Rewrite App.tsx with Metrics import + route
-    {"action": "create", "path": "src/components/App.tsx", "content": """YOUR UPDATED APP.TSX CONTENT FROM PLAN B"""},
+  After outputting both code blocks: STOP AND WAIT.
+  Lamby will auto-apply these files, take a screenshot, and respond with the result.
+  Do NOT call browse_page until Lamby responds.
 
-    # Step 3: Edit Navigation.tsx (single-line search/replace)
-    {"action": "edit", "path": "src/components/Navigation.tsx",
-     "search": "{ id: 'settings', label: 'Settings', icon: Settings }",
-     "replace": "{ id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }"},
+Step 2 — After Lamby responds with screenshot/results:
+  Check the screenshot and any error logs Lamby provides.
+  If there are errors, output corrected code blocks and wait again.
+  If it looks good, continue to Step 3.
 
-    # Step 4: Verify all files
-    {"action": "verify", "path": "src/pages/Metrics.tsx", "contains": ["export const Metrics", "export default Metrics"]},
-    {"action": "verify", "path": "src/components/App.tsx", "contains": ["import { Metrics }", "metrics:"]},
-    {"action": "verify", "path": "src/components/Navigation.tsx", "contains": ["'metrics'"]},
+Step 3 — Edit Navigation.tsx via bridge (1 call):
+  This is a small single-line search/replace — use the bridge endpoint:
+  GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=src/components/Navigation.tsx&search=%7B%20id%3A%20'settings'%2C%20label%3A%20'Settings'%2C%20icon%3A%20Settings%20%7D&replace=%7B%20id%3A%20'settings'%2C%20label%3A%20'Settings'%2C%20icon%3A%20Settings%20%7D%2C%0A%20%20%7B%20id%3A%20'metrics'%2C%20label%3A%20'Metrics'%2C%20icon%3A%20Activity%20%7D
 
-    # Step 5: Check console for errors
-    {"action": "console_check"},
+Step 4 — Verify all files via bridge (3 calls):
+  GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/pages/Metrics.tsx
+  → Confirm: has "export const Metrics", has "export default Metrics", has 3+ metric cards
 
-    # Step 6: Git commit
-    {"action": "git_add"},
-    {"action": "git_commit", "message": "L3: Add Metrics page with routing and navigation"},
-    {"action": "git_log", "count": 3},
+  GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/App.tsx
+  → Confirm: has "import { Metrics }", has "metrics:" in PAGES map
 
-    # Step 7: Post result
-    {"action": "coord", "note": "L3-P3: executor complete, see summary"},
-]
+  GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
+  → Confirm: has "'metrics'" entry, NO duplicate Activity import
 
-# Fetch and run the bridge executor
-import urllib.request
-exec(urllib.request.urlopen(f"{RELAY}/bridge_executor.py").read().decode())
-```
+Step 5 — Git commit (3 calls):
+  GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=add&args=.
+  GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=commit&message=L3%3A%20Add%20Metrics%20page%20with%20routing%20and%20navigation
+  GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=log&count=3
 
-*** IMPORTANT ***
-- Replace the triple-quoted strings with your ACTUAL content from Plans A and B.
-- Escape any backslashes or triple-quotes inside the content strings.
-- The executor prints a full PASS/FAIL summary with exact char counts.
-- This is ONE code execution. No agents can interfere. No race conditions.
-- The executor auto-waits 15s between writes and verification steps.
-
-→ After the executor finishes, read its output carefully.
+→ Post to coord: "L3-P3: files written, Nav edited, git committed"
 
 ==============================
 PHASE 4 — REVIEW (1 browse_page call max)
 ==============================
-Read the executor output. It already verified everything and printed a summary.
+Take a screenshot to visually confirm everything works:
+  GET {{RELAY_BASE}}/api/screenshot/{{PROJECT}}?fullPage=true&waitMs=8000
 
-4a. If executor says PASS:
-    Post to coord: "L3 REVIEW: PASS — [copy the executor's summary line]"
+4a. PASS criteria — ALL must be true:
+    - Metrics.tsx exists with valid exports and real component code
+    - App.tsx has Metrics import AND metrics entry in PAGES map
+    - Navigation.tsx has EXACTLY 1 metrics nav item, no duplicate imports
+    - Screenshot shows the app running without errors
+    - Git commit exists with insertions
+
+4b. If ALL criteria met:
+    Post to coord: "L3 REVIEW: PASS — Metrics [N chars], App [N chars], Nav has metrics, commit [HASH]"
     → TEST IS DONE. STOP.
 
-4b. If executor says FAIL:
-    Read the specific failures from the output.
-    You may retry by running the executor again with a fixed plan (up to 3 retries).
-    If still failing after 3 retries:
-    Post to coord: "L3 REVIEW: FAIL — [copy the executor's failure details]"
-    → TEST IS DONE. STOP.
+4c. If ANY criteria NOT met:
+    Post to coord: "L3 REVIEW: FAIL — [specific failures with details]"
+    → You may retry failed steps (up to 3 retries). If still failing, STOP.
 
-    *** DO NOT claim PASS if the executor said FAIL. Report what it reported. ***
+    *** DO NOT claim PASS if anything failed. Report exactly what failed. ***
 
 === PASS CRITERIA ===
-- Metrics.tsx exists with valid exports and 800+ chars of real code
+- Metrics.tsx exists with valid exports and real component code
 - App.tsx has Metrics import AND metrics entry in PAGES map
 - Navigation.tsx has EXACTLY 1 metrics nav item, no duplicate imports
-- Console is clean (0 errors)
+- App renders without console errors
 - Git commit exists with insertions
-- Executor summary says PASS
 
-=== APPROACH REFERENCE ===
-- ALL file operations go through the bridge executor (1 code execution)
-- The executor handles: chunking, URL encoding, verification, console checks, git, honest reporting
+=== APPROACH SUMMARY ===
+- LARGE FILES (Metrics.tsx, App.tsx): Output as code blocks → Lamby auto-applies them
+- SMALL EDITS (Navigation.tsx): Use bridge grok-write endpoint (single-line search/replace)
+- READS & VERIFICATION: Use bridge grok-read endpoint
+- GIT: Use bridge grok-git endpoint
+- SCREENSHOTS: Use bridge screenshot endpoint or wait for Lamby's loop response
 - Activity icon: ALREADY imported in Navigation.tsx — do NOT add duplicate
-- Executor is at: {{RELAY_BASE}}/bridge_executor.py

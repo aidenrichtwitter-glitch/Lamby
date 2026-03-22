@@ -2162,7 +2162,7 @@ const GrokBridge: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [model, setModel] = useState('grok-4');
   const [showModelPicker, setShowModelPicker] = useState(false);
-  const [autoApplyEnabled, setAutoApplyEnabled] = useState(() => localStorage.getItem('lamby-auto-apply') === 'true');
+  const [autoApplyEnabled, setAutoApplyEnabled] = useState(() => localStorage.getItem('lamby-auto-apply') !== 'false');
   const [visionEnabled, setVisionEnabled] = useState(() => localStorage.getItem('lamby-vision') === 'true');
   const [autoDetectEnabled, setAutoDetectEnabled] = useState(() => localStorage.getItem('lamby-autodetect') !== 'false');
   const [visionAvailable, setVisionAvailable] = useState(false);

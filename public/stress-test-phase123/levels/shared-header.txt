@@ -23,30 +23,52 @@ what you think you need to succeed. Do NOT claim PASS if any step failed. A deta
 report with specific diagnostics is 10x more valuable than a false PASS. We use your
 failure reports to fix the system — lying about success wastes everyone's time.
 
-PATIENCE PROTOCOL — after any file WRITE (grok-write, grok-create), wait 15 seconds before
-your next action. File changes take time to propagate through the desktop dev server.
-  EXCEPTION: grok-create-chunk calls do NOT need waiting between them — chunks buffer in memory
-  and the file doesn't exist until the final chunk. Send all chunks back-to-back, then wait 15s
-  after the LAST chunk before doing anything else.
+=== AUTO-APPLY MODE (PRIMARY — use this for creating/rewriting files) ===
+Lamby has auto-apply enabled. When you output code blocks with file path comments,
+Lamby automatically extracts and writes the files to the project. This is the PREFERRED
+method for creating or rewriting files — no chunking, no URL encoding, no size limits.
 
-=== ENDPOINTS ===
+HOW IT WORKS:
+1. You respond with fenced code blocks, each with a file path comment on the first line:
+   ```tsx
+   // src/pages/Metrics.tsx
+   import { useState } from 'react'
+   ...your full component code...
+   export default Metrics
+   ```
+2. Lamby's auto-apply parses your response and writes each file to disk.
+3. The dev server hot-reloads. Lamby takes a screenshot and checks for errors.
+4. Lamby responds with the screenshot + any error logs.
+5. You review the result and iterate if needed.
+
+RULES FOR AUTO-APPLY:
+- Put the file path as a comment on the FIRST LINE of every code block.
+- Use the format: // path/to/file.tsx (for JS/TS) or <!-- path/to/file.html -->
+- After outputting ALL code blocks, STOP AND WAIT. Do not call browse_page.
+  Lamby will process your response, apply the files, and reply with results.
+- You can output MULTIPLE files in one response — Lamby extracts them all.
+- No size limits. Write complete files. No chunking needed.
+
+WHEN TO USE AUTO-APPLY:
+- Creating new files (any size)
+- Rewriting entire files (e.g. adding imports + new components to App.tsx)
+- Any file over 600 chars (which would need chunking via bridge endpoints)
+
+=== BRIDGE ENDPOINTS (for reads, small edits, git, and verification) ===
+Use bridge GET endpoints for operations that don't involve large content:
+
 READ FILES — grok-read:
   GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/App.tsx
 
-WRITE/EDIT FILES — grok-write (search/replace with auto-verify):
+EDIT FILES — grok-write (single-line search/replace):
   GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=FILE&search=ENCODED_OLD&replace=ENCODED_NEW
-  URL-encode search and replace values. The relay has smartDecode (handles single + double encoding).
+  Best for small, targeted edits. URL-encode search and replace values.
+  ⚠ ON WINDOWS: Single-line searches only. Multi-line searches FAIL SILENTLY.
+  For multi-line changes, use auto-apply (output the full file as a code block).
 
 CREATE SMALL FILES — grok-create (for content < 600 raw chars):
   GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=FILE&content=ENCODED_CONTENT
-  URL-encode the content. For content > 600 raw chars, use grok-create-chunk instead.
-
-CREATE LARGE FILES — grok-create-chunk (for content > 600 raw chars):
-  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=ENCODED_CHUNK&chunk=0&total=N
-  Split into chunks of UNDER 500 raw characters each. URL-encode each chunk.
-  Encoding adds ~1.7x overhead. ~500 raw → ~850 encoded → fits in URL.
-  chunk=0 starts file. File written to disk when final chunk (chunk=N-1) arrives.
-  Send ALL chunks back-to-back. No waiting between chunks. Verify ONCE after last chunk.
+  For larger files, use auto-apply instead.
 
 DELETE FILES — grok-delete:
   GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=FILE
@@ -57,77 +79,28 @@ FILE TREE — grok-tree:
 GIT — grok-git:
   ?action=status | add&args=. | commit&message=MSG | log&count=5 | diff
   ?action=checkout&args=HASH%20--%20path  (restore file from specific commit)
-  ?action=checkout&paths=file1,file2      (restore from HEAD)
-  ?action=checkout&ref=branch             (switch branch)
-  git reset --hard is sanitized to --soft.
 
 SCREENSHOT:
   GET {{RELAY_BASE}}/api/screenshot/{{PROJECT}}?fullPage=true&waitMs=8000
-
-RUN COMMANDS — grok-run:
-  GET {{RELAY_BASE}}/api/grok-run?project={{PROJECT}}&command=COMMAND
-  Param is "command" not "cmd". Windows PowerShell. Only npm/node/echo allowed.
-
-CONSOLE ERRORS — grok-proxy:
-  GET {{RELAY_BASE}}/api/grok-proxy?project={{PROJECT}}&payload=ENCODED_JSON
-  payload: {"actions":[{"type":"get_console_errors","project":"{{PROJECT}}"}]}
-
-SEARCH — grok-search:
-  GET {{RELAY_BASE}}/api/grok-search?project={{PROJECT}}&q=PATTERN
 
 COORD — post progress notes:
   GET {{RELAY_BASE}}/api/coord?note=YOUR_MESSAGE&from=grok
   Post ONCE per phase/step. Do NOT duplicate. Keep under 200 chars.
 
-=== BRIDGE EXECUTOR (PREFERRED — use this for all file operations) ===
-Instead of calling endpoints manually, use the bridge executor via code execution.
-It handles chunking, encoding, verification, git, and honest reporting automatically.
-
-Usage — run this as ONE code execution:
-  RELAY = "{{RELAY_BASE}}"
-  PROJECT = "{{PROJECT}}"
-  plan = [
-      {"action": "create", "path": "src/file.tsx", "content": "..."},
-      {"action": "edit", "path": "src/file.tsx", "search": "old", "replace": "new"},
-      {"action": "delete", "path": "src/old.tsx"},
-      {"action": "read", "path": "src/file.tsx"},
-      {"action": "verify", "path": "src/file.tsx", "contains": ["export default"]},
-      {"action": "console_check"},
-      {"action": "git_add"},
-      {"action": "git_commit", "message": "my commit"},
-      {"action": "git_log", "count": 3},
-      {"action": "git_checkout", "args": "af7629a -- src/App.tsx"},
-      {"action": "wait", "seconds": 5},
-      {"action": "coord", "note": "progress update"},
-  ]
-  import urllib.request
-  exec(urllib.request.urlopen(f"{RELAY}/bridge_executor.py").read().decode())
-
-The executor:
-- Auto-chunks files >450 chars (splits raw, encodes each chunk)
-- Waits 15s between writes and verification steps
-- Prints PASS/FAIL per step with exact char counts
-- Prints overall summary at the end
-
 === RULES ===
-1. URL-ENCODE all content/search/replace params. Raw newlines are SILENTLY STRIPPED by HTTP.
-   The relay has smartDecode — both single and double encoding work correctly.
+1. URL-ENCODE all search/replace params for bridge endpoints. The relay has smartDecode.
 
-2. LARGE FILES (>600 raw chars): Use grok-create-chunk with chunks UNDER 500 raw chars each.
-   grok-create FAILS SILENTLY on large content (URL too long for browse_page).
+2. For LARGE FILE WRITES: Use auto-apply (output as code block). Not bridge endpoints.
 
-3. grok-write ON WINDOWS: Single-line searches work. Multi-line searches FAIL SILENTLY
-   due to \r\n vs \n mismatch. For multi-line edits, use grok-create (full file rewrite).
+3. grok-write ON WINDOWS: Single-line searches only. For anything else, use auto-apply.
 
-4. VERIFY after writes: grok-read the file to confirm changes landed.
+4. VERIFY after writes: Use grok-read or wait for Lamby's screenshot response.
 
-5. If grok-write returns replacements:0, the search text wasn't found. Do NOT retry
-   blindly — read the file first to see the actual content.
+5. If grok-write returns replacements:0, read the file first to see actual content.
 
 6. ALL ENDPOINTS ARE GET. Do NOT attempt POST requests.
 
 7. Each level's instructions override these defaults where they conflict.
-   Follow the level instructions.
 
 === END SHARED HEADER ===
 

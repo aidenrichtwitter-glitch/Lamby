@@ -4,10 +4,19 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
-## Lesson 29: Pre-built bridge executor eliminates Grok's script-writing failures
+## Lesson 30: Auto-apply beats bridge executor — let Grok write code normally
+**Date:** 2026-03-22
+**Context:** The bridge executor (`bridge_executor.py`) was a Python script that Grok fetched via `urllib.request.urlopen` and ran via `exec()`. Problem: Grok's Python code execution tool cannot make HTTP requests — `urlopen` fails silently or is blocked. The entire executor approach was fundamentally broken. Meanwhile, Lamby already has auto-apply: Grok outputs fenced code blocks with file path comments, Lamby's ClipboardExtractor + parseCodeBlocks extracts them, and auto-apply writes them to disk. Tested end-to-end: 3 code blocks → 3 files written → vite build passes (32 modules, 0 errors). A 1,368-char Metrics.tsx landed perfectly — no chunking, no URL encoding, no executor needed.
+**Fix:** Deleted bridge_executor.py. Rewrote L3 to hybrid approach: large file creates (Metrics.tsx, App.tsx) go through auto-apply (Grok outputs code blocks, Lamby writes them). Small operations (Nav search/replace, git, reads, coord) use bridge GET endpoints. After outputting code blocks, Grok STOPS AND WAITS for Lamby's autonomous loop to respond with screenshot + error logs. Changed auto-apply default to ON (`!== 'false'` instead of `=== 'true'`). This eliminates: chunking complexity, URL encoding limits, Python HTTP failures, and the entire executor script.
+**Key insight:** Don't fight the platform. Grok's natural output is code blocks. Lamby's natural input is code blocks. The bridge should handle what code blocks can't (reads, git, small edits), not try to replace the code block flow.
+
+---
+
+## Lesson 29: Pre-built bridge executor eliminates Grok's script-writing failures (SUPERSEDED by Lesson 30)
 **Date:** 2026-03-22
 **Context:** Even with the single-executor rule and Python script approach, Grok still had to write the Python script from scratch each time — getting encoding, chunking, and error handling wrong. The inline script template in L3 was complex and Grok frequently mangled it.
 **Fix:** Created `public/bridge_executor.py` — a pre-built script served as a static file. Grok fetches and runs it via `exec(urllib.request.urlopen(...).read().decode())`. Grok's only job is building a JSON plan list. The executor handles all the hard parts: auto-chunking files >450 chars (raw-first split, then encode), URL encoding, sequential execution, verification, console checks, git operations, 15s wait between writes and verifications, and honest structured PASS/FAIL summary. L3 Phase 3 went from ~40 lines of inline Python template + 2 browse_page calls to a single code execution with a clean plan list.
+**Status:** SUPERSEDED — bridge executor approach doesn't work because Grok's Python tool can't make HTTP requests.
 **Rule:** Never make Grok write infrastructure code. Give it a ready-made tool and a simple interface (JSON plan). The less Grok has to implement, the more reliable the test.
 
 ---
