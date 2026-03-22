@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, clipboard, session } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, session, Menu } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -88,9 +88,12 @@ function proxyToLocalServer(method, apiPath, body) {
 }
 
 function createWindow() {
+  Menu.setApplicationMenu(null);
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,

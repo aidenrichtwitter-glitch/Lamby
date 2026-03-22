@@ -5851,6 +5851,7 @@ function sourceDownloadPlugin(): Plugin {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  base: './',
   server: {
     host: "0.0.0.0",
     port: 5000,
