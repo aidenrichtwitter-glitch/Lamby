@@ -1,0 +1,30 @@
+directories:
+  output: ../exe
+  buildResources: build
+appId: com.lamby.desktop
+productName: Lamby
+asar: false
+files:
+  - filter:
+      - src/**/*
+      - dist/**/*
+      - package.json
+win:
+  target: nsis
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeader: build/installerHeader.bmp
+  installerSidebar: build/installerSidebar.bmp
+  installerHeaderIcon: build/icon.ico
+  shortcutName: Lamby
+  artifactName: Lamby-Setup-${version}.${ext}
+linux:
+  target:
+    - AppImage
+  icon: build/icon.png
+  category: Development
+electronVersion: 33.4.11

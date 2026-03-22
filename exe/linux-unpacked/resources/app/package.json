@@ -1,0 +1,9 @@
+{
+  "name": "lamby",
+  "description": "Lamby Desktop Application",
+  "author": "Lamby",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "src/main.js"
+}

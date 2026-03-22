@@ -36,7 +36,9 @@
       "installerSidebar": "build/installerSidebar.bmp",
       "installerHeaderIcon": "build/icon.ico",
       "shortcutName": "Lamby",
-      "artifactName": "Lamby-Setup-${version}.${ext}"
+      "artifactName": "Lamby-Setup-${version}.${ext}",
+      "perMachine": false,
+      "menuCategory": "Lamby"
     },
     "linux": {
       "target": ["AppImage"],
