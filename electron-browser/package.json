@@ -28,18 +28,16 @@
       "icon": "build/icon.ico"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
-      "installerHeader": "build/installerHeader.bmp",
-      "installerSidebar": "build/installerSidebar.bmp",
       "installerHeaderIcon": "build/icon.ico",
       "shortcutName": "Lamby",
       "artifactName": "Lamby-Setup-${version}.${ext}",
       "perMachine": false,
       "menuCategory": "Lamby",
-      "uninstallDisplayName": "Lamby"
+      "uninstallDisplayName": "Lamby",
+      "deleteAppDataOnUninstall": false
     },
     "linux": {
       "target": ["AppImage"],
