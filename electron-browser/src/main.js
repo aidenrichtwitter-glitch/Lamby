@@ -91,6 +91,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
@@ -100,6 +101,7 @@ function createWindow() {
   });
 
   if (app.isPackaged) {
+    mainWindow.setMenu(null);
     const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
     log(`Packaged mode — loading ${indexPath}`);
     mainWindow.loadFile(indexPath);
