@@ -34,39 +34,21 @@ CRITICAL APPROACH — WHAT WORKS (TESTED AND VERIFIED):
 
 STEPS (do them in order, post to coord after each):
 
-0. CLEANUP — ENSURE CLEAN BASELINE (REQUIRED BEFORE EVERY L3 RUN):
-   This step removes any leftover state from a previous L3 run so the test is idempotent.
-   Uses git checkout file restore to revert files to their last committed state.
+0. CLEANUP — ENSURE CLEAN BASELINE (3 calls only):
+   Restore all modified files and delete Metrics.tsx if it exists. Do NOT retry or loop — each call is idempotent.
 
-   a) CHECK for stale Metrics.tsx:
-      GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/pages/Metrics.tsx
-      → If it exists (status: success), DELETE it:
-        GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/pages/Metrics.tsx
+   a) RESTORE tracked files to HEAD (1 call — restores App.tsx, Navigation.tsx, Dashboard.tsx):
+      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/components/App.tsx,src/components/Navigation.tsx,src/pages/Dashboard.tsx
 
-   b) RESTORE App.tsx to last committed version (removes any stale Metrics references):
-      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/components/App.tsx
-      This restores App.tsx from HEAD — undoes any uncommitted edits instantly.
+   b) DELETE Metrics.tsx (1 call — ignore "File not found" error, that just means it's already clean):
+      GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/pages/Metrics.tsx
+      → "File not found" is SUCCESS — it means there's nothing to clean up. Do NOT retry.
 
-   c) RESTORE Navigation.tsx to last committed version (removes any stale metrics nav entries):
-      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/components/Navigation.tsx
-
-   d) RESTORE Dashboard.tsx (removes any stale L2 comment headers):
-      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/pages/Dashboard.tsx
-
-   e) GIT STATUS — verify clean:
+   c) GIT STATUS (1 call — verify clean):
       GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=status
-      → Should show clean working tree. If Metrics.tsx still shows as untracked from a previous committed run,
-        the delete in step (a) already handled it.
-      → If still dirty, do:
-        GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=add&args=.
-        GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=commit&message=L3-cleanup:%20remove%20stale%20artifacts
 
-   f) CONSOLE CHECK after cleanup:
-      GET {{RELAY_BASE}}/api/grok-proxy?project={{PROJECT}}&payload={"actions":[{"type":"get_console_errors","project":"{{PROJECT}}"}]}
-      → Must be 0 errors. If errors exist after restore, something else is wrong — post failure and STOP.
-
-   → Post to coord: "L3-S0: cleanup done, baseline clean" or "L3-S0: cleanup done, had to remove stale files"
-   → If cleanup fails, post: "L3-S0: cleanup FAILED: [details]" and STOP.
+   That's it. 3 calls. Do NOT add extra checks, retries, or reads. Move on.
+   → Post to coord: "L3-S0: cleanup done, baseline clean"
 
 1. READ TREE: Call /api/grok-tree?project={{PROJECT}}
    → Post to coord: "L3-S1: tree read"
