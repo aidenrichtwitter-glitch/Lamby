@@ -21,16 +21,16 @@ function copyRecursive(src, dest) {
   }
 }
 
-function run(cmd, cwd, env) {
+function run(cmd, cwd) {
   console.log(`\n> ${cmd}\n`);
-  execSync(cmd, { stdio: 'inherit', cwd: cwd || ROOT, env: { ...process.env, ...env } });
+  execSync(cmd, { stdio: 'inherit', cwd: cwd || ROOT });
 }
 
 const isLinux = process.argv.includes('--linux');
 const totalSteps = isLinux ? 4 : 5;
 
 console.log(`=== Step 1/${totalSteps}: Building web assets (vite build) ===`);
-run('npx vite build', ROOT, { ELECTRON_BUILD: '1' });
+run('npx vite build');
 
 console.log(`\n=== Step 2/${totalSteps}: Copying dist → electron-browser/dist ===`);
 if (fs.existsSync(ELECTRON_DIST)) {

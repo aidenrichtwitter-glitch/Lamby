@@ -7,7 +7,7 @@ import ParallaxControls from "@/components/ParallaxControls";
 export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <ParallaxProvider>
-      <SidebarProvider defaultOpen={false}>
+      <SidebarProvider>
         <ParallaxScene>
           <div className="h-screen flex w-full overflow-hidden">
             <ParallaxPortal wall="left">
