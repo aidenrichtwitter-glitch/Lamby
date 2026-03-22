@@ -41,38 +41,26 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 
 [Code]
-const
-  DarkBg = TColor($181218);
-  DarkField = TColor($282228);
-  TextWhite = TColor($FFFFFF);
-  TextGrey = TColor($CCCCCC);
-  TextDim = TColor($999999);
-
 procedure InitializeWizard();
 begin
-  WizardForm.Color := DarkBg;
-  WizardForm.MainPanel.Color := DarkBg;
-  WizardForm.InnerPage.Color := DarkBg;
-  WizardForm.OuterNotebook.Color := DarkBg;
-  WizardForm.InnerNotebook.Color := DarkBg;
-
-  WizardForm.WelcomeLabel1.Font.Color := TextWhite;
-  WizardForm.WelcomeLabel2.Font.Color := TextGrey;
-  WizardForm.PageNameLabel.Font.Color := TextWhite;
-  WizardForm.PageDescriptionLabel.Font.Color := TextGrey;
-
-  WizardForm.ReadyLabel.Font.Color := TextGrey;
-  WizardForm.FinishedLabel.Font.Color := TextGrey;
-  WizardForm.FinishedHeadingLabel.Font.Color := TextWhite;
-
-  WizardForm.SelectDirLabel.Font.Color := TextGrey;
-  WizardForm.SelectDirBrowseLabel.Font.Color := TextGrey;
-  WizardForm.DirEdit.Color := DarkField;
-  WizardForm.DirEdit.Font.Color := TextWhite;
-
-  WizardForm.TasksList.Color := DarkField;
-  WizardForm.TasksList.Font.Color := TextGrey;
-
-  WizardForm.StatusLabel.Font.Color := TextGrey;
-  WizardForm.FilenameLabel.Font.Color := TextDim;
+  WizardForm.Color := $181218;
+  WizardForm.MainPanel.Color := $181218;
+  WizardForm.InnerPage.Color := $181218;
+  WizardForm.OuterNotebook.Color := $181218;
+  WizardForm.InnerNotebook.Color := $181218;
+  WizardForm.WelcomeLabel1.Font.Color := $FFFFFF;
+  WizardForm.WelcomeLabel2.Font.Color := $CCCCCC;
+  WizardForm.PageNameLabel.Font.Color := $FFFFFF;
+  WizardForm.PageDescriptionLabel.Font.Color := $CCCCCC;
+  WizardForm.ReadyLabel.Font.Color := $CCCCCC;
+  WizardForm.FinishedLabel.Font.Color := $CCCCCC;
+  WizardForm.FinishedHeadingLabel.Font.Color := $FFFFFF;
+  WizardForm.SelectDirLabel.Font.Color := $CCCCCC;
+  WizardForm.SelectDirBrowseLabel.Font.Color := $CCCCCC;
+  WizardForm.DirEdit.Color := $282228;
+  WizardForm.DirEdit.Font.Color := $FFFFFF;
+  WizardForm.TasksList.Color := $282228;
+  WizardForm.TasksList.Font.Color := $CCCCCC;
+  WizardForm.StatusLabel.Font.Color := $CCCCCC;
+  WizardForm.FilenameLabel.Font.Color := $999999;
 end;
