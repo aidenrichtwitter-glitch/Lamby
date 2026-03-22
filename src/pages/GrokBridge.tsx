@@ -577,7 +577,7 @@ function extractContextSections(fullText: string): string[] {
   return sections;
 }
 
-function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport, onReplaceRepo, toasterConfig, toasterAvailable, userTask, setUserTask, onGenerateContext, onEditContext, onEditTemplate, hasCustomTemplate, contextLoading, projectContext, injectTextRef, autoDetectEnabled, onToggleAutoDetect, onPhase3Complete }: { onApply: (filePath: string, code: string, editType?: string, searchCode?: string) => void; onApplyAll?: (blocks: { filePath: string; code: string; editType?: string; searchCode?: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void; onReplaceRepo?: (url: string) => void; toasterConfig?: OllamaToasterConfig; toasterAvailable?: boolean; userTask: string; setUserTask: (task: string) => void; onGenerateContext: (task?: string) => Promise<void>; onEditContext: () => void; onEditTemplate: () => void; hasCustomTemplate: boolean; contextLoading: boolean; projectContext: string; injectTextRef?: React.MutableRefObject<((text: string) => void) | null>; autoDetectEnabled: boolean; onToggleAutoDetect: (val: boolean) => void; onPhase3Complete?: (convo: Conversation) => void }) {
+function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activeProject, onGithubImport, onReplaceRepo, toasterConfig, toasterAvailable, userTask, setUserTask, onGenerateContext, onEditContext, onEditTemplate, hasCustomTemplate, contextLoading, projectContext, injectTextRef, onPhase3Complete }: { onApply: (filePath: string, code: string, editType?: string, searchCode?: string) => void; onApplyAll?: (blocks: { filePath: string; code: string; editType?: string; searchCode?: string }[]) => void; onResponseCaptured?: (fullResponse: string) => void; activeProject?: string | null; onGithubImport?: (url: string) => void; onReplaceRepo?: (url: string) => void; toasterConfig?: OllamaToasterConfig; toasterAvailable?: boolean; userTask: string; setUserTask: (task: string) => void; onGenerateContext: (task?: string) => Promise<void>; onEditContext: () => void; onEditTemplate: () => void; hasCustomTemplate: boolean; contextLoading: boolean; projectContext: string; injectTextRef?: React.MutableRefObject<((text: string) => void) | null>; onPhase3Complete?: (convo: Conversation) => void }) {
   type ProjectExtractorState = {
     blocks: ExtractedBlock[];
     detectedDeps: { dependencies: string[]; devDependencies: string[] };
@@ -1000,35 +1000,17 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
     }
   }, [extractFromText]);
 
-  const lastInjectTimeRef = useRef<number>(0);
-
   useEffect(() => {
     extractFromTextRef.current = extractFromText;
-    if (injectTextRef) {
-      const wrappedInject = autoDetectEnabled ? (text: string) => {
-        lastInjectTimeRef.current = Date.now();
-        extractFromText(text);
-      } : null;
-      injectTextRef.current = wrappedInject;
-    }
+    if (injectTextRef) injectTextRef.current = extractFromText;
     return () => { if (injectTextRef) injectTextRef.current = null; };
-  }, [extractFromText, injectTextRef, autoDetectEnabled]);
+  }, [extractFromText, injectTextRef]);
 
   useEffect(() => {
-    if (!autoDetectEnabled) return;
-
-    const poll = () => {
-      if (isElectron) {
-        const timeSinceInject = Date.now() - lastInjectTimeRef.current;
-        if (timeSinceInject < 10000) return;
-      }
+    if (!isElectron) {
       readClipboard();
-    };
-
-    poll();
-    const intervalId = setInterval(poll, 2000);
-    return () => clearInterval(intervalId);
-  }, [autoDetectEnabled, readClipboard]);
+    }
+  }, []);
 
   const validate = (block: ExtractedBlock) => {
     const checks = validateChange(block.code, block.filePath || 'unknown.ts');
@@ -1095,15 +1077,12 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           <Zap className={`w-3.5 h-3.5 text-primary ${flash ? 'animate-ping' : 'animate-pulse'}`} />
           <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Code Extractor</span>
         </div>
-        <button
-          onClick={() => onToggleAutoDetect(!autoDetectEnabled)}
-          data-testid="button-toggle-autodetect"
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[9px] border transition-colors ${autoDetectEnabled ? 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/20' : 'bg-muted/30 text-muted-foreground/50 border-border/20 hover:bg-muted/50'}`}
-          title={autoDetectEnabled ? 'Auto-detect is ON — click to disable' : 'Auto-detect is OFF — click to enable'}
-        >
-          <ClipboardCheck className="w-3 h-3" />
-          <span>Auto-detect {autoDetectEnabled ? 'ON' : 'OFF'}</span>
-        </button>
+        {isElectron && (
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary/10 text-primary text-[9px] border border-primary/20">
+            <ClipboardCheck className="w-3 h-3" />
+            <span>Auto-detects Grok copy-button responses</span>
+          </div>
+        )}
         <button
           onClick={() => { setShowPasteBox(p => !p); if (collapsed) setCollapsed(false); setTimeout(() => { pasteRef.current?.focus(); }, 100); }}
           data-testid="button-paste-response"
@@ -1485,7 +1464,7 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
           {blocks.length === 0 && !showPasteBox && (
             <div className="text-center py-4 text-[10px] text-muted-foreground/50">
               <p>Click <strong>"Paste Response"</strong> above, then paste Grok's reply (Ctrl+V)</p>
-              <p className="mt-1 text-[9px] text-muted-foreground/30">{!autoDetectEnabled ? 'Auto-detect is OFF — use paste or clipboard buttons' : isElectron ? 'Auto-detect also runs in Electron mode' : 'Or use "Read clipboard" if your browser allows it'}</p>
+              <p className="mt-1 text-[9px] text-muted-foreground/30">{isElectron ? 'Auto-detect also runs in Electron mode' : 'Or use "Read clipboard" if your browser allows it'}</p>
             </div>
           )}
 
@@ -2182,7 +2161,6 @@ const GrokBridge: React.FC = () => {
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [autoApplyEnabled, setAutoApplyEnabled] = useState(() => localStorage.getItem('lamby-auto-apply') !== 'false');
   const [visionEnabled, setVisionEnabled] = useState(() => localStorage.getItem('lamby-vision') === 'true');
-  const [autoDetectEnabled, setAutoDetectEnabled] = useState(() => localStorage.getItem('lamby-autodetect') !== 'false');
   const [visionAvailable, setVisionAvailable] = useState(false);
   const [visionAnalyzing, setVisionAnalyzing] = useState(false);
   const [autonomousState, dispatchAutonomous] = React.useReducer(autonomousReducer, INITIAL_AUTONOMOUS_STATE);
@@ -2935,10 +2913,6 @@ const GrokBridge: React.FC = () => {
 
   useEffect(() => {
     if (!isElectron) return;
-    if (!autoDetectEnabled) {
-      if (manualWatcherRef.current) { clearInterval(manualWatcherRef.current); manualWatcherRef.current = null; }
-      return;
-    }
     const ipcRenderer = (window as any).require('electron').ipcRenderer;
     const WATCH_INTERVAL = 3000;
 
@@ -3040,7 +3014,7 @@ const GrokBridge: React.FC = () => {
         manualWatcherRef.current = null;
       }
     };
-  }, [ipcWithTimeout, autoDetectEnabled]);
+  }, [ipcWithTimeout]);
 
   useEffect(() => {
     const ipc = (window as any).electronAPI;
@@ -6799,7 +6773,7 @@ const GrokBridge: React.FC = () => {
 
             {/* Code extractor — shared across both modes */}
             <ParallaxPortal wall="bottom">
-              <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} onReplaceRepo={handleReplaceRepo} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} userTask={userTask} setUserTask={setUserTask} onGenerateContext={async (task?: string) => { const ctx = await buildProjectContext(task); if (ctx) copyContextToClipboard(ctx); }} onEditContext={() => { setEditableContext(projectContext); setShowContextEditor(true); setTimeout(() => contextEditorRef.current?.focus(), 100); }} onEditTemplate={() => { setShowPromptTemplateEditor(true); setTimeout(() => promptTemplateRef.current?.focus(), 100); }} hasCustomTemplate={!!customPromptTemplate.trim()} contextLoading={contextLoading} projectContext={projectContext} injectTextRef={injectExtractorTextRef} autoDetectEnabled={autoDetectEnabled} onToggleAutoDetect={(val) => { setAutoDetectEnabled(val); localStorage.setItem('lamby-autodetect', val ? 'true' : 'false'); }} onPhase3Complete={(convo) => { setConversations(prev => [convo, ...prev]); setActiveConvoId(convo.id); setMessages(convo.messages); setModel(convo.model); setMode('api'); }} />
+              <ClipboardExtractor onApply={applyBlock} onApplyAll={batchApplyAll} onResponseCaptured={(text) => { lastFullResponseRef.current = text; }} activeProject={activeProject} onGithubImport={handleGitHubImport} onReplaceRepo={handleReplaceRepo} toasterConfig={toasterConfig} toasterAvailable={toasterAvailability?.available} userTask={userTask} setUserTask={setUserTask} onGenerateContext={async (task?: string) => { const ctx = await buildProjectContext(task); if (ctx) copyContextToClipboard(ctx); }} onEditContext={() => { setEditableContext(projectContext); setShowContextEditor(true); setTimeout(() => contextEditorRef.current?.focus(), 100); }} onEditTemplate={() => { setShowPromptTemplateEditor(true); setTimeout(() => promptTemplateRef.current?.focus(), 100); }} hasCustomTemplate={!!customPromptTemplate.trim()} contextLoading={contextLoading} projectContext={projectContext} injectTextRef={injectExtractorTextRef} onPhase3Complete={(convo) => { setConversations(prev => [convo, ...prev]); setActiveConvoId(convo.id); setMessages(convo.messages); setModel(convo.model); setMode('api'); }} />
             </ParallaxPortal>
           </div>
           )}
