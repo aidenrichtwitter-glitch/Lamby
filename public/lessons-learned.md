@@ -4,13 +4,14 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
-## Lesson 25: browse_page auto-encodes URLs — Grok must NOT pre-encode content
+## Lesson 25: Double URL-encoding corrupts file content — relay now has smartDecode
 **Date:** 2026-03-21
-**Context:** L3 test — Grok sent 6 chunks for Metrics.tsx, relay returned success for each, but file never appeared on disk.
-**Root cause:** Grok URL-encoded the content before putting it in the URL. Then browse_page URL-encoded the entire URL again. The relay received double-encoded content (e.g., `%2520` instead of `%20`). The desktop bridge received garbled content and the chunks didn't assemble correctly.
-**Evidence:** Grok's own debugging identified "double URL-encoding in browse_page calls" as the cause.
-**Fix:** Updated all prompts to say "DO NOT URL-ENCODE" for grok-create, grok-create-chunk, and grok-write content/search/replace params. browse_page handles encoding automatically. Put raw text directly in the URL.
-**Rule:** When using browse_page, NEVER pre-encode URL parameters. browse_page does it for you. Pre-encoding = double-encoding = corrupted data.
+**Context:** L3 test — Grok pre-encoded chunk content, making URLs ~2x longer. This burned through browse_page calls faster (encoding doubles URL length) and chunks didn't complete within the call limit.
+**Root cause:** Grok URL-encoded content, then browse_page may have encoded again → double-encoded. Encoded URLs are also ~2x longer, which means fewer chars per chunk → more chunks → more browse_page calls.
+**Fix (two-part):**
+1. Prompts now say "DO NOT URL-ENCODE" — put raw text in URLs, browse_page handles encoding.
+2. Relay added smartDecode() — transparently handles both raw, single-encoded, and double-encoded content. So even if Grok accidentally encodes, it still works.
+**Rule:** Tell Grok to use raw text in URLs. The relay's smartDecode ensures it works regardless of encoding state.
 
 ---
 
