@@ -782,7 +782,13 @@ function parseUnfencedFileBlocks(text: string): ParsedBlock[] {
 
 function parseFencedBlocks(text: string): ParsedBlock[] {
   const blocks: ParsedBlock[] = [];
-  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  let normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  normalized = normalized.replace(
+    /```\w*\n((?:\/\/|#|<!--)\s*(?:file:\s?)?[\w.\/\\-]+\.[a-zA-Z]{1,10}\s*(?:-->)?)\n```(\w+)\n/g,
+    '$1\n```$2\n'
+  );
+
   if (!/```\w*\n/.test(normalized)) return blocks;
 
   const regex = new RegExp(
