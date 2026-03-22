@@ -3787,8 +3787,6 @@ const GrokBridge: React.FC = () => {
       const warns = checks.filter(c => c.severity === 'warning');
       if (errors.length > 0) { hasErrors = true; break; }
       if (warns.length > 0) warnings.push(...warns.map(w => `${block.filePath}: ${w.message}`));
-      const lineChanges = Math.abs(block.code.split('\n').length - oldContent.split('\n').length);
-      if (lineChanges > 50) { hasErrors = true; break; }
       backups.push({ filePath: block.filePath, oldContent, newContent: block.code });
     }
 
