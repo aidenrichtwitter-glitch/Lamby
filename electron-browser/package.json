@@ -24,11 +24,8 @@
       "package.json"
     ],
     "win": {
-      "target": "portable",
+      "target": "dir",
       "icon": "build/icon.ico"
-    },
-    "portable": {
-      "artifactName": "Lamby.${ext}"
     },
     "linux": {
       "target": ["AppImage"],

@@ -531,6 +531,13 @@ Grok (xAI) → GET /api/grok-proxy?payload=BASE64 → bridge-relay.replit.app �
 ## Development
 - Dev server: `npx vite` (port 5000) — web-only mode
 - Desktop dev: `npm run electron:dev` — full desktop experience
-- Build: `npm run build`
+- Build: `npm run build` (on Windows — produces `exe/Lamby-Setup.exe` via Inno Setup)
+  - Step 1: Vite builds web assets
+  - Step 2: Copies dist into electron-browser
+  - Step 3: npm install in electron-browser
+  - Step 4: electron-builder packages unpacked app (`exe/win-unpacked/`)
+  - Step 5: Inno Setup compiles `electron-browser/build/installer.iss` → `exe/Lamby-Setup.exe`
+  - Requires Inno Setup 6 installed (free: https://jrsoftware.org/isdl.php) with `iscc` on PATH
+  - If Inno Setup not found, falls back gracefully — unpacked app still works from `exe/win-unpacked/Lamby.exe`
 - Download source: Click "Download Source" in the sidebar to get a zip of all project files (excludes node_modules, .git)
 - The app connects to an existing hosted Supabase project for its database and edge functions
