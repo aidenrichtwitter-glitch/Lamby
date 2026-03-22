@@ -15,7 +15,8 @@
     "productName": "Lamby",
     "asar": false,
     "directories": {
-      "output": "../exe"
+      "output": "../exe",
+      "buildResources": "build"
     },
     "files": [
       "src/**/*",
@@ -23,16 +24,23 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": null,
-      "uninstallerIcon": null
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "installerHeaderIcon": "build/icon.ico",
+      "shortcutName": "Lamby",
+      "artifactName": "Lamby-Setup-${version}.${ext}"
     },
     "linux": {
       "target": ["AppImage"],
+      "icon": "build/icon.png",
       "category": "Development"
     }
   }

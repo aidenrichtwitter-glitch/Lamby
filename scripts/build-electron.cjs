@@ -46,4 +46,4 @@ run(`npx electron-builder ${platform}`, ELECTRON_DIR);
 console.log('\n=== BUILD COMPLETE ===');
 const outputDir = path.join(ROOT, 'exe');
 console.log(`Output: ${outputDir}`);
-console.log(isLinux ? 'Look for the AppImage in the exe/ folder.' : 'Look for the Setup .exe installer in the exe/ folder.');
+console.log(isLinux ? 'Look for the AppImage in the exe/ folder.' : 'Look for Lamby-Setup-1.0.0.exe in the exe/ folder.');
