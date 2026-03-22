@@ -4,6 +4,15 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 27: Grok's agents ignore "pause" — must enforce single-executor rule
+**Date:** 2026-03-22
+**Context:** L3 failed again despite adding "send chunks atomically." Screenshots show agents fighting: Agent 1 says "Paused Phase 3 calls," Agent 3 says "Paused Phase 3 contributions," but then both still tried to execute. One agent tried "chatroom_send to pause Benjamin and Lucas" — they acknowledged but kept working. Another agent said "Resolving team conflict by taking control of Phase 3 myself." Result: multiple agents all executing Phase 3 simultaneously, Nav got duplicates again, Metrics had chunk issues, final review was FAIL.
+**Root cause:** Grok's agents cannot actually be paused via chatroom_send. They acknowledge the message but continue executing independently. The coordination mechanism doesn't work as a lock — it's advisory only. Telling agents to "pause" is like asking, not commanding.
+**Fix:** Added "SINGLE-EXECUTOR RULE" to both shared header and L3 prompt: ONLY the Leader/primary agent may call browse_page or execute code. All other agents may ONLY think, plan, draft content, and advise. Never assign execution to sub-agents. The chatroom_send "pause" approach is explicitly called out as ineffective.
+**Rule:** Never instruct Grok to coordinate agent execution via messaging. Instead, make the prompt clear that only ONE entity executes, and sub-agents are planners/thinkers only.
+
+---
+
 ## Lesson 26: Grok's multi-agent system causes concurrent chunk writes — use atomic Python script
 **Date:** 2026-03-22
 **Context:** L3 test failed again. Grok has multiple internal agents (Agent 1, Agent 3, "Benjamin", "Lucas", "Harper") that execute browse_page calls in parallel. When L3 Phase 3 says "send all chunks back-to-back," each agent independently tries to send chunks — they fight over the chunk buffer, corrupt each other's writes, and waste browse_page calls negotiating who gets to write.

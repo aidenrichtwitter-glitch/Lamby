@@ -3,6 +3,11 @@
 
 You will create Metrics.tsx, add it to App.tsx routing, add it to Navigation.tsx, and git commit.
 
+*** SINGLE-EXECUTOR RULE — APPLIES TO ENTIRE TEST ***
+*** ONLY the Leader executes. All agents/teammates THINK ONLY — no browse_page, no code execution. ***
+*** If you have sub-agents: they draft content and suggest plans. YOU execute every action. ***
+*** Agents calling browse_page in parallel has caused EVERY prior L3 failure (duplicates, corruption, race conditions). ***
+
 STOP RULES:
 - Maximum 30 browse_page calls. If you exceed 30, STOP.
 - Once you post "L3 REVIEW", you are DONE. No more browse_page calls.
