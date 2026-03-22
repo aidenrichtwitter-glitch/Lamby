@@ -79,7 +79,7 @@ const DESKTOP_PROJECT = 'groks-app';
 
 const isElectron = typeof window !== 'undefined' && typeof (window as any).require === 'function';
 
-function downloadPromptAsTxt(content: string, filename?: string) {
+function downloadPromptAsTxt(content: string, filename?: string): string {
   const fname = filename || `grok-prompt-${Date.now()}.txt`;
   const blob = new Blob([content], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
@@ -90,6 +90,7 @@ function downloadPromptAsTxt(content: string, filename?: string) {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+  return fname;
 }
 
 type Mode = 'api' | 'browser';
