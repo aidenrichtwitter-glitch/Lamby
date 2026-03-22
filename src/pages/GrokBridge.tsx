@@ -79,6 +79,19 @@ const DESKTOP_PROJECT = 'groks-app';
 
 const isElectron = typeof window !== 'undefined' && typeof (window as any).require === 'function';
 
+function downloadPromptAsTxt(content: string, filename?: string) {
+  const fname = filename || `grok-prompt-${Date.now()}.txt`;
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 type Mode = 'api' | 'browser';
 type Msg = { role: 'user' | 'assistant'; content: string };
 
@@ -1288,24 +1301,25 @@ function ClipboardExtractor({ onApply, onApplyAll, onResponseCaptured, activePro
                   if (!resp.ok) { alert('Could not load phase3 prompt file'); return; }
                   promptText = await resp.text();
                 }
-                await navigator.clipboard.writeText(promptText);
+                const fname = level ? `L${level.id}-${level.name.replace(/\s+/g, '-').toLowerCase()}.txt` : 'stress-test-prompt.txt';
+                downloadPromptAsTxt(promptText, fname);
                 const convo: Conversation = {
                   id: crypto.randomUUID(),
-                  title: level ? `${level.name} prompt (copied)` : 'Phase 3 prompt (copied to clipboard)',
+                  title: level ? `${level.name} prompt (downloaded)` : 'Phase 3 prompt (downloaded)',
                   messages: [{ role: 'user', content: promptText }],
                   model: 'grok-4',
                   createdAt: Date.now(),
                 };
                 onPhase3Complete?.(convo);
               } catch (err: any) {
-                alert('Failed to copy: ' + err.message);
+                alert('Failed to download: ' + err.message);
               }
             }}
             data-testid="button-copy-phase3-prompt"
             className="flex items-center gap-1 px-2 py-1 rounded text-[9px] transition-colors border shrink-0 whitespace-nowrap bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25"
-            title="Copy selected test level prompt to clipboard — paste into Grok on browser for live feedback"
+            title="Download test level prompt as .txt file — upload into Grok for best results"
           >
-            <Copy className="w-3 h-3" /> Copy
+            <Download className="w-3 h-3" /> .txt
           </button>
           {selectedTestLevel !== null && (
             <>
@@ -5045,23 +5059,10 @@ const GrokBridge: React.FC = () => {
   const copyContextToClipboard = useCallback(async (contextOverride?: string) => {
     const ctx = contextOverride || projectContext;
     if (!ctx) return;
-    try {
-      if (isElectron) {
-        const { clipboard } = (window as any).require('electron');
-        clipboard.writeText(ctx);
-      } else {
-        await navigator.clipboard.writeText(ctx);
-      }
-      setStatusMessage('✓ Project context copied to clipboard — paste into Grok');
-    } catch {
-      try {
-        await navigator.clipboard.writeText(ctx);
-        setStatusMessage('✓ Project context copied');
-      } catch {
-        setStatusMessage('⚠ Clipboard write failed');
-      }
-    }
-  }, [projectContext]);
+    const fname = `grok-context-${activeProject || 'project'}-${Date.now()}.txt`;
+    downloadPromptAsTxt(ctx, fname);
+    setStatusMessage(`✓ Downloaded ${fname} — upload into Grok`);
+  }, [projectContext, activeProject]);
 
   const duplicateMainApp = useCallback(async (targetName?: string, switchToProject = true) => {
     const name = targetName || `main-copy-${Date.now()}`;
