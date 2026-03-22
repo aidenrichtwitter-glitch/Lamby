@@ -1,6 +1,6 @@
 const { ipcMain, webContents } = require('electron');
 
-const BROWSER_MODE_VERSION = 'v26.2';
+const BROWSER_MODE_VERSION = 'v26.3';
 
 const LOG = '[GROK-IPC]';
 
@@ -24,32 +24,24 @@ function findGrokWebviewContents() {
 
 const SELECTORS = {
   stop: [
+    'form div.ms-auto button',
     'button[aria-label="Stop"]',
     'button[aria-label="Stop generating"]',
-    'button[aria-label="Stop model response"]',
-    'button[aria-label="Stop response"]',
     'button[data-testid="stop-button"]',
-    'button[data-testid="stop-generating"]',
   ],
   copy: [
-    'div.action-buttons.last-response button:nth-child(4)',
-    'div.action-buttons button:nth-child(4)',
-    'button[aria-label="Copy"]',
-    'button[aria-label="Copy to clipboard"]',
-    'button[aria-label="Copy response"]',
-    'button[data-testid="copy-button"]',
+    'div.action-buttons.last-response > div > button:nth-child(4)',
+    'div.action-buttons > div > button:nth-child(4)',
+  ],
+  actionButtons: [
+    'div.action-buttons.last-response',
+    'div.action-buttons',
   ],
   reaction: [
-    'button[aria-label="Good response"]',
-    'button[aria-label="Bad response"]',
-    'button[aria-label="Like"]',
-    'button[aria-label="Dislike"]',
-    'button[aria-label="Thumbs up"]',
-    'button[aria-label="Thumbs down"]',
-    'button[data-testid="like-button"]',
-    'button[data-testid="dislike-button"]',
-    'button[data-testid="thumbUp"]',
-    'button[data-testid="thumbDown"]',
+    'div.action-buttons.last-response > div > button:nth-child(1)',
+    'div.action-buttons.last-response > div > button:nth-child(2)',
+    'div.action-buttons > div > button:nth-child(1)',
+    'div.action-buttons > div > button:nth-child(2)',
   ],
   followUp: [
     'button[data-testid="suggested-prompt"]',
@@ -58,27 +50,23 @@ const SELECTORS = {
     '[data-testid="followup-suggestion"]',
   ],
   textarea: [
-    'textarea[data-testid="chat-input"]',
-    'textarea[placeholder*="Ask"]',
-    'textarea[placeholder*="ask"]',
-    'textarea[aria-label*="Ask"]',
-    'textarea[data-testid="textbox"]',
+    'form div[class*="ps-11"] div[class*="relative"] div[contenteditable]',
+    'form div[class*="ps-11"] div[class*="relative"] div > div > div',
     'div[contenteditable="true"][role="textbox"]',
-    'div[contenteditable="true"][data-testid="chat-input"]',
+    'textarea[placeholder*="Ask"]',
+    'textarea[data-testid="chat-input"]',
   ],
   sendButton: [
+    'form div.ms-auto button',
     'button[aria-label="Send"]',
     'button[aria-label="Send message"]',
     'button[data-testid="send-button"]',
     'button[type="submit"]',
   ],
   response: [
+    'div[id^="response-"]',
     '[data-testid="message-text"]',
-    '[data-testid="assistant-message"]',
-    '[data-testid="bot-message"]',
     'div[data-message-author-role="assistant"]',
-    'div[class*="message"][class*="assistant"]',
-    'div[class*="response"]',
   ],
 };
 
@@ -96,12 +84,20 @@ const SHARED_COUNTING_JS = `
   const __followUpSel = ${JSON.stringify(buildSelectorChain(SELECTORS.followUp))};
 
   function __isGenerating() {
-    if (__count(__stopSel) > 0) return true;
+    const msAutoContainer = document.querySelector('form div.ms-auto');
+    if (msAutoContainer) {
+      const btns = msAutoContainer.querySelectorAll('button');
+      if (btns.length >= 2) return true;
+      for (const btn of btns) {
+        const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+        if (label.includes('stop')) return true;
+      }
+    }
     const allButtons = document.querySelectorAll('button');
     for (const btn of allButtons) {
       const text = (btn.textContent || '').trim().toLowerCase();
       const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-      if (text === 'stop' || text === 'stop generating' || label.includes('stop')) return true;
+      if (text === 'stop' || text === 'stop generating' || label.includes('stop gener')) return true;
     }
     return false;
   }
@@ -110,23 +106,13 @@ const SHARED_COUNTING_JS = `
     const actionBars = document.querySelectorAll('div.action-buttons');
     if (actionBars.length > 0) return actionBars.length;
     let n = __count(__copySel);
-    if (n > 0) return n;
-    const allButtons = document.querySelectorAll('button');
-    for (const btn of allButtons) {
-      const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-      if (label.includes('copy') || label.includes('clipboard')) n++;
-    }
     return n;
   }
 
   function __countReaction() {
+    const actionBars = document.querySelectorAll('div.action-buttons');
+    if (actionBars.length > 0) return actionBars.length;
     let n = __count(__reactionSel);
-    if (n > 0) return n;
-    const allButtons = document.querySelectorAll('button');
-    for (const btn of allButtons) {
-      const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-      if (label.includes('like') || label.includes('dislike') || label.includes('good') || label.includes('bad') || label.includes('thumb')) n++;
-    }
     return n;
   }
 
@@ -243,34 +229,11 @@ function registerGrokIpcHandlers(getWebviewContents) {
         console.log(`${LOG} grok-copy-last-response: ${clickResult.error}. Falling back to DOM scrape.`);
       }
       const domResult = await wc.executeJavaScript(`(() => {
-        const responseSelectors = ${JSON.stringify(responseSel)};
-        let messages = document.querySelectorAll(responseSelectors);
+        let messages = document.querySelectorAll('div[id^="response-"]');
 
         if (messages.length === 0) {
-          const allDivs = document.querySelectorAll('div');
-          const candidates = [];
-          for (const div of allDivs) {
-            const cl = (div.className || '').toLowerCase();
-            const role = (div.getAttribute('data-message-author-role') || '').toLowerCase();
-            const testId = (div.getAttribute('data-testid') || '').toLowerCase();
-            if (role === 'assistant' || testId.includes('message') || testId.includes('response') || cl.includes('message') || cl.includes('response')) {
-              if (div.innerText && div.innerText.trim().length > 20) {
-                candidates.push(div);
-              }
-            }
-          }
-          messages = candidates;
-        }
-
-        if (messages.length === 0) {
-          const turnContainers = document.querySelectorAll('[class*="turn"], [class*="Turn"], [data-testid*="turn"], [data-testid*="conversation"]');
-          if (turnContainers.length > 0) {
-            const last = turnContainers[turnContainers.length - 1];
-            const text = last.innerText || '';
-            if (text.trim().length > 10) {
-              return { success: true, text: text.trim(), findMethod: 'turn-container' };
-            }
-          }
+          const responseSelectors = ${JSON.stringify(responseSel)};
+          messages = document.querySelectorAll(responseSelectors);
         }
 
         if (messages.length === 0) {
@@ -282,7 +245,7 @@ function registerGrokIpcHandlers(getWebviewContents) {
         if (!text || text.length < 5) {
           return { success: false, error: 'Last response is empty or too short' };
         }
-        return { success: true, text, findMethod: 'dom-scrape-fallback' };
+        return { success: true, text, findMethod: 'dom-response-id' };
       })()`);
 
       console.log(`${LOG} grok-copy-last-response: success=${domResult.success}, len=${domResult.text ? domResult.text.length : 0}, method=${domResult.findMethod || 'n/a'}, error=${domResult.error || 'none'}`);
@@ -299,23 +262,11 @@ function registerGrokIpcHandlers(getWebviewContents) {
       if (!wc) return { success: false, error: 'No webview' };
 
       const result = await wc.executeJavaScript(`(() => {
-        const responseSelectors = ${JSON.stringify(buildSelectorChain(SELECTORS.response))};
-        let messages = document.querySelectorAll(responseSelectors);
+        let messages = document.querySelectorAll('div[id^="response-"]');
 
         if (messages.length === 0) {
-          const allDivs = document.querySelectorAll('div');
-          const candidates = [];
-          for (const div of allDivs) {
-            const role = (div.getAttribute('data-message-author-role') || '').toLowerCase();
-            const testId = (div.getAttribute('data-testid') || '').toLowerCase();
-            const cl = (div.className || '').toLowerCase();
-            if (role === 'assistant' || testId.includes('message') || testId.includes('response') || cl.includes('message') || cl.includes('response')) {
-              if (div.innerText && div.innerText.trim().length > 20) {
-                candidates.push(div);
-              }
-            }
-          }
-          messages = candidates;
+          const responseSelectors = ${JSON.stringify(buildSelectorChain(SELECTORS.response))};
+          messages = document.querySelectorAll(responseSelectors);
         }
 
         if (messages.length === 0) return { success: false, error: 'No response found' };
@@ -334,81 +285,85 @@ function registerGrokIpcHandlers(getWebviewContents) {
       const wc = resolveWc();
       if (!wc) return { success: false, error: 'No webview' };
 
+      const { clipboard } = require('electron');
+      const prevClip = clipboard.readText();
+      clipboard.writeText(prompt);
+
       const escapedPrompt = JSON.stringify(prompt);
 
-      const result = await wc.executeJavaScript(`(() => {
+      const result = await wc.executeJavaScript(`(async () => {
         ${SHARED_COUNTING_JS}
         const promptText = ${escapedPrompt};
         const textareaSelectors = ${JSON.stringify(buildSelectorChain(SELECTORS.textarea))};
-        const sendSelectors = ${JSON.stringify(buildSelectorChain(SELECTORS.sendButton))};
 
-        let textarea = document.querySelector(textareaSelectors);
+        let input = null;
 
-        if (!textarea) {
-          const all = document.querySelectorAll('textarea, div[contenteditable="true"]');
+        const formInputs = document.querySelectorAll('form div[class*="ps-11"] div[class*="relative"] div');
+        for (let i = formInputs.length - 1; i >= 0; i--) {
+          const el = formInputs[i];
+          if (el.children.length === 0 && el.offsetParent !== null) {
+            input = el;
+            break;
+          }
+        }
+
+        if (!input) {
+          input = document.querySelector(textareaSelectors);
+        }
+
+        if (!input) {
+          const all = document.querySelectorAll('div[contenteditable="true"], textarea');
           for (const el of all) {
             if (el.offsetParent !== null) {
-              textarea = el;
+              input = el;
               break;
             }
           }
         }
 
-        if (!textarea) {
+        if (!input) {
           return { success: false, error: 'Could not find Grok input field' };
         }
 
-        const nativeSet = Object.getOwnPropertyDescriptor(
-          textarea.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLElement.prototype,
-          'value'
-        );
+        input.focus();
+        await new Promise(r => setTimeout(r, 100));
 
-        if (textarea.tagName === 'TEXTAREA') {
+        if (input.tagName === 'TEXTAREA' || input.tagName === 'INPUT') {
+          const nativeSet = Object.getOwnPropertyDescriptor(
+            input.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+            'value'
+          );
           if (nativeSet && nativeSet.set) {
-            nativeSet.set.call(textarea, '');
-            textarea.dispatchEvent(new Event('input', { bubbles: true }));
-            nativeSet.set.call(textarea, promptText);
+            nativeSet.set.call(input, promptText);
           } else {
-            textarea.value = promptText;
+            input.value = promptText;
           }
-          textarea.dispatchEvent(new Event('input', { bubbles: true }));
-          textarea.dispatchEvent(new Event('change', { bubbles: true }));
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new Event('change', { bubbles: true }));
         } else {
-          textarea.innerText = promptText;
-          textarea.dispatchEvent(new InputEvent('input', { bubbles: true, data: promptText }));
+          if (input.getAttribute('contenteditable')) {
+            input.focus();
+            input.innerText = '';
+            input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+            await new Promise(r => setTimeout(r, 50));
+            input.innerText = promptText;
+            input.dispatchEvent(new InputEvent('input', { bubbles: true, data: promptText }));
+          } else {
+            input.focus();
+            document.execCommand('selectAll', false, null);
+            document.execCommand('insertText', false, promptText);
+          }
         }
+
+        await new Promise(r => setTimeout(r, 100));
 
         const preCopyCount = __countCopy();
         const preReactionCount = __countReaction();
         const preFollowUpCount = __countFollowUp();
 
-        setTimeout(() => {
-          let sendBtn = document.querySelector(sendSelectors);
-          if (!sendBtn) {
-            const allBtns = document.querySelectorAll('button');
-            for (const btn of allBtns) {
-              const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-              const text = (btn.textContent || '').trim().toLowerCase();
-              if (label.includes('send') || text === 'send' || label.includes('submit')) {
-                sendBtn = btn;
-                break;
-              }
-            }
-          }
-          if (!sendBtn) {
-            const form = textarea.closest('form');
-            if (form) {
-              form.dispatchEvent(new Event('submit', { bubbles: true }));
-              return;
-            }
-            textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-            return;
-          }
-          sendBtn.click();
-        }, 200);
-
         return {
           success: true,
+          inputTag: input.tagName,
           preCopyCount,
           preReactionCount,
           preFollowUpCount,
@@ -416,7 +371,37 @@ function registerGrokIpcHandlers(getWebviewContents) {
         };
       })()`);
 
-      console.log(`${LOG} grok-send-prompt: success=${result.success}, baseline: copy=${result.preCopyCount}, reactions=${result.preReactionCount}, followUps=${result.preFollowUpCount}, error=${result.error || 'none'}`);
+      if (result.success) {
+        await new Promise(r => setTimeout(r, 200));
+
+        await wc.executeJavaScript(`(() => {
+          const form = document.querySelector('form');
+          if (form) {
+            const sendBtns = form.querySelectorAll('div.ms-auto button');
+            if (sendBtns.length > 0) {
+              sendBtns[sendBtns.length - 1].click();
+              return 'clicked-ms-auto';
+            }
+            const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn) {
+              submitBtn.click();
+              return 'clicked-submit';
+            }
+            form.dispatchEvent(new Event('submit', { bubbles: true }));
+            return 'form-submit';
+          }
+          const input = document.activeElement;
+          if (input) {
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+            return 'enter-key';
+          }
+          return 'no-send';
+        })()`);
+      }
+
+      try { clipboard.writeText(prevClip || ''); } catch {}
+
+      console.log(`${LOG} grok-send-prompt: success=${result.success}, inputTag=${result.inputTag || 'n/a'}, baseline: copy=${result.preCopyCount}, reactions=${result.preReactionCount}, followUps=${result.preFollowUpCount}, error=${result.error || 'none'}`);
       return result;
     } catch (err) {
       console.error(`${LOG} grok-send-prompt error:`, err.message);
