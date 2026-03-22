@@ -33,19 +33,11 @@ const SELECTORS = {
   ],
   copy: [
     'div.action-buttons.last-response button:nth-child(4)',
-    'div.action-buttons.last-response button:last-child',
     'div.action-buttons button:nth-child(4)',
     'button[aria-label="Copy"]',
     'button[aria-label="Copy to clipboard"]',
     'button[aria-label="Copy response"]',
-    'button[aria-label="Copy code"]',
-    'button[aria-label="Copy text"]',
     'button[data-testid="copy-button"]',
-    'button[data-testid="copy-code-button"]',
-  ],
-  responseCopy: [
-    'div.action-buttons.last-response button',
-    'div.action-buttons button',
   ],
   reaction: [
     'button[aria-label="Good response"]',
@@ -115,6 +107,8 @@ const SHARED_COUNTING_JS = `
   }
 
   function __countCopy() {
+    const actionBars = document.querySelectorAll('div.action-buttons');
+    if (actionBars.length > 0) return actionBars.length;
     let n = __count(__copySel);
     if (n > 0) return n;
     const allButtons = document.querySelectorAll('button');
@@ -219,76 +213,35 @@ function registerGrokIpcHandlers(getWebviewContents) {
       clipboard.writeText('__CLIPBOARD_CLEAR__');
 
       const clickResult = await wc.executeJavaScript(`(async () => {
-        const actionBar = document.querySelector('div.action-buttons.last-response')
-                       || document.querySelector('div.action-buttons');
-
-        if (actionBar) {
-          const btns = actionBar.querySelectorAll('button');
-          if (btns.length >= 4) {
-            btns[3].click();
-            return { clicked: true, strategy: 'action-buttons-nth4', btnCount: btns.length };
-          }
-          if (btns.length > 0) {
-            btns[btns.length - 1].click();
-            return { clicked: true, strategy: 'action-buttons-last', btnCount: btns.length };
-          }
-        }
-
-        const copySel = ${JSON.stringify(copySel)};
-        let copyBtns = document.querySelectorAll(copySel);
-        if (copyBtns.length === 0) {
-          const allButtons = document.querySelectorAll('button');
-          const found = [];
-          for (const btn of allButtons) {
-            const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-            const tooltip = (btn.getAttribute('title') || '').toLowerCase();
-            const svg = btn.querySelector('svg');
-            const svgTitle = svg ? (svg.querySelector('title')?.textContent || '').toLowerCase() : '';
-            if (label.includes('copy') || label.includes('clipboard') ||
-                tooltip.includes('copy') || tooltip.includes('clipboard') ||
-                svgTitle.includes('copy')) {
-              found.push(btn);
-            }
-          }
-          copyBtns = found;
-        }
-
-        if (copyBtns.length > 0) {
-          const lastCopyBtn = copyBtns[copyBtns.length - 1];
-          lastCopyBtn.click();
-          return { clicked: true, strategy: 'selector-match', count: copyBtns.length };
-        }
-
-        return { clicked: false, error: 'no-copy-buttons-found' };
+        const actionBar = document.querySelector('div.action-buttons.last-response');
+        if (!actionBar) return { clicked: false, error: 'no-action-buttons-last-response' };
+        const btn = actionBar.querySelector('div > button:nth-child(4)');
+        if (!btn) return { clicked: false, error: 'no-4th-button-in-action-bar' };
+        btn.click();
+        return { clicked: true };
       })()`);
 
       if (clickResult.clicked) {
         await new Promise(r => setTimeout(r, 400));
 
-        let clipText = null;
-        try {
-          clipText = await wc.executeJavaScript(`(async () => {
-            try {
-              const t = await navigator.clipboard.readText();
-              return t || null;
-            } catch { return null; }
-          })()`);
-        } catch {}
+        let clipText = clipboard.readText();
 
         if (!clipText || clipText === '__CLIPBOARD_CLEAR__' || clipText.trim().length < 10) {
-          clipText = clipboard.readText();
+          try {
+            clipText = await wc.executeJavaScript(`(async () => {
+              try { return await navigator.clipboard.readText(); } catch { return null; }
+            })()`);
+          } catch {}
         }
 
         if (clipText && clipText !== '__CLIPBOARD_CLEAR__' && clipText.trim().length > 10) {
-          console.log(`${LOG} grok-copy-last-response: success=true, len=${clipText.length}, method=copy-click-${clickResult.strategy}`);
-          return { success: true, text: clipText.trim(), findMethod: `copy-click-${clickResult.strategy}` };
+          console.log(`${LOG} grok-copy-last-response: success=true, len=${clipText.length}, method=action-buttons-copy`);
+          return { success: true, text: clipText.trim(), findMethod: 'action-buttons-copy' };
         }
-        console.log(`${LOG} grok-copy-last-response: copy button clicked (strategy=${clickResult.strategy}) but clipboard empty/unchanged. Falling back to DOM scrape.`);
+        console.log(`${LOG} grok-copy-last-response: copy button clicked but clipboard empty/unchanged. Falling back to DOM scrape.`);
       } else {
         console.log(`${LOG} grok-copy-last-response: ${clickResult.error}. Falling back to DOM scrape.`);
       }
-
-      console.log(`${LOG} grok-copy-last-response: copy-button click did not yield clipboard text (clickResult: clicked=${clickResult.clicked}, method=${clickResult.method}). Falling back to DOM scrape.`);
       const domResult = await wc.executeJavaScript(`(() => {
         const responseSelectors = ${JSON.stringify(responseSel)};
         let messages = document.querySelectorAll(responseSelectors);
