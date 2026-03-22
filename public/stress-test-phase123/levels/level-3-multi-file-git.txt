@@ -95,18 +95,17 @@ STEPS (do them in order, post to coord after each):
    - Dark mode support (dark: classes)
    - At least 80 lines of real code
 
-   Split the content into 4-5 chunks of ~800 raw chars each. For each chunk:
-   GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=CHUNK_TEXT&chunk=N&total=TOTAL
-   - DO NOT URL-ENCODE the chunk content — browse_page does it automatically. Double-encoding corrupts the file.
-   - Put raw JSX/TypeScript directly in the content= parameter
-   - Keep each chunk under ~800 raw chars so the URL stays under ~2000 chars after browse_page encoding
+   Split the content into chunks of ~500 raw chars each (expect 5-7 chunks for a ~3000-char file). For each chunk:
+   GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=ENCODED_CHUNK&chunk=N&total=TOTAL
+   ENCODING IS MANDATORY:
+   - You MUST URL-encode each chunk (encodeURIComponent). Raw newlines in URLs are SILENTLY STRIPPED by HTTP.
+   - Encoding roughly doubles the length (~1.7x for JSX). ~500 raw chars → ~850 encoded → safely fits in URL.
+   - The relay has smartDecode — it handles single-encoded AND double-encoded content. Encoding is ALWAYS safe.
+   CHUNK RULES:
    - Send chunks IN ORDER: chunk=0, then chunk=1, then chunk=2, etc.
-   - The file only appears on disk when the last chunk (chunk=total-1) arrives
-   - DO NOT send chunks out of order or in parallel
-
-   *** SPEED: Send ALL chunks back-to-back WITHOUT waiting between them. ***
-   *** Chunks are NOT edits — they buffer in memory. The 15-second wait rule does NOT apply to chunks. ***
-   *** Do NOT check or verify individual chunks. Just send them all, then verify ONCE after the last chunk. ***
+   - The file only appears on disk when the last chunk (chunk=total-1) arrives.
+   - Send ALL chunks back-to-back WITHOUT waiting. Chunks buffer in memory — no 15s wait needed.
+   - Do NOT verify individual chunks. Verify ONCE after the last chunk via grok-read.
 
    DO NOT use grok-create (single URL) for this — it WILL fail because the URL is too long.
    → Post to coord: "L3-S4: Metrics.tsx chunks sent" (post ONCE after ALL chunks are sent)
@@ -127,10 +126,10 @@ STEPS (do them in order, post to coord after each):
    a) Add after the last import line: import { Metrics } from '../pages/Metrics'
    b) Add to the PAGES map after the last entry: metrics: Metrics (with comma after the previous entry)
 
-   Then write the entire updated file:
-   GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/components/App.tsx&content=FULL_UPDATED_CONTENT
+   Then URL-encode the entire updated content and write it:
+   GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/components/App.tsx&content=ENCODED_FULL_CONTENT
 
-   The file is ~920 chars so grok-create (single URL) works fine for this one.
+   The file is ~920 chars raw → ~1500 chars encoded. This fits in a single grok-create URL.
    → Post to coord: "L3-S6: App.tsx updated via grok-create"
 
 7. VERIFY APP: grok-read App.tsx

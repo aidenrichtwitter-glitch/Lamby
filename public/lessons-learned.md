@@ -4,14 +4,16 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
-## Lesson 25: Double URL-encoding corrupts file content — relay now has smartDecode
-**Date:** 2026-03-21
-**Context:** L3 test — Grok pre-encoded chunk content, making URLs ~2x longer. This burned through browse_page calls faster (encoding doubles URL length) and chunks didn't complete within the call limit.
-**Root cause:** Grok URL-encoded content, then browse_page may have encoded again → double-encoded. Encoded URLs are also ~2x longer, which means fewer chars per chunk → more chunks → more browse_page calls.
-**Fix (two-part):**
-1. Prompts now say "DO NOT URL-ENCODE" — put raw text in URLs, browse_page handles encoding.
-2. Relay added smartDecode() — transparently handles both raw, single-encoded, and double-encoded content. So even if Grok accidentally encodes, it still works.
-**Rule:** Tell Grok to use raw text in URLs. The relay's smartDecode ensures it works regardless of encoding state.
+## Lesson 25: Grok MUST URL-encode content — raw newlines are silently stripped by HTTP
+**Date:** 2026-03-22
+**Context:** L3 test failed 3 times. Raw (unencoded) JSX in URLs loses all newlines — HTTP strips `\n` from query parameters. File appears to write successfully but content is one giant line with missing line breaks.
+**Root cause:** We told Grok "DON'T encode" thinking browse_page auto-encodes. Testing proves raw `\n` in URLs is silently stripped. Encoding is the ONLY way to preserve newlines.
+**Evidence:** Raw chunk test: 375 chars received vs 394 expected. Content had `'react';interface` instead of `'react';\n\ninterface`. Encoded chunk test: 394 = 394, exact match.
+**Fix:**
+1. Prompts now say "MUST URL-encode" all content/search/replace params.
+2. Chunk size reduced from ~800 to ~500 raw chars (encoding adds ~1.7x → ~850 encoded fits in 2000-char URL).
+3. Relay has smartDecode — handles both single-encoded AND double-encoded content, so encoding is always safe regardless of whether browse_page also encodes.
+**Rule:** Encoding is MANDATORY. The only question is chunk size — keep raw chunks under ~500 chars so encoded URLs stay under ~2000 chars.
 
 ---
 

@@ -17,23 +17,23 @@ READ FILES — grok-read:
   GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/App.tsx
 
 WRITE/EDIT FILES — grok-write (search/replace with automatic verify):
-  GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=src/App.tsx&search=OLD_TEXT&replace=NEW_TEXT
-  DO NOT URL-ENCODE search/replace yourself — browse_page does it automatically.
-  Supports \n for newlines in search/replace text.
+  GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=src/App.tsx&search=ENCODED_OLD&replace=ENCODED_NEW
+  You MUST URL-encode search and replace values. Raw newlines and special chars in URLs are silently stripped by HTTP.
+  Use encodeURIComponent() on search and replace text. The relay has smartDecode and handles both single and double encoding.
 
 CREATE NEW FILES — grok-create (simple GET, for SMALL files only):
-  GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/newfile.tsx&content=FILE_CONTENT
-  DO NOT URL-ENCODE the content yourself. browse_page auto-encodes the URL.
-  If you pre-encode, it gets DOUBLE-ENCODED and the content is corrupted on the server.
-  Just put the raw content directly in the URL. No base64. No JSON payload.
+  GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/newfile.tsx&content=ENCODED_CONTENT
+  You MUST URL-encode the content. Raw newlines (\n) in URLs are SILENTLY STRIPPED — your file will be corrupted.
+  The relay has smartDecode — it handles both single-encoded and double-encoded content correctly.
   *** URL LENGTH LIMIT: browse_page truncates URLs over ~2048 chars. ***
-  *** For content > 1000 chars (raw), you MUST use grok-create-chunk instead. ***
+  *** For content > 600 chars (raw), you MUST use grok-create-chunk instead. ***
   *** grok-create with large content WILL FAIL SILENTLY via browse_page. ***
 
-CREATE FILES — grok-create-chunk (USE THIS for any content > 1000 chars):
-  Split content into chunks of ~800 raw chars. Send each as a separate GET request:
-  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=CHUNK_TEXT&chunk=0&total=3
-  DO NOT URL-ENCODE the chunk content — browse_page handles encoding automatically.
+CREATE FILES — grok-create-chunk (USE THIS for any content > 600 chars):
+  Split content into chunks of ~500 raw chars. Send each as a separate GET request:
+  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=ENCODED_CHUNK&chunk=0&total=5
+  You MUST URL-encode each chunk's content. Raw newlines are stripped by HTTP and your file will be missing line breaks.
+  Encoding roughly doubles the URL length (~1.7x for JSX). ~500 raw chars → ~850 encoded chars → fits in URL.
   chunk=0 starts the file. chunk=1+ appends. File is written to disk when chunk=total-1 arrives.
   SPEED: Send ALL chunks back-to-back. Do NOT wait between chunks. Do NOT verify individual chunks.
   Chunks buffer in memory — the 15-second wait rule does NOT apply. Verify ONCE after the last chunk.
@@ -97,11 +97,11 @@ DIAGNOSTICS — diag:
   GET {{RELAY_BASE}}/api/diag?project={{PROJECT}}
 
 === CRITICAL RULES (STRESS-TESTED AND VERIFIED) ===
-1. USE SMART ENDPOINTS: For file create/delete, use grok-create and grok-delete (simple GET URLs, no encoding). Only fall back to grok-proxy for get_console_errors or batched operations.
+1. USE SMART ENDPOINTS: For file create/delete, use grok-create and grok-delete (simple GET URLs). Only fall back to grok-proxy for get_console_errors or batched operations.
 
-2. DO NOT URL-ENCODE: browse_page automatically URL-encodes the entire URL. If you manually encode content/search/replace params, they get DOUBLE-ENCODED and arrive corrupted. Put raw text directly in the URL. The only exception is grok-proxy payload which needs raw JSON in the payload= param.
+2. URL-ENCODE ALL CONTENT: You MUST URL-encode (encodeURIComponent) all content, search, and replace parameters. Raw newlines (\n) in URLs are SILENTLY STRIPPED by HTTP — your files will be missing line breaks. The relay has smartDecode — it correctly handles both single-encoded AND double-encoded content, so encoding is ALWAYS safe.
 
-3. CONTENT > 1000 CHARS: Use grok-create-chunk. Split into ~800-char raw chunks. DO NOT encode them. grok-create will FAIL SILENTLY for large content because browse_page has a URL length limit (~2048 chars).
+3. CONTENT > 600 CHARS: Use grok-create-chunk. Split into ~500 raw-char chunks. URL-encode each chunk. Encoding adds ~1.7x overhead for JSX. grok-create will FAIL SILENTLY for large content because browse_page has a URL length limit (~2048 chars).
 
 4. ENTRY POINT: Before writing App.tsx, ALWAYS read src/index.tsx first to find the real App component path.
 
