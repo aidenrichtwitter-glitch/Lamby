@@ -4888,8 +4888,8 @@ const GrokBridge: React.FC = () => {
         active += `6. Do NOT wrap code in narrative like "here's what your file should look like". Just use the // file: header directly.\n`;
         active += `7. If multiple files need changes, output multiple // file: blocks in sequence.\n`;
         active += `8. You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.\n`;
-        active += `ALWAYS output your code changes as // file: blocks. Lamby auto-applies them.\n`;
-        active += `If a "LAMBY WORKSPACE API" section appears above, you may use bridge endpoints to READ files (grok-read), search code (grok-search), run commands (grok-run), and check status — but ALWAYS output code changes as // file: blocks so Lamby can auto-apply them.\n\n`;
+        active += `If a "LAMBY WORKSPACE API" section appears above, use the bridge endpoints (grok-write, grok-create, grok-delete, grok-read, grok-search, grok-run, grok-git, etc.) for ALL file operations. Bridge is the fastest path.\n`;
+        active += `For LARGE files that exceed bridge write limits, fall back to // file: blocks above — Lamby auto-applies them. Both methods work; bridge is preferred, // file: blocks are the fallback for big content.\n\n`;
       } else {
         active += `1. Only cite real, published npm packages — never invent package names.\n`;
         active += `2. Suggest a GitHub repo URL instead of writing code from scratch.\n\n`;
@@ -4898,6 +4898,12 @@ const GrokBridge: React.FC = () => {
       let remaining = fileBudget - active.length;
       const fileContents: { path: string; content: string; priority: number }[] = [];
 
+      if (ctxBridgeOnline && ctxCmdUrl) {
+        active += `\nIMPORTANT: DO NOT expect file contents in this prompt. Use the Smart Bridge endpoints above to read files yourself.\n`;
+        active += `Start by calling /api/diag to confirm the bridge is live, then use grok-macro/project-status for a full overview.\n`;
+        active += `Use grok-read to read individual files and grok-search to find code. No base64 encoding needed.\n`;
+        active += `File contents are NOT included here because you have full API access to read them on-demand.\n\n`;
+      } else {
       if (toasterAvailability?.available && activeProject && (lastErrors || errorLogs.length > 0)) {
         try {
           setToasterLoading(true);
@@ -4963,6 +4969,7 @@ const GrokBridge: React.FC = () => {
           }
         }
       }
+      }
 
       if (knowledgeMatches.length > 0) {
         const knowledgeSection = formatKnowledgeForGrokPrompt(knowledgeMatches);
@@ -4970,12 +4977,14 @@ const GrokBridge: React.FC = () => {
         remaining -= knowledgeSection.length;
       }
 
-      fileContents.sort((a, b) => a.priority - b.priority);
-      for (const fc of fileContents) {
-        const block = `\n${fc.path}:\n${fc.content}\n`;
-        if (remaining - block.length < 0) continue;
-        active += block;
-        remaining -= block.length;
+      if (!ctxBridgeOnline || !ctxCmdUrl) {
+        fileContents.sort((a, b) => a.priority - b.priority);
+        for (const fc of fileContents) {
+          const block = `\n${fc.path}:\n${fc.content}\n`;
+          if (remaining - block.length < 0) continue;
+          active += block;
+          remaining -= block.length;
+        }
       }
 
       const context = active + hostSection;
