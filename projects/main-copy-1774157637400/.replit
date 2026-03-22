@@ -1,0 +1,105 @@
+modules = ["nodejs-20", "web"]
+[agent]
+expertMode = true
+integrations = ["javascript_database:1.0.0", "github:1.0.0"]
+
+[nix]
+channel = "stable-25_05"
+packages = ["glib", "nss", "nspr", "at-spi2-atk", "cups", "dbus", "libdrm", "gtk3", "pango", "cairo", "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage", "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libxcb", "mesa", "expat", "alsa-lib", "xorg.libxshmfence", "libxkbcommon", "xorg.libXcursor", "xorg.libXi", "xorg.libXtst", "xorg.libXScrnSaver", "chromium"]
+
+[deployment]
+deploymentTarget = "gce"
+run = ["node", "server/production.cjs"]
+build = ["bash", "scripts/build-deploy.sh"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx vite --host 0.0.0.0 --port 5000"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[[ports]]
+localPort = 5001
+externalPort = 3000
+
+[[ports]]
+localPort = 5100
+externalPort = 3001
+
+[[ports]]
+localPort = 5101
+externalPort = 3002
+
+[[ports]]
+localPort = 5102
+externalPort = 3003
+
+[[ports]]
+localPort = 5103
+externalPort = 6000
+
+[[ports]]
+localPort = 5104
+externalPort = 4200
+
+[[ports]]
+localPort = 5105
+externalPort = 5173
+
+[[ports]]
+localPort = 5106
+externalPort = 5000
+
+[[ports]]
+localPort = 5107
+externalPort = 6800
+
+[[ports]]
+localPort = 5108
+externalPort = 8000
+
+[[ports]]
+localPort = 5198
+externalPort = 9000
+
+[[ports]]
+localPort = 8080
+externalPort = 8080
+
+[[ports]]
+localPort = 8081
+externalPort = 8081
+
+[[ports]]
+localPort = 8082
+externalPort = 8008
+
+[[ports]]
+localPort = 8083
+externalPort = 8099
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 20000

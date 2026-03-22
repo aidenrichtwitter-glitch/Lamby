@@ -1,0 +1,7 @@
+{
+  "name": "guardian-ai-electron",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "src/main.js"
+}

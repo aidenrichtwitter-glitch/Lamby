@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+<script data-lamby-preview-path>if(window.location.pathname.match(/^\/__preview\/\d+/)){window.history.replaceState(null,'',window.location.pathname.replace(/^\/__preview\/\d+\/?/,'/')+window.location.search+window.location.hash)}</script>
+<script data-lamby-console-bridge>
+(function() {
+  if (window.__lambyConsoleBridge) return;
+  window.__lambyConsoleBridge = true;
+  var origLog = console.log, origWarn = console.warn, origError = console.error, origInfo = console.info;
+  function send(level, args, stack) {
+    try {
+      var serialized = [];
+      for (var i = 0; i < args.length; i++) {
+        try { serialized.push(typeof args[i] === 'object' ? JSON.parse(JSON.stringify(args[i])) : args[i]); }
+        catch(e) { serialized.push(String(args[i])); }
+      }
+      window.parent.postMessage({ type: 'lamby-console-bridge', level: level, args: serialized, stack: stack || null }, '*');
+    } catch(e) {}
+  }
+  console.log = function() { send('log', Array.prototype.slice.call(arguments)); origLog.apply(console, arguments); };
+  console.warn = function() { send('warn', Array.prototype.slice.call(arguments)); origWarn.apply(console, arguments); };
+  console.error = function() { send('error', Array.prototype.slice.call(arguments)); origError.apply(console, arguments); };
+  console.info = function() { send('info', Array.prototype.slice.call(arguments)); origInfo.apply(console, arguments); };
+  window.onerror = function(msg, source, line, column, error) {
+    send('error', [String(msg)], error && error.stack ? error.stack : null);
+    return false;
+  };
+  window.addEventListener('unhandledrejection', function(event) {
+    var reason = event.reason;
+    var msg = reason instanceof Error ? reason.message : String(reason);
+    var stack = reason instanceof Error ? reason.stack : null;
+    send('error', ['Unhandled Promise Rejection: ' + msg], stack);
+  });
+  var moduleErrors = [];
+  var origCreateElement = document.createElement;
+  document.createElement = function(tag) {
+    var el = origCreateElement.call(document, tag);
+    if (tag === 'script') {
+      el.addEventListener('error', function(e) {
+        var src = el.src || el.getAttribute('src') || 'unknown';
+        moduleErrors.push(src);
+        send('error', ['[Lamby] Failed to load script: ' + src]);
+      });
+    }
+    return el;
+  };
+  function extractOverlayContent(el) {
+    try {
+      var root = el.shadowRoot || el;
+      var text = '';
+      var msgEl = root.querySelector('.message-body, .message, [class*="message"], pre');
+      if (msgEl) text = msgEl.textContent || '';
+      if (!text) {
+        var preEls = root.querySelectorAll('pre, code');
+        for (var p = 0; p < preEls.length; p++) { text += (preEls[p].textContent || '') + '\n'; }
+      }
+      if (!text) {
+        text = root.textContent || el.textContent || '';
+      }
+      return text.trim().substring(0, 4000);
+    } catch(e) { return ''; }
+  }
+  function checkOverlays() {
+    try {
+      var selectors = ['vite-error-overlay', 'nextjs-portal', '#webpack-dev-server-client-overlay'];
+      for (var s = 0; s < selectors.length; s++) {
+        var els = document.querySelectorAll(selectors[s]);
+        for (var i = 0; i < els.length; i++) {
+          if (els[i].__lambyReported) continue;
+          els[i].__lambyReported = true;
+          var content = extractOverlayContent(els[i]);
+          if (content) {
+            send('error', ['[Lamby] Error overlay detected (' + selectors[s] + '):\n' + content]);
+          } else {
+            send('error', ['[Lamby] Error overlay detected (' + selectors[s] + ') but could not extract content.']);
+          }
+        }
+      }
+    } catch(e) {}
+  }
+  try {
+    var overlayObserver = new MutationObserver(function() { checkOverlays(); });
+    overlayObserver.observe(document.documentElement, { childList: true, subtree: true });
+  } catch(e) {}
+  setTimeout(function() {
+    checkOverlays();
+    try {
+      var root = document.getElementById('root') || document.getElementById('app');
+      if (root && root.children.length === 0 && root.textContent.trim() === '') {
+        var diag = '[Lamby] Blank screen detected — root element exists but has no rendered content after 5s.';
+        if (moduleErrors.length > 0) diag += ' Failed scripts: ' + moduleErrors.join(', ');
+        var viteErrors = document.querySelectorAll('vite-error-overlay');
+        if (viteErrors.length > 0) diag += ' Vite error overlay is showing.';
+        send('warn', [diag]);
+      }
+      if (!root) {
+        var body = document.body;
+        var visibleText = body ? body.innerText.trim() : '';
+        if (visibleText.length === 0) {
+          send('warn', ['[Lamby] Blank screen detected — no visible content on page after 5s. Check that index.html has the correct root element and entry script.']);
+        }
+      }
+    } catch(e) {}
+  }, 5000);
+})();
+</script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- TODO: Set the document title to the name of your application -->
+    <title>Lamby</title>
+    <link rel="icon" type="image/png" href="/favicon.ico" />
+    <meta name="description" content="AI-powered autonomous development loop">
+    <meta name="author" content="Lovable" />
+
+    <!-- TODO: Update og:title to match your application name -->
+    
+    
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/83b2181e-4ce6-47bd-a22e-07f83403d02d/id-preview-35b5f9bd--da86fe1f-c329-4284-91d7-f2f583af2e39.lovable.app-1772771905849.png">
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@Lovable" />
+    <meta name="twitter:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/83b2181e-4ce6-47bd-a22e-07f83403d02d/id-preview-35b5f9bd--da86fe1f-c329-4284-91d7-f2f583af2e39.lovable.app-1772771905849.png">
+    <meta property="og:title" content="Lamby">
+  <meta name="twitter:title" content="Lamby">
+  <meta property="og:description" content="AI-powered autonomous development loop">
+  <meta name="twitter:description" content="AI-powered autonomous development loop">
+</head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <link rel="apple-touch-icon" href="/pwa-icon-512.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  </body>
+</html>

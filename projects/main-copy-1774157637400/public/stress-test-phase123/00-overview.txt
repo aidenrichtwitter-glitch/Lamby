@@ -1,0 +1,36 @@
+===============================================================
+LAMBY BRIDGE STRESS TEST — THREE-PHASE REPORT
+===============================================================
+Date: 2026-03-21
+Relay: https://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev
+Project: groks-app
+Desktop: Connected (Windows, Node.js v25.4.0, npm 11.7.0)
+App Port: 4999 (Vite dev server)
+
+HOW THE BRIDGE WORKS:
+  1. User clicks "Copy Context" in Lamby → prompt copied to clipboard
+  2. User pastes prompt into Grok on grok.com
+  3. Grok reads the prompt, sees bridge endpoint URLs
+  4. Grok uses its browse_page tool (GET-only) to call bridge endpoints
+  5. Bridge relay forwards requests to user's desktop via WebSocket
+  6. Changes happen on the user's local project files
+  THIS APP DOES NOT CALL GROK'S API FOR BRIDGE CHANGES.
+  GROK DOES ALL THE WORK ITSELF THROUGH BROWSE_PAGE.
+
+THREE PHASES:
+  Phase 1: Make extreme changes through the bridge. Prove they work
+           with screenshots and tests. Save everything that was done
+           to get it working. Update the prompt template with findings.
+  Phase 2: Delete everything from Phase 1. Clean slate.
+  Phase 3: Use the Context button like a normal user — paste the prompt
+           into Grok and make sure Grok actually does the same work
+           through browse_page.
+
+Phase 3 is the real validation. It proves the prompt template actually
+works end-to-end when Grok reads it and acts on it.
+
+FILES IN THIS FOLDER:
+  00-overview.txt          — This file
+  01-phase1-changes.txt    — What was changed, how, what broke, what was fixed
+  02-phase2-cleanup.txt    — Deleting everything, restoring clean state
+  03-phase3-grok-test.txt  — Grok doing the work via the Context button prompt

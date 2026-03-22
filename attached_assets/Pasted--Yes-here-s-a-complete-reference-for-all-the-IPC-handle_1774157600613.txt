@@ -1,0 +1,132 @@
+**Yes, here's a complete reference for all the IPC handlers** you'd typically implement in a **Grok Browser App** (Electron desktop wrapper for grok.com / grok.x.ai).
+
+Grok.com itself is a pure web app (React), so it doesn't expose real IPC. These are the **standard channels** people use in community Electron wrappers (via `webContents.executeJavaScript` + smart selectors that work reliably even when Grok updates their UI).
+
+### Core Chat IPC Handlers (Renderer → Main)
+
+#### 1. Send Message
+```js
+// main.js (ipcMain handler)
+ipcMain.handle('grok:send-message', async (event, { text }) => {
+  const wc = mainWindow.webContents; // or your webview.webContents
+  return await wc.executeJavaScript(`
+    const textarea = document.querySelector('textarea[placeholder*="Ask anything"]') || 
+                     document.querySelector('textarea');
+    if (!textarea) return false;
+    
+    textarea.focus();
+    textarea.value = ${JSON.stringify(text)};
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    
+    return true;
+  `);
+});
+```
+
+#### 2. Stop Generation
+```js
+ipcMain.handle('grok:stop-generation', async () => {
+  return await wc.executeJavaScript(`
+    const stopBtn = Array.from(document.querySelectorAll('button')).find(btn => 
+      btn.textContent.toLowerCase().includes('stop') ||
+      btn.getAttribute('aria-label')?.toLowerCase().includes('stop') ||
+      btn.innerHTML.includes('stop')
+    );
+    stopBtn?.click();
+    return !!stopBtn;
+  `);
+});
+```
+
+#### 3. Copy Last Response (or specific message)
+```js
+ipcMain.handle('grok:copy-last', async () => {
+  return await wc.executeJavaScript(`
+    const responses = document.querySelectorAll('[data-message-author-role="assistant"], .assistant-message, div[class*="assistant"]');
+    const last = responses[responses.length - 1];
+    if (!last) return false;
+
+    // Try Grok's native Copy button first
+    const copyBtn = Array.from(last.querySelectorAll('button')).find(b => 
+      b.textContent.includes('Copy') || 
+      b.getAttribute('aria-label')?.includes('Copy')
+    );
+    
+    if (copyBtn) {
+      copyBtn.click();
+    } else {
+      const text = last.innerText.trim();
+      await navigator.clipboard.writeText(text);
+    }
+    return true;
+  `);
+});
+```
+
+#### 4. Copy All Conversation
+```js
+ipcMain.handle('grok:copy-all', async () => {
+  return await wc.executeJavaScript(`
+    const allText = Array.from(document.querySelectorAll('.message, [data-message-author-role]'))
+      .map(el => el.innerText.trim())
+      .filter(Boolean)
+      .join('\\n\\n---\\n\\n');
+    await navigator.clipboard.writeText(allText);
+    return true;
+  `);
+});
+```
+
+### Additional Useful Handlers
+
+| Channel                  | Payload                  | Purpose |
+|--------------------------|--------------------------|---------|
+| `grok:regenerate`        | none                     | Clicks the "Regenerate" button on last response |
+| `grok:new-chat`          | none                     | Clicks the "New chat" button (top-left) |
+| `grok:like`              | `{ messageId?: string }` | Thumbs-up last response |
+| `grok:dislike`           | `{ messageId?: string }` | Thumbs-down last response |
+| `grok:edit-last`         | `{ newText: string }`    | Edits the last user message |
+| `grok:delete-chat`       | none                     | Deletes current conversation |
+| `grok:toggle-dark-mode`  | none                     | Forces dark mode toggle |
+| `grok:open-settings`     | none                     | Opens Grok settings sidebar |
+
+### Preload.js Exposure (Renderer side)
+```js
+// preload.js
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('grok', {
+  send: (text) => ipcRenderer.invoke('grok:send-message', { text }),
+  stop: () => ipcRenderer.invoke('grok:stop-generation'),
+  copyLast: () => ipcRenderer.invoke('grok:copy-last'),
+  copyAll: () => ipcRenderer.invoke('grok:copy-all'),
+  regenerate: () => ipcRenderer.invoke('grok:regenerate'),
+  newChat: () => ipcRenderer.invoke('grok:new-chat'),
+  like: () => ipcRenderer.invoke('grok:like'),
+  // ... add the rest
+});
+```
+
+### How to use in your renderer (React / UI buttons)
+```tsx
+// Example in your button component
+const handleSend = async () => {
+  await window.grok.send(inputValue);
+};
+
+const handleStop = async () => {
+  await window.grok.stop();
+};
+
+const handleCopy = async () => {
+  await window.grok.copyLast();
+};
+```
+
+Would you like me to:
+- Expand this with the full preload + main.js file?
+- Add handlers for voice mode / image upload / file upload?
+- Or update your current `Chat.tsx` in the groks-app project with matching buttons (Copy / Stop / Regenerate)?
+
+Just say the word and I'll drop the exact code blocks ready for auto-apply.

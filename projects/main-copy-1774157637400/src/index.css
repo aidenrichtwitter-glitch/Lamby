@@ -1,0 +1,141 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 270 15% 6%;
+    --foreground: 300 40% 92%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 140 60% 75%;
+
+    --popover: 220 18% 12%;
+    --popover-foreground: 140 60% 75%;
+
+    --primary:    315 85% 65%;
+    --primary-foreground: 220 20% 7%;
+
+    --secondary: 220 15% 15%;
+    --secondary-foreground: 140 40% 65%;
+
+    --muted:      300 20% 60%;
+    --muted-foreground: 220 10% 45%;
+
+    --accent:     315 85% 65%;
+    --accent-foreground: 220 20% 7%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 95%;
+
+    --border: 140 30% 20%;
+    --input: 220 15% 15%;
+    --ring: 140 70% 45%;
+
+    --radius: 0.25rem;
+
+    /* Custom tokens */
+    --terminal-green: 315 80% 62%;
+    --terminal-cyan:  290 70% 65%;
+    --terminal-amber: 40 90% 55%;
+    --terminal-red: 0 70% 50%;
+    --terminal-dim: 220 10% 35%;
+    --window-chrome: 220 18% 14%;
+    --window-border: 140 20% 18%;
+    --glow-green: 0 0 12px hsl(140 70% 45% / 0.3);
+    --glow-cyan: 0 0 12px hsl(175 70% 40% / 0.3);
+
+    --sidebar-background: 220 20% 8%;
+    --sidebar-foreground: 140 40% 60%;
+    --sidebar-primary: 140 70% 45%;
+    --sidebar-primary-foreground: 220 20% 7%;
+    --sidebar-accent: 220 15% 13%;
+    --sidebar-accent-foreground: 140 60% 75%;
+    --sidebar-border: 140 20% 15%;
+    --sidebar-ring: 140 70% 45%;
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border, hsl(var(--border)));
+  }
+
+  body {
+    background-color: var(--color-background, hsl(var(--background)));
+    color: var(--color-foreground, hsl(var(--foreground)));
+    font-family: 'JetBrains Mono', monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: hsl(140 70% 45% / 0.25);
+    color: hsl(140 70% 90%);
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(220 20% 7%);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(140 30% 20%);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(140 40% 30%);
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 8px hsl(140 70% 45% / 0.4);
+  }
+
+  .text-glow-cyan {
+    text-shadow: 0 0 8px hsl(175 70% 40% / 0.4);
+  }
+
+  .border-glow {
+    box-shadow: var(--glow-green);
+  }
+
+  .border-glow-cyan {
+    box-shadow: var(--glow-cyan);
+  }
+
+  .scanline {
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      hsl(140 70% 45% / 0.02) 2px,
+      hsl(140 70% 45% / 0.02) 4px
+    );
+    pointer-events: none;
+  }
+
+  .window-chrome {
+    background: hsl(var(--window-chrome));
+    border: 1px solid hsl(var(--window-border));
+  }
+}
+
+@keyframes toasterBubbleIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}

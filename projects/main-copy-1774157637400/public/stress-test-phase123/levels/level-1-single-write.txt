@@ -1,0 +1,67 @@
+=== LEVEL 1: SINGLE FILE WRITE TEST ===
+=== OBJECTIVE: Create one new file and verify it exists ===
+
+You will create ONE new file and verify it. Nothing else. No edits to existing files.
+
+STEPS (do them in order, post to coord after each):
+
+1. DISCOVERY: Call /api/diag?project={{PROJECT}}
+   → Post to coord: "L1-S1: diag OK, relay online"
+
+2. FILE TREE (before): Call /api/grok-tree?project={{PROJECT}}
+   → Confirm src/pages/BridgeTest.tsx does NOT exist yet
+   → Post to coord: "L1-S2: tree read, BridgeTest.tsx [missing/already exists]"
+   → If it already exists, skip to step 7 (delete it first is NOT allowed — just read and report)
+
+3. CREATE FILE: Use grok-create to create src/pages/BridgeTest.tsx with this exact content:
+
+import { useState } from 'react';
+
+export default function BridgeTest() {
+  const [count, setCount] = useState(0);
+  const timestamp = new Date().toISOString();
+
+  return (
+    <div style={{ padding: '2rem', fontFamily: 'system-ui' }}>
+      <h1>Bridge Test Page</h1>
+      <p>Created by Grok-4 via bridge relay</p>
+      <p>Timestamp: {timestamp}</p>
+      <p>Counter: {count}</p>
+      <button onClick={() => setCount(c => c + 1)}>Increment</button>
+    </div>
+  );
+}
+
+   URL: {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/pages/BridgeTest.tsx&content=URL_ENCODED_CONTENT
+   URL-encode the file content. No base64, no JSON payload needed.
+   → Post to coord: "L1-S3: grok-create sent for BridgeTest.tsx"
+
+4. VERIFY TREE: Call /api/grok-tree?project={{PROJECT}}
+   → Confirm src/pages/BridgeTest.tsx appears in the tree
+   → Post to coord: "L1-S4: grok-tree shows BridgeTest.tsx [present/MISSING]"
+   → If MISSING: Post "L1-S4 FAILED: file not in tree, retrying write" and go back to step 3
+
+5. VERIFY CONTENT: Call /api/grok-read?project={{PROJECT}}&path=src/pages/BridgeTest.tsx
+   → Confirm it contains "Bridge Test Page" and "Created by Grok-4"
+   → Post to coord: "L1-S5: grok-read shows [N] chars, content verified"
+   → If empty or wrong content: Post failure and retry step 3
+
+6. CONSOLE CHECK: Use grok-proxy (raw JSON) + get_console_errors to check for compile errors
+   → Post to coord: "L1-S6: console [clean/errors: details]"
+
+7. FINAL: Post to coord: "L1 COMPLETE: BridgeTest.tsx created and verified. [N] chars on disk."
+
+=== PASS CRITERIA ===
+- All coord notes posted (L1-S1 through L1-S6 + final)
+- src/pages/BridgeTest.tsx exists in grok-tree
+- grok-read returns the correct content (contains "Bridge Test Page")
+- Console has no errors related to this file
+- No existing files were modified
+- No git commit was made (this test doesn't require it)
+
+=== FAIL CONDITIONS ===
+- BridgeTest.tsx missing from tree after write
+- grok-read returns empty or wrong content
+- Any existing file was modified
+- Coord notes missing
+- Claimed file exists without verifying via grok-tree AND grok-read
