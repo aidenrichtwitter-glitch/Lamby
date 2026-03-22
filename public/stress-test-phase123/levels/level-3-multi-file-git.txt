@@ -97,8 +97,9 @@ STEPS (do them in order, post to coord after each):
 
    Split the content into 4-5 chunks of ~800 raw chars each. For each chunk:
    GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=CHUNK_TEXT&chunk=N&total=TOTAL
-   - URL-encode each chunk's content
-   - Keep each chunk's ENCODED content under ~1500 chars so the full URL stays under ~2000 chars
+   - DO NOT URL-ENCODE the chunk content — browse_page does it automatically. Double-encoding corrupts the file.
+   - Put raw JSX/TypeScript directly in the content= parameter
+   - Keep each chunk under ~800 raw chars so the URL stays under ~2000 chars after browse_page encoding
    - Send chunks IN ORDER: chunk=0, then chunk=1, then chunk=2, etc.
    - The file only appears on disk when the last chunk (chunk=total-1) arrives
    - DO NOT send chunks out of order or in parallel

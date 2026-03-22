@@ -365,19 +365,21 @@ function buildSandboxApiSection(snapshotUrl: string, cmdEndpoint: string, projec
   section += `WRITE/EDIT FILES — grok-write (with automatic verify — edits AND confirms in 1 call):\n`;
   section += `  GET ${relayBase}/api/grok-write?project=${proj}&path=src/App.tsx&search=OLD_TEXT&replace=NEW_TEXT\n`;
   section += `  Auto-reads the file back to verify the edit landed. Returns verified content.\n`;
-  section += `  URL-encode the search and replace values. Supports newlines (\\n) and special chars.\n`;
-  section += `  For large edits (>2KB), use grok-create to overwrite the entire file instead.\n\n`;
+  section += `  DO NOT URL-ENCODE search/replace — browse_page does it automatically. Double-encoding corrupts matches.\n`;
+  section += `  Supports newlines (\\n) and special chars. For large edits (>2KB), use grok-create instead.\n\n`;
 
-  section += `CREATE NEW FILES — grok-create (simple GET, NO encoding needed):\n`;
+  section += `CREATE NEW FILES — grok-create (simple GET, for SMALL files <1000 chars):\n`;
   section += `  GET ${relayBase}/api/grok-create?project=${proj}&path=src/newfile.tsx&content=FILE_CONTENT\n`;
-  section += `  URL-encode the content param. No base64. No JSON payload. Just a simple GET URL.\n`;
-  section += `  SIZE LIMIT: Keep content under ~5KB per URL. For larger files, use grok-create-chunk.\n\n`;
+  section += `  DO NOT URL-ENCODE the content — browse_page does it automatically. Double-encoding corrupts the file.\n`;
+  section += `  Just put raw content directly in the URL. No base64. No JSON payload.\n`;
+  section += `  URL LENGTH LIMIT: For content > 1000 chars, use grok-create-chunk instead.\n\n`;
 
-  section += `CREATE LARGE FILES — grok-create-chunk (for content >5KB):\n`;
-  section += `  Split content into chunks. Send each as a separate GET request:\n`;
+  section += `CREATE LARGE FILES — grok-create-chunk (USE THIS for content >1000 chars):\n`;
+  section += `  Split content into chunks of ~800 raw chars. Send each as a separate GET request:\n`;
   section += `  GET ${relayBase}/api/grok-create-chunk?project=${proj}&path=FILE&content=CHUNK_TEXT&chunk=0&total=3\n`;
-  section += `  chunk=0 creates the file. chunk=1+ appends. File is complete when chunk=total-1 arrives.\n`;
-  section += `  Keep each chunk under ~1500 chars of content. URL-encode each chunk's content.\n\n`;
+  section += `  DO NOT URL-ENCODE chunk content — browse_page does it automatically. Double-encoding corrupts the file.\n`;
+  section += `  chunk=0 starts the file. chunk=1+ appends. File is written to disk when chunk=total-1 arrives.\n`;
+  section += `  Send chunks IN ORDER. Keep each chunk under ~800 raw chars.\n\n`;
 
   section += `DELETE FILES — grok-delete (simple GET):\n`;
   section += `  GET ${relayBase}/api/grok-delete?project=${proj}&path=src/oldfile.tsx\n\n`;

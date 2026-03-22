@@ -4,6 +4,16 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 25: browse_page auto-encodes URLs — Grok must NOT pre-encode content
+**Date:** 2026-03-21
+**Context:** L3 test — Grok sent 6 chunks for Metrics.tsx, relay returned success for each, but file never appeared on disk.
+**Root cause:** Grok URL-encoded the content before putting it in the URL. Then browse_page URL-encoded the entire URL again. The relay received double-encoded content (e.g., `%2520` instead of `%20`). The desktop bridge received garbled content and the chunks didn't assemble correctly.
+**Evidence:** Grok's own debugging identified "double URL-encoding in browse_page calls" as the cause.
+**Fix:** Updated all prompts to say "DO NOT URL-ENCODE" for grok-create, grok-create-chunk, and grok-write content/search/replace params. browse_page handles encoding automatically. Put raw text directly in the URL.
+**Rule:** When using browse_page, NEVER pre-encode URL parameters. browse_page does it for you. Pre-encoding = double-encoding = corrupted data.
+
+---
+
 ## Lesson 24: Use grok-git checkout paths for cleanup — not manual file rewrites
 **Date:** 2026-03-21
 **Context:** L3 cleanup step told Grok to read files, strip stale content, then grok-create them back. Grok couldn't do this reliably — content manipulation in-flight is error-prone.
