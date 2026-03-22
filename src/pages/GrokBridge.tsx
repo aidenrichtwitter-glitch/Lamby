@@ -4489,14 +4489,18 @@ const GrokBridge: React.FC = () => {
   const promptTemplateRef = useRef<HTMLTextAreaElement>(null);
 
   const connectToBridge = useCallback((relayWsUrl: string, project: string) => {
+    if (isElectron) {
+      console.log('[Bridge] Skipping browser WebSocket in Electron mode — desktop connector handles relay connection');
+      return;
+    }
     if (bridgeWsRef.current) {
       try { bridgeWsRef.current.close(); } catch {}
       bridgeWsRef.current = null;
     }
 
-    const apiBase = isElectron ? 'http://localhost:4999' : '';
+    const apiBase = '';
     const wsUrl = `${relayWsUrl.replace(/\/$/, '')}/bridge-ws?project=${encodeURIComponent(project || 'default')}`;
-    console.log('[Bridge] Connecting to:', wsUrl, isElectron ? '(Electron — API via localhost:4999)' : '(browser)');
+    console.log('[Bridge] Connecting to:', wsUrl, '(browser)');
     setBridgeStatus('connecting');
 
     const ws = new WebSocket(wsUrl);
@@ -4574,11 +4578,12 @@ const GrokBridge: React.FC = () => {
 
   const pollDesktopBridgeStatusRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const pollDesktopBridgeStatus = useCallback(() => {
+  const pollDesktopBridgeStatus = useCallback((continuous = false) => {
     if (pollDesktopBridgeStatusRef.current) {
       clearInterval(pollDesktopBridgeStatusRef.current);
     }
     let attempts = 0;
+    let wasConnected = false;
     const poll = async () => {
       try {
         const res = await fetch('http://localhost:4999/health');
@@ -4586,24 +4591,33 @@ const GrokBridge: React.FC = () => {
           const data = await res.json();
           const newStatus = data.bridge === 'connected' ? 'connected' : 'connecting';
           setBridgeStatus(newStatus);
-          if (newStatus === 'connected') {
+          if (newStatus === 'connected' && !wasConnected) {
             setStatusMessage('Bridge connected (desktop connector)');
+            wasConnected = true;
+          } else if (newStatus !== 'connected') {
+            wasConnected = false;
+          }
+          if (newStatus === 'connected' && !continuous) {
             if (pollDesktopBridgeStatusRef.current) {
               clearInterval(pollDesktopBridgeStatusRef.current);
               pollDesktopBridgeStatusRef.current = null;
             }
           }
+          attempts = 0;
+        } else {
+          attempts++;
         }
-      } catch {}
-      attempts++;
-      if (attempts > 20 && pollDesktopBridgeStatusRef.current) {
+      } catch {
+        attempts++;
+      }
+      if (!continuous && attempts > 20 && pollDesktopBridgeStatusRef.current) {
         clearInterval(pollDesktopBridgeStatusRef.current);
         pollDesktopBridgeStatusRef.current = null;
         setBridgeStatus('disconnected');
       }
     };
     poll();
-    pollDesktopBridgeStatusRef.current = setInterval(poll, 1500);
+    pollDesktopBridgeStatusRef.current = setInterval(poll, continuous ? 5000 : 1500);
   }, []);
 
   useEffect(() => {
@@ -4657,13 +4671,41 @@ const GrokBridge: React.FC = () => {
         setCommandEndpoint(`${devRelayBase}/api/sandbox/execute`);
         setExternalSnapshotUrl(`${devRelayBase}/api/snapshot/${activeProject || 'PROJECT_NAME'}`);
         setExternalCommandEndpoint(`${devRelayBase}/api/sandbox/execute`);
-        setBridgeStatus('connected');
+        if (isElectron) {
+          try {
+            const healthRes = await fetch('http://localhost:4999/health').catch(() => null);
+            const healthData = healthRes?.ok ? await healthRes.json().catch(() => null) : null;
+            setBridgeStatus(healthData?.bridge === 'connected' ? 'connected' : 'disconnected');
+          } catch {
+            setBridgeStatus('disconnected');
+          }
+        } else {
+          try {
+            const statusCheck = await fetch(`${devRelayBase}/api/bridge-status`).catch(() => null);
+            const statusData = statusCheck?.ok ? await statusCheck.json().catch(() => null) : null;
+            setBridgeStatus(statusData?.connectedClients > 0 ? 'connected' : 'disconnected');
+          } catch {
+            setBridgeStatus('disconnected');
+          }
+        }
       }
     }
     fetchSnapshotInfo();
     const interval = setInterval(fetchSnapshotInfo, 30000);
     return () => { clearInterval(interval); };
   }, [activeProject]);
+
+  useEffect(() => {
+    if (isElectron) {
+      pollDesktopBridgeStatus(true);
+      return () => {
+        if (pollDesktopBridgeStatusRef.current) {
+          clearInterval(pollDesktopBridgeStatusRef.current);
+          pollDesktopBridgeStatusRef.current = null;
+        }
+      };
+    }
+  }, [pollDesktopBridgeStatus]);
 
   const estimateTokens = useCallback((text: string): number => {
     return Math.ceil(text.length / 4);
