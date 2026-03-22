@@ -4888,7 +4888,8 @@ const GrokBridge: React.FC = () => {
         active += `6. Do NOT wrap code in narrative like "here's what your file should look like". Just use the // file: header directly.\n`;
         active += `7. If multiple files need changes, output multiple // file: blocks in sequence.\n`;
         active += `8. You may use multiple SEARCH/REPLACE blocks for the same file if making several edits.\n`;
-        active += `NOTE: If a "LAMBY WORKSPACE API" section appears above, you should use the Smart Bridge endpoints (grok-read, grok-write, grok-search, grok-run, grok-git, etc.) to directly make changes instead of outputting // file: blocks. Use // file: blocks only as a fallback if the API is unreachable.\n\n`;
+        active += `ALWAYS output your code changes as // file: blocks. Lamby auto-applies them.\n`;
+        active += `If a "LAMBY WORKSPACE API" section appears above, you may use bridge endpoints to READ files (grok-read), search code (grok-search), run commands (grok-run), and check status — but ALWAYS output code changes as // file: blocks so Lamby can auto-apply them.\n\n`;
       } else {
         active += `1. Only cite real, published npm packages — never invent package names.\n`;
         active += `2. Suggest a GitHub repo URL instead of writing code from scratch.\n\n`;
@@ -4897,75 +4898,68 @@ const GrokBridge: React.FC = () => {
       let remaining = fileBudget - active.length;
       const fileContents: { path: string; content: string; priority: number }[] = [];
 
-      if (ctxBridgeOnline && ctxCmdUrl) {
-        active += `\nIMPORTANT: DO NOT expect file contents in this prompt. Use the Smart Bridge endpoints above to read files yourself.\n`;
-        active += `Start by calling /api/diag to confirm the bridge is live, then use grok-macro/project-status for a full overview.\n`;
-        active += `Use grok-read to read individual files and grok-search to find code. No base64 encoding needed.\n`;
-        active += `File contents are NOT included here because you have full API access to read them on-demand.\n\n`;
-      } else {
-        if (toasterAvailability?.available && activeProject && (lastErrors || errorLogs.length > 0)) {
-          try {
-            setToasterLoading(true);
-            const errorText = lastErrors || errorLogs.map(l => `[${l.level}] ${l.message}`).join('\n');
-            const smartCtx = await buildSmartContext(errorText, flatPaths, undefined, toasterConfig);
-            if (smartCtx.usedOllama && smartCtx.analysis) {
-              setLastToasterAnalysis(smartCtx.analysis);
-              const analysisText = formatAnalysisForPrompt(smartCtx.analysis);
-              active += analysisText + '\n';
-              remaining -= analysisText.length;
-              for (const fp of smartCtx.filesToInclude.slice(0, 20)) {
-                try {
-                  const c = await readProjectFile(activeProject!, fp);
-                  if (c.length < 10000) fileContents.push({ path: fp, content: c, priority: 1 });
-                } catch {}
-              }
+      if (toasterAvailability?.available && activeProject && (lastErrors || errorLogs.length > 0)) {
+        try {
+          setToasterLoading(true);
+          const errorText = lastErrors || errorLogs.map(l => `[${l.level}] ${l.message}`).join('\n');
+          const smartCtx = await buildSmartContext(errorText, flatPaths, undefined, toasterConfig);
+          if (smartCtx.usedOllama && smartCtx.analysis) {
+            setLastToasterAnalysis(smartCtx.analysis);
+            const analysisText = formatAnalysisForPrompt(smartCtx.analysis);
+            active += analysisText + '\n';
+            remaining -= analysisText.length;
+            for (const fp of smartCtx.filesToInclude.slice(0, 20)) {
+              try {
+                const c = await readProjectFile(activeProject!, fp);
+                if (c.length < 10000) fileContents.push({ path: fp, content: c, priority: 1 });
+              } catch {}
             }
-          } catch {} finally { setToasterLoading(false); }
-        }
-
-        if (activeProject && flatPaths.length > 0) {
-          const changedKeyFiles = flatPaths.filter(f => changedSet.has(f));
-          const unchangedKeyFiles = flatPaths.filter(f =>
-            !changedSet.has(f) && (
-              f === 'tsconfig.json' || f === 'vite.config.ts' || f === 'vite.config.js' ||
-              f === 'index.html' || f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css') || f.endsWith('.html')
-            )
-          );
-          const prioritizedFiles = [...changedKeyFiles, ...unchangedKeyFiles].slice(0, 30);
-          for (const fp of prioritizedFiles) {
-            if (fileContents.some(f => f.path === fp)) continue;
-            try {
-              const c = await readProjectFile(activeProject, fp);
-              if (c.length < 8000) fileContents.push({ path: fp, content: c, priority: changedSet.has(fp) ? 2 : 5 });
-            } catch {}
           }
-        } else if (!activeProject) {
-          if (isElectron) {
-            const { ipcRenderer } = (window as any).require('electron');
-            const [filesResult, gitResult] = await Promise.all([
-              ipcRenderer.invoke('list-project-files'),
-              ipcRenderer.invoke('git-log', { count: 5 }),
-            ]);
-            const fileTree = filesResult.success ? filesResult.files : [];
-            const keyFiles = fileTree.filter((f: string) =>
-              f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
-              f === 'tailwind.config.ts' || f === 'index.html' ||
-              (f.startsWith('src/') && (f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css')) && !f.includes('lib/capabilities/'))
-            ).slice(0, 20);
-            const contentsResult = await ipcRenderer.invoke('read-files-for-context', { filePaths: keyFiles, maxSizePerFile: 6000 });
-            if (gitResult.success && gitResult.log) {
-              active += `Recent git log:\n${gitResult.log}\n\n`;
-              remaining -= gitResult.log.length + 20;
+        } catch {} finally { setToasterLoading(false); }
+      }
+
+      if (activeProject && flatPaths.length > 0) {
+        const changedKeyFiles = flatPaths.filter(f => changedSet.has(f));
+        const unchangedKeyFiles = flatPaths.filter(f =>
+          !changedSet.has(f) && (
+            f === 'tsconfig.json' || f === 'vite.config.ts' || f === 'vite.config.js' ||
+            f === 'index.html' || f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css') || f.endsWith('.html')
+          )
+        );
+        const prioritizedFiles = [...changedKeyFiles, ...unchangedKeyFiles].slice(0, 30);
+        for (const fp of prioritizedFiles) {
+          if (fileContents.some(f => f.path === fp)) continue;
+          try {
+            const c = await readProjectFile(activeProject, fp);
+            if (c.length < 8000) fileContents.push({ path: fp, content: c, priority: changedSet.has(fp) ? 2 : 5 });
+          } catch {}
+        }
+      } else if (!activeProject) {
+        if (isElectron) {
+          const { ipcRenderer } = (window as any).require('electron');
+          const [filesResult, gitResult] = await Promise.all([
+            ipcRenderer.invoke('list-project-files'),
+            ipcRenderer.invoke('git-log', { count: 5 }),
+          ]);
+          const fileTree = filesResult.success ? filesResult.files : [];
+          const keyFiles = fileTree.filter((f: string) =>
+            f === 'package.json' || f === 'tsconfig.json' || f === 'vite.config.ts' ||
+            f === 'tailwind.config.ts' || f === 'index.html' ||
+            (f.startsWith('src/') && (f.endsWith('.tsx') || f.endsWith('.ts') || f.endsWith('.css')) && !f.includes('lib/capabilities/'))
+          ).slice(0, 20);
+          const contentsResult = await ipcRenderer.invoke('read-files-for-context', { filePaths: keyFiles, maxSizePerFile: 6000 });
+          if (gitResult.success && gitResult.log) {
+            active += `Recent git log:\n${gitResult.log}\n\n`;
+            remaining -= gitResult.log.length + 20;
+          }
+          if (contentsResult.success) {
+            for (const file of contentsResult.files) {
+              fileContents.push({ path: file.path, content: file.content, priority: 5 });
             }
-            if (contentsResult.success) {
-              for (const file of contentsResult.files) {
-                fileContents.push({ path: file.path, content: file.content, priority: 5 });
-              }
-            }
-          } else {
-            for (const file of SELF_SOURCE.filter(f => f.content && f.content.length < 8000).slice(0, 15)) {
-              fileContents.push({ path: file.path, content: file.content || '', priority: 5 });
-            }
+          }
+        } else {
+          for (const file of SELF_SOURCE.filter(f => f.content && f.content.length < 8000).slice(0, 15)) {
+            fileContents.push({ path: file.path, content: file.content || '', priority: 5 });
           }
         }
       }
@@ -4976,14 +4970,12 @@ const GrokBridge: React.FC = () => {
         remaining -= knowledgeSection.length;
       }
 
-      if (!ctxBridgeOnline || !ctxCmdUrl) {
-        fileContents.sort((a, b) => a.priority - b.priority);
-        for (const fc of fileContents) {
-          const block = `\n${fc.path}:\n${fc.content}\n`;
-          if (remaining - block.length < 0) continue;
-          active += block;
-          remaining -= block.length;
-        }
+      fileContents.sort((a, b) => a.priority - b.priority);
+      for (const fc of fileContents) {
+        const block = `\n${fc.path}:\n${fc.content}\n`;
+        if (remaining - block.length < 0) continue;
+        active += block;
+        remaining -= block.length;
       }
 
       const context = active + hostSection;
