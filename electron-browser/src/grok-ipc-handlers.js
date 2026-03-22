@@ -84,20 +84,18 @@ const SHARED_COUNTING_JS = `
   const __followUpSel = ${JSON.stringify(buildSelectorChain(SELECTORS.followUp))};
 
   function __isGenerating() {
-    const msAutoContainer = document.querySelector('form div.ms-auto');
-    if (msAutoContainer) {
-      const btns = msAutoContainer.querySelectorAll('button');
-      if (btns.length >= 2) return true;
-      for (const btn of btns) {
-        const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-        if (label.includes('stop')) return true;
-      }
-    }
+    const lastResponse = document.querySelector('div.action-buttons.last-response');
+    if (lastResponse) return false;
+
+    const allActionBars = document.querySelectorAll('div.action-buttons');
+    const responseEls = document.querySelectorAll('div[id^="response-"]');
+    if (responseEls.length > allActionBars.length) return true;
+
     const allButtons = document.querySelectorAll('button');
     for (const btn of allButtons) {
-      const text = (btn.textContent || '').trim().toLowerCase();
       const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-      if (text === 'stop' || text === 'stop generating' || label.includes('stop gener')) return true;
+      const text = (btn.textContent || '').trim().toLowerCase();
+      if (label.includes('stop') || text === 'stop' || text === 'stop generating') return true;
     }
     return false;
   }
@@ -110,9 +108,13 @@ const SHARED_COUNTING_JS = `
   }
 
   function __countReaction() {
-    const actionBars = document.querySelectorAll('div.action-buttons');
-    if (actionBars.length > 0) return actionBars.length;
     let n = __count(__reactionSel);
+    if (n > 0) return n;
+    const actionBars = document.querySelectorAll('div.action-buttons');
+    for (const bar of actionBars) {
+      const btns = bar.querySelectorAll('div > button');
+      if (btns.length >= 2) n++;
+    }
     return n;
   }
 
@@ -285,10 +287,6 @@ function registerGrokIpcHandlers(getWebviewContents) {
       const wc = resolveWc();
       if (!wc) return { success: false, error: 'No webview' };
 
-      const { clipboard } = require('electron');
-      const prevClip = clipboard.readText();
-      clipboard.writeText(prompt);
-
       const escapedPrompt = JSON.stringify(prompt);
 
       const result = await wc.executeJavaScript(`(async () => {
@@ -398,8 +396,6 @@ function registerGrokIpcHandlers(getWebviewContents) {
           return 'no-send';
         })()`);
       }
-
-      try { clipboard.writeText(prevClip || ''); } catch {}
 
       console.log(`${LOG} grok-send-prompt: success=${result.success}, inputTag=${result.inputTag || 'n/a'}, baseline: copy=${result.preCopyCount}, reactions=${result.preReactionCount}, followUps=${result.preFollowUpCount}, error=${result.error || 'none'}`);
       return result;
