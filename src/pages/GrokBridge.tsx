@@ -6248,6 +6248,7 @@ const GrokBridge: React.FC = () => {
                           data-testid="button-reconnect-bridge"
                           onClick={async () => {
                             if (isElectron) {
+                              setBridgeStatus('connecting');
                               try {
                                 const ipcRenderer = (window as any).require('electron').ipcRenderer;
                                 await ipcRenderer.invoke('bridge-reconnect');
@@ -6255,6 +6256,7 @@ const GrokBridge: React.FC = () => {
                               } catch {
                                 try { await fetch('http://localhost:4999/api/bridge-reconnect'); setStatusMessage('Bridge reconnecting...'); } catch {}
                               }
+                              pollDesktopBridgeStatus();
                             } else {
                               if (bridgeWsRef.current) { try { bridgeWsRef.current.close(); } catch {} bridgeWsRef.current = null; }
                               const url = bridgeRelayUrl || serverDevRelayUrl || 'wss://35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev';
