@@ -18,9 +18,11 @@ CRITICAL STOP RULES (READ THESE FIRST):
 CRITICAL APPROACH — WHAT WORKS (TESTED AND VERIFIED):
 - For CREATING new files (Metrics.tsx): Use grok-create-chunk (NOT grok-create).
   The file will be >1000 chars. browse_page has a ~2048 char URL limit. grok-create WILL FAIL.
-  Split into ~800-char raw chunks. Send each as a separate GET:
-  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=CHUNK&chunk=N&total=TOTAL
-  Chunks must be sent IN ORDER (0, 1, 2, ...). The file only appears on disk when the FINAL chunk lands.
+  Split into ~500 raw-char chunks. URL-encode each chunk. Send as separate GET requests:
+  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=ENCODED_CHUNK&chunk=N&total=TOTAL
+  Encoding adds ~1.7x overhead. ~500 raw → ~850 encoded → fits in URL.
+  Chunks must be sent IN ORDER (0, 1, 2, ...). Send ALL back-to-back, no waiting.
+  File only appears on disk when the FINAL chunk lands.
 
 - For EDITING App.tsx: Use grok-create (read → modify → write full file).
   DO NOT USE grok-write ON APP.TSX. The desktop runs on Windows with \r\n line endings.
@@ -31,6 +33,10 @@ CRITICAL APPROACH — WHAT WORKS (TESTED AND VERIFIED):
   matching within one line). Use it for the nav item. Do NOT call it more than ONCE.
 
 - Activity icon is ALREADY imported in Navigation.tsx. Do NOT add a duplicate import.
+
+*** CRITICAL: Do each step ONCE. Do NOT restart from step 0 if a later step fails. ***
+*** Fix the failing step in place. Restarting wastes browse_page calls and compounds errors ***
+*** (e.g., calling grok-write multiple times creates duplicate entries). ***
 
 STEPS (do them in order, post to coord after each):
 
@@ -94,10 +100,15 @@ STEPS (do them in order, post to coord after each):
 
 5. VERIFY METRICS: Call grok-read for src/pages/Metrics.tsx
    → This is the ONLY verification needed — do NOT verify individual chunks.
-   → Confirm the first line is "import React"
-   → Confirm it has "export const Metrics" and "export default Metrics"
-   → Post to coord: "L3-S5: Metrics.tsx verified"
-   → If MISSING or EMPTY: Retry step 4 ONCE. If still missing, post failure and stop.
+   → Check ALL of these:
+     a) File exists (status: success)
+     b) Contains "export const Metrics"
+     c) Contains "export default Metrics" — this MUST be the last meaningful line
+     d) At least 80 lines of code
+   → If ANY check fails, the file is TRUNCATED. The chunks did not all land.
+     Delete the file: GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/pages/Metrics.tsx
+     Then retry step 4 from chunk=0 with ALL chunks. Retry ONCE only.
+   → Post to coord: "L3-S5: Metrics.tsx verified, N lines, has default export"
 
 6. UPDATE APP.TSX — USE GROK-CREATE (NOT grok-write):
    *** WINDOWS LINE ENDING WARNING: The desktop project uses \r\n line endings. ***
@@ -122,18 +133,23 @@ STEPS (do them in order, post to coord after each):
    → If EITHER missing: Read the file, fix it with grok-create, verify again. Do NOT continue without both.
 
 8. UPDATE NAVIGATION: Use grok-write to add ONE metrics nav item.
-   Search for the LAST nav item: { id: 'settings', label: 'Settings', icon: Settings }
+   *** ONE CALL ONLY. If grok-write returns replacements:0, do NOT retry — move to step 9 and fix there. ***
+   *** If grok-write returns replacements:1, it worked. Do NOT call grok-write again. ***
+   Search for: { id: 'settings', label: 'Settings', icon: Settings }
    Replace with: { id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }
    This is a SINGLE-LINE search so \r\n line endings do NOT affect it.
    DO NOT add an import for Activity — it is ALREADY imported.
-   DO NOT call grok-write more than ONCE for this change.
    → Post to coord: "L3-S8: Navigation.tsx updated"
 
 9. VERIFY NAVIGATION: grok-read Navigation.tsx
-   → Count how many times "'metrics'" appears. Must be EXACTLY 1.
-   → If more than 1: The edit was duplicated. Read the file, remove duplicates with grok-create, verify again.
-   → Confirm no duplicate Activity imports
-   → Post to coord: "L3-S9: Nav verified, metrics entries: 1"
+   → Count how many times "'metrics'" appears in the content. Must be EXACTLY 1.
+   → If count > 1: Grok-write ran multiple times and created duplicates. You MUST fix this:
+     Read the full file, remove ALL duplicate metrics entries (keep only one), then write the
+     corrected full file with grok-create. Verify the fix with another grok-read.
+   → If count = 0: The grok-write in step 8 failed. Use grok-create to write the full Nav file
+     with the metrics entry added manually.
+   → Confirm no duplicate Activity imports.
+   → Post to coord: "L3-S9: Nav verified, metrics entries: [count]"
 
 10. CONSOLE CHECK: Use grok-proxy (raw JSON) + get_console_errors
     → Post to coord: "L3-S10: console clean" or "L3-S10: console errors: [details]"
