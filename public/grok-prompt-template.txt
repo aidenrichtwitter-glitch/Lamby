@@ -79,6 +79,36 @@ COORD — post progress notes:
   GET {{RELAY_BASE}}/api/coord?note=YOUR_MESSAGE&from=grok
   Post ONCE per phase/step. Do NOT duplicate. Keep under 200 chars.
 
+=== BRIDGE EXECUTOR (PREFERRED — use this for all file operations) ===
+Instead of calling endpoints manually, use the bridge executor via code execution.
+It handles chunking, encoding, verification, git, and honest reporting automatically.
+
+Usage — run this as ONE code execution:
+  RELAY = "{{RELAY_BASE}}"
+  PROJECT = "{{PROJECT}}"
+  plan = [
+      {"action": "create", "path": "src/file.tsx", "content": "..."},
+      {"action": "edit", "path": "src/file.tsx", "search": "old", "replace": "new"},
+      {"action": "delete", "path": "src/old.tsx"},
+      {"action": "read", "path": "src/file.tsx"},
+      {"action": "verify", "path": "src/file.tsx", "contains": ["export default"]},
+      {"action": "console_check"},
+      {"action": "git_add"},
+      {"action": "git_commit", "message": "my commit"},
+      {"action": "git_log", "count": 3},
+      {"action": "git_checkout", "args": "af7629a -- src/App.tsx"},
+      {"action": "wait", "seconds": 5},
+      {"action": "coord", "note": "progress update"},
+  ]
+  import urllib.request
+  exec(urllib.request.urlopen(f"{RELAY}/bridge_executor.py").read().decode())
+
+The executor:
+- Auto-chunks files >450 chars (splits raw, encodes each chunk)
+- Waits 15s between writes and verification steps
+- Prints PASS/FAIL per step with exact char counts
+- Prints overall summary at the end
+
 === RULES ===
 1. URL-ENCODE all content/search/replace params. Raw newlines are SILENTLY STRIPPED by HTTP.
    The relay has smartDecode — both single and double encoding work correctly.
@@ -147,7 +177,6 @@ Gather all information. No writes yet.
 
 1d. OPTIONAL — Browse for inspiration (1-2 calls):
     You may browse the web for React metric/dashboard card examples to inspire your component.
-    Example: browse_page("https://react.dev/learn") or any React component example site.
     This is optional — skip if you already know what to write.
 
 → Post to coord: "L3-P1: reads done, App [N chars], Nav [N chars]"
@@ -159,7 +188,7 @@ Do ALL planning in your head. Do NOT call browse_page during this phase.
 
 Plan A — Metrics.tsx content:
   Generate a Metrics.tsx component that is BETWEEN 800 AND 900 CHARACTERS total.
-  This size constraint is critical — it must split into exactly 2 chunks.
+  This size constraint is critical — keep it focused.
 
   Requirements:
   - Named export: export const Metrics: React.FC = () => { ... }
@@ -169,141 +198,91 @@ Plan A — Metrics.tsx content:
   - Dark mode support (dark: classes)
   - Valid TypeScript/JSX
 
-  SIZE CHECK: Count your characters. Must be 800-900 raw chars.
-  Then split into exactly 2 chunks: each chunk UNDER 500 raw chars.
-  You will URL-encode each chunk in Phase 3.
-
 Plan B — Updated App.tsx content:
   Take the App.tsx you read in Phase 1 and modify it:
   a) Add import: import { Metrics } from '../pages/Metrics'
   b) Add to PAGES map: metrics: Metrics
-  Prepare the FULL updated file content. You will URL-encode it in Phase 3.
-  (~920 chars raw → ~1500 encoded → fits in one grok-create URL)
+  Prepare the FULL updated file content.
 
 Plan C — Navigation.tsx edit:
-  You will use grok-write with a SINGLE-LINE search/replace:
+  You will use a search/replace edit:
   Search: { id: 'settings', label: 'Settings', icon: Settings }
   Replace: { id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }
   DO NOT add an Activity import — it is ALREADY imported.
-  This will be exactly ONE grok-write call.
 
 ==============================
-PHASE 3 — EXECUTE (2 browse_page calls + 1 code execution)
+PHASE 3 — EXECUTE (1 code execution — that's it!)
 ==============================
-*** CRITICAL: Chunks MUST be sent from a SINGLE Python script using your code execution tool.
-    Do NOT use multiple browse_page calls for chunks — your agents will fight over them. ***
+*** USE THE BRIDGE EXECUTOR — do NOT write your own Python script ***
+*** Do NOT use browse_page for any writes — use the executor for EVERYTHING ***
 
-3a. Send BOTH Metrics.tsx chunks ATOMICALLY (1 code execution — NOT browse_page):
-    Write and execute a Python script that sends both chunks sequentially.
-    This is ONE code execution action. No agents can interfere.
+Run ONE code execution with all your file operations as a plan.
+The executor handles chunking, encoding, verification, git, and honest reporting automatically.
 
-    ```python
-    import urllib.request, urllib.parse, json, time
+```python
+RELAY = "{{RELAY_BASE}}"
+PROJECT = "{{PROJECT}}"
 
-    RELAY = "{{RELAY_BASE}}"
-    PROJECT = "{{PROJECT}}"
-    PATH = "src/pages/Metrics.tsx"
+plan = [
+    # Step 1: Create Metrics.tsx (executor auto-chunks if >450 chars)
+    {"action": "create", "path": "src/pages/Metrics.tsx", "content": """YOUR METRICS.TSX CONTENT FROM PLAN A"""},
 
-    # Your full Metrics.tsx content from Plan A — paste it here as a Python string
-    content = """YOUR METRICS.TSX CONTENT HERE"""
+    # Step 2: Rewrite App.tsx with Metrics import + route
+    {"action": "create", "path": "src/components/App.tsx", "content": """YOUR UPDATED APP.TSX CONTENT FROM PLAN B"""},
 
-    # Split RAW content into 2 chunks FIRST, then URL-encode each independently
-    # (splitting encoded text can break %xx sequences across chunk boundaries)
-    mid = len(content) // 2
-    raw_chunks = [content[:mid], content[mid:]]
+    # Step 3: Edit Navigation.tsx (single-line search/replace)
+    {"action": "edit", "path": "src/components/Navigation.tsx",
+     "search": "{ id: 'settings', label: 'Settings', icon: Settings }",
+     "replace": "{ id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }"},
 
-    print(f"Content: {len(content)} raw chars")
-    print(f"Sending 2 chunks for {PATH}...")
-    for i, raw_chunk in enumerate(raw_chunks):
-        encoded_chunk = urllib.parse.quote(raw_chunk, safe='')
-        url = f"{RELAY}/api/grok-create-chunk?project={PROJECT}&path={PATH}&content={encoded_chunk}&chunk={i}&total=2"
-        print(f"  Chunk {i}/1: {len(raw_chunk)} raw chars, {len(encoded_chunk)} encoded, URL length: {len(url)}")
-        try:
-            req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                result = json.loads(resp.read().decode())
-                status = result.get('results', [{}])[0].get('status', 'unknown')
-                print(f"  Chunk {i}/1: {status}")
-                if i == 1:
-                    data = result.get('results', [{}])[0].get('data', {})
-                    print(f"  Final chunk result: {json.dumps(data)}")
-        except Exception as e:
-            print(f"  Chunk {i}/1: ERROR - {e}")
-        time.sleep(0.5)
+    # Step 4: Verify all files
+    {"action": "verify", "path": "src/pages/Metrics.tsx", "contains": ["export const Metrics", "export default Metrics"]},
+    {"action": "verify", "path": "src/components/App.tsx", "contains": ["import { Metrics }", "metrics:"]},
+    {"action": "verify", "path": "src/components/Navigation.tsx", "contains": ["'metrics'"]},
 
-    print("All chunks sent!")
-    ```
+    # Step 5: Check console for errors
+    {"action": "console_check"},
 
-    *** IMPORTANT: The content variable must contain your COMPLETE Metrics.tsx code.
-    Use triple-quotes. Escape any backslashes or triple-quotes in the content.
-    The script will print exact sizes and status — report these numbers in your coord note. ***
+    # Step 6: Git commit
+    {"action": "git_add"},
+    {"action": "git_commit", "message": "L3: Add Metrics page with routing and navigation"},
+    {"action": "git_log", "count": 3},
 
-3b. Write App.tsx (1 browse_page call):
-    URL-encode the full updated App.tsx content from Plan B:
-    GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/components/App.tsx&content=ENCODED_FULL_CONTENT
-    Wait 15 seconds after this call.
+    # Step 7: Post result
+    {"action": "coord", "note": "L3-P3: executor complete, see summary"},
+]
 
-3c. Write Navigation.tsx (1 browse_page call — EXACTLY ONE, never more):
-    GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=src/components/Navigation.tsx&search=SEARCH_TEXT&replace=REPLACE_TEXT
-    If this returns replacements:0, do NOT retry now. You will fix it in Phase 4.
-    If this returns replacements:1, it worked.
-    Wait 15 seconds after this call.
+# Fetch and run the bridge executor
+import urllib.request
+exec(urllib.request.urlopen(f"{RELAY}/bridge_executor.py").read().decode())
+```
 
-→ Post to coord: "L3-P3: chunks [status], App [status], Nav [status]"
+*** IMPORTANT ***
+- Replace the triple-quoted strings with your ACTUAL content from Plans A and B.
+- Escape any backslashes or triple-quotes inside the content strings.
+- The executor prints a full PASS/FAIL summary with exact char counts.
+- This is ONE code execution. No agents can interfere. No race conditions.
+- The executor auto-waits 15s between writes and verification steps.
+
+→ After the executor finishes, read its output carefully.
 
 ==============================
-PHASE 4 — VERIFY & COMMIT (~8 calls)
+PHASE 4 — REVIEW (1 browse_page call max)
 ==============================
-Now verify everything. BE HONEST — report exact numbers from grok-read responses.
+Read the executor output. It already verified everything and printed a summary.
 
-4a. VERIFY Metrics.tsx (1 call):
-    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/pages/Metrics.tsx
-    Check ALL of these and report the ACTUAL values:
-    - File exists? (yes/no)
-    - Actual character count? (report the real number)
-    - Contains "export const Metrics"? (yes/no)
-    - Contains "export default Metrics"? (yes/no)
-    → If file is empty or missing exports: it FAILED. Report exactly what you see.
-      Delete it and re-run the Python script from 3a. You may retry up to 3 times.
+4a. If executor says PASS:
+    Post to coord: "L3 REVIEW: PASS — [copy the executor's summary line]"
+    → TEST IS DONE. STOP.
 
-4b. VERIFY App.tsx (1 call):
-    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/App.tsx
-    - Contains "import { Metrics }"? (yes/no)
-    - Contains "metrics: Metrics" or "metrics:" in PAGES map? (yes/no)
-    - Actual character count? (report the real number — should be >900)
-    → If broken: rewrite with grok-create again.
+4b. If executor says FAIL:
+    Read the specific failures from the output.
+    You may retry by running the executor again with a fixed plan (up to 3 retries).
+    If still failing after 3 retries:
+    Post to coord: "L3 REVIEW: FAIL — [copy the executor's failure details]"
+    → TEST IS DONE. STOP.
 
-4c. VERIFY Navigation.tsx (1 call):
-    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
-    - How many times does "'metrics'" appear? (report exact count)
-    - If count > 1: duplicates. Rewrite full file with grok-create to fix.
-    - If count = 0: grok-write failed. Rewrite full file with grok-create to add it.
-    - Any duplicate Activity imports? (yes/no)
-
-4d. CONSOLE CHECK (1 call):
-    GET {{RELAY_BASE}}/api/grok-proxy?project={{PROJECT}}&payload=ENCODED_JSON
-    payload: {"actions":[{"type":"get_console_errors","project":"{{PROJECT}}"}]}
-    → Report exact error count. Must be 0 to pass. If errors: fix before committing.
-
-4e. GIT ADD + COMMIT (2 calls):
-    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=add&args=.
-    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=commit&message=L3:%20Add%20Metrics%20page%20with%20routing%20and%20navigation
-
-4f. VERIFY COMMIT (1 call):
-    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=log&count=3
-    → Report the commit hash and insertions/deletions count.
-
-4g. FINAL REVIEW — BE COMPLETELY HONEST:
-    Post to coord with this EXACT format, filling in real values:
-    "L3 REVIEW: [PASS/FAIL]
-     Metrics: [exists/missing], [N] chars, named export [yes/no], default export [yes/no]
-     App: [updated/unchanged], [N] chars, has import [yes/no], has route [yes/no]
-     Nav: [updated/unchanged], metrics count [N], duplicate imports [yes/no]
-     Console: [N] errors
-     Git: [commit hash], [N] insertions, [N] deletions
-     If FAIL: [explain exactly what went wrong and what you think would fix it]"
-
-    *** TEST IS NOW DONE. STOP. NO MORE BROWSE_PAGE CALLS. ***
+    *** DO NOT claim PASS if the executor said FAIL. Report what it reported. ***
 
 === PASS CRITERIA ===
 - Metrics.tsx exists with valid exports and 800+ chars of real code
@@ -311,18 +290,10 @@ Now verify everything. BE HONEST — report exact numbers from grok-read respons
 - Navigation.tsx has EXACTLY 1 metrics nav item, no duplicate imports
 - Console is clean (0 errors)
 - Git commit exists with insertions
-- Total browse_page calls ≤ 50
-
-=== ENCODING REFERENCE ===
-- All content/search/replace params MUST be URL-encoded (encodeURIComponent)
-- Raw newlines (\n) in URLs are SILENTLY STRIPPED by HTTP — files will be corrupted without encoding
-- The relay has smartDecode — handles both single and double encoding correctly
-- Keep each chunk UNDER 500 raw chars → ~850 encoded → fits safely in a 2000-char URL
-- App.tsx is ~920 raw chars → ~1500 encoded → fits in one grok-create URL
+- Executor summary says PASS
 
 === APPROACH REFERENCE ===
-- Metrics.tsx: Python script via code execution → sends 2 grok-create-chunk URLs atomically
-  (NEVER use multiple browse_page calls for chunks — your agents will fight over them)
-- App.tsx: grok-create via browse_page (full rewrite — grok-write fails on Windows \r\n)
-- Navigation.tsx: grok-write via browse_page (single-line search, ONE call only)
+- ALL file operations go through the bridge executor (1 code execution)
+- The executor handles: chunking, URL encoding, verification, console checks, git, honest reporting
 - Activity icon: ALREADY imported in Navigation.tsx — do NOT add duplicate
+- Executor is at: {{RELAY_BASE}}/bridge_executor.py

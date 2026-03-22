@@ -79,6 +79,36 @@ COORD — post progress notes:
   GET {{RELAY_BASE}}/api/coord?note=YOUR_MESSAGE&from=grok
   Post ONCE per phase/step. Do NOT duplicate. Keep under 200 chars.
 
+=== BRIDGE EXECUTOR (PREFERRED — use this for all file operations) ===
+Instead of calling endpoints manually, use the bridge executor via code execution.
+It handles chunking, encoding, verification, git, and honest reporting automatically.
+
+Usage — run this as ONE code execution:
+  RELAY = "{{RELAY_BASE}}"
+  PROJECT = "{{PROJECT}}"
+  plan = [
+      {"action": "create", "path": "src/file.tsx", "content": "..."},
+      {"action": "edit", "path": "src/file.tsx", "search": "old", "replace": "new"},
+      {"action": "delete", "path": "src/old.tsx"},
+      {"action": "read", "path": "src/file.tsx"},
+      {"action": "verify", "path": "src/file.tsx", "contains": ["export default"]},
+      {"action": "console_check"},
+      {"action": "git_add"},
+      {"action": "git_commit", "message": "my commit"},
+      {"action": "git_log", "count": 3},
+      {"action": "git_checkout", "args": "af7629a -- src/App.tsx"},
+      {"action": "wait", "seconds": 5},
+      {"action": "coord", "note": "progress update"},
+  ]
+  import urllib.request
+  exec(urllib.request.urlopen(f"{RELAY}/bridge_executor.py").read().decode())
+
+The executor:
+- Auto-chunks files >450 chars (splits raw, encodes each chunk)
+- Waits 15s between writes and verification steps
+- Prints PASS/FAIL per step with exact char counts
+- Prints overall summary at the end
+
 === RULES ===
 1. URL-ENCODE all content/search/replace params. Raw newlines are SILENTLY STRIPPED by HTTP.
    The relay has smartDecode — both single and double encoding work correctly.

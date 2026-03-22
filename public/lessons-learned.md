@@ -4,6 +4,14 @@ Updated after every significant discovery or failure. Newest entries at the top.
 
 ---
 
+## Lesson 29: Pre-built bridge executor eliminates Grok's script-writing failures
+**Date:** 2026-03-22
+**Context:** Even with the single-executor rule and Python script approach, Grok still had to write the Python script from scratch each time — getting encoding, chunking, and error handling wrong. The inline script template in L3 was complex and Grok frequently mangled it.
+**Fix:** Created `public/bridge_executor.py` — a pre-built script served as a static file. Grok fetches and runs it via `exec(urllib.request.urlopen(...).read().decode())`. Grok's only job is building a JSON plan list. The executor handles all the hard parts: auto-chunking files >450 chars (raw-first split, then encode), URL encoding, sequential execution, verification, console checks, git operations, 15s wait between writes and verifications, and honest structured PASS/FAIL summary. L3 Phase 3 went from ~40 lines of inline Python template + 2 browse_page calls to a single code execution with a clean plan list.
+**Rule:** Never make Grok write infrastructure code. Give it a ready-made tool and a simple interface (JSON plan). The less Grok has to implement, the more reliable the test.
+
+---
+
 ## Lesson 28: Simplify targets — 2 chunks max, enforce honest FAIL reporting
 **Date:** 2026-03-22
 **Context:** L3 failed every run. Grok claimed "PASS" but Metrics.tsx was 0 chars, Nav had 0 metrics entries. The 80+ line target required 5-7 chunks, which amplified agent race conditions. Grok's final review said "PASS" when nothing actually worked.
