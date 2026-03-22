@@ -6,6 +6,14 @@ const { spawn, execSync } = require('child_process');
 const os = require('os');
 const { registerGrokIpcHandlers, BROWSER_MODE_VERSION } = require('./grok-ipc-handlers');
 
+process.on('uncaughtException', (err) => {
+  if (err.code === 'EPIPE' || err.code === 'ERR_STREAM_DESTROYED') return;
+  if (app.isReady()) {
+    const { dialog } = require('electron');
+    dialog.showErrorBox('Uncaught Exception', err.stack || err.message);
+  }
+});
+
 const LOG = '[ELECTRON]';
 const USER_DATA = path.join(os.homedir(), '.guardian-ai');
 const PROJECTS_DIR = path.resolve(process.env.PROJECT_DIR || path.join(USER_DATA, 'projects'));
@@ -20,8 +28,8 @@ let mainWindow = null;
 let localServerProcess = null;
 let activeProject = '';
 
-function log(...args) { console.log(LOG, ...args); }
-function logErr(...args) { console.error(LOG, ...args); }
+function log(...args) { try { console.log(LOG, ...args); } catch (_) {} }
+function logErr(...args) { try { console.error(LOG, ...args); } catch (_) {} }
 
 function getActiveProjectDir() {
   if (!activeProject) return null;
@@ -50,9 +58,9 @@ function startLocalServer() {
     stdio: 'pipe',
     windowsHide: true,
   });
-  localServerProcess.stdout.on('data', (d) => log(`[local-server] ${d.toString().trim()}`));
-  localServerProcess.stderr.on('data', (d) => logErr(`[local-server] ${d.toString().trim()}`));
-  localServerProcess.on('exit', (code) => log(`[local-server] exited with code ${code}`));
+  localServerProcess.stdout.on('data', (d) => { try { log(`[local-server] ${d.toString().trim()}`); } catch (_) {} });
+  localServerProcess.stderr.on('data', (d) => { try { logErr(`[local-server] ${d.toString().trim()}`); } catch (_) {} });
+  localServerProcess.on('exit', (code) => { try { log(`[local-server] exited with code ${code}`); } catch (_) {} });
 }
 
 function proxyToLocalServer(method, apiPath, body) {
