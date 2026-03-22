@@ -22,7 +22,9 @@ function createConnector(config) {
   let _lastScreenshotUrl = "";
   let _lastConnectedAt = 0;
   let _destroyed       = false;
-  const RECONNECT_DELAY = 5000;
+  let _suppressNextReconnect = false;
+  let reconnectDelay   = 2000;
+  const MAX_DELAY      = 60000;
   const GRACE_PERIOD_MS = 30000;
 
   const runningProcs  = new Map();
@@ -1658,7 +1660,8 @@ function createConnector(config) {
     if (msg.type === "ping") { send({ type: "pong", ts: Date.now() }); return; }
     if (msg.type === "pong") return;
     if (msg.type === "connection_replaced") {
-      log("warn", "Connection replaced by a newer connection with the same key.");
+      log("warn", "Connection replaced by a newer connection with the same key — suppressing reconnect.");
+      _suppressNextReconnect = true;
       return;
     }
 
@@ -1794,7 +1797,7 @@ function createConnector(config) {
         const headerStr = rxBuf.slice(0, sepIdx).toString();
         rxBuf = rxBuf.slice(sepIdx + 4);
         if (!headerStr.includes("101")) { log("error", `WS upgrade rejected: ${headerStr.split("\r\n")[0]}`); sock.destroy(); return; }
-        upgraded = true; _connected = true; _socket = sock; _lastConnectedAt = Date.now();
+        upgraded = true; _connected = true; _socket = sock; _lastConnectedAt = Date.now(); reconnectDelay = 2000;
         log("info", `Connected to relay at ${host}`);
         if (_onStatusChange) _onStatusChange("connected");
         clearInterval(_pingInterval);
@@ -1818,9 +1821,15 @@ function createConnector(config) {
       clearInterval(_pingInterval); _pingInterval = null;
       _connected = false; _socket = null;
       if (_onStatusChange) _onStatusChange("disconnected");
+      if (_suppressNextReconnect) {
+        _suppressNextReconnect = false;
+        log("warn", "Disconnected (replaced by newer connection) — not reconnecting.");
+        return;
+      }
       if (!_destroyed) {
-        log("warn", `Disconnected. Reconnecting in ${RECONNECT_DELAY / 1000}s...`);
-        setTimeout(() => doConnect(), RECONNECT_DELAY);
+        log("warn", `Disconnected. Reconnecting in ${(reconnectDelay / 1000).toFixed(0)}s...`);
+        setTimeout(() => doConnect(), reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 2, MAX_DELAY);
       }
     };
     sock.on("close",   () => onDisconnect());
