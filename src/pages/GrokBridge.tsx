@@ -2619,8 +2619,8 @@ const GrokBridge: React.FC = () => {
 
     const lastResponse = lastFullResponseRef.current;
     if (lastResponse) {
-      const snippet = lastResponse.slice(0, 2000);
-      prompt += `Previous suggestion from you was:\n${snippet}${lastResponse.length > 2000 ? '\n...(truncated)' : ''}\n\n`;
+      const sanitized = lastResponse.slice(0, 2000).replace(/```[\w]*/g, '---code-block---');
+      prompt += `Previous suggestion from you was:\n${sanitized}${lastResponse.length > 2000 ? '\n...(truncated)' : ''}\n\n`;
     }
 
     if (visionEnabled && isElectron) {
@@ -2651,22 +2651,19 @@ const GrokBridge: React.FC = () => {
     }
 
     if (freshDiag.cmdUrl) {
-      prompt += `YOU MUST USE THE SANDBOX API TO FIX THIS. Follow this exact workflow:\n`;
-      prompt += `1. read_file each file mentioned in the error stack traces above to see their CURRENT state\n`;
-      prompt += `2. grep for the broken symbol/function if the root cause isn't obvious\n`;
-      prompt += `3. Diagnose the root cause by cross-referencing errors with the source code\n`;
-      prompt += `4. write_file with the corrected content for every file that needs fixing\n`;
-      prompt += `5. run_command to verify the fix (e.g. a quick node -e check or build command)\n`;
-      prompt += `6. Fetch console logs to confirm errors are resolved\n\n`;
-      prompt += `Respond with a \`\`\`json code block containing {"actions": [...]} so Lamby auto-executes your fix.\n`;
-      prompt += `Do NOT just describe the fix in text — actually apply it via the API.\n\n`;
-    } else {
-      prompt += `Fix the issue and provide COMPLETE, FULL file content for every affected file.\n`;
-      prompt += `⚠ NO SNIPPETS: Every code block must contain the ENTIRE file — all imports, all functions, all closing braces. Lamby OVERWRITES the file with your output. Returning a snippet permanently deletes the rest of the file.\n`;
-      prompt += `FORBIDDEN: "// ... rest unchanged", "// remaining code", ellipsis (...), any abbreviated/truncated content.\n`;
-      prompt += `Use this format for each file:\n`;
-      prompt += `// file: path/to/file.tsx\n\`\`\`tsx\n[COMPLETE file content — every line]\n\`\`\`\n`;
+      prompt += `FIX WORKFLOW (bridge is online — use it for reads and small edits):\n`;
+      prompt += `1. READ broken files via grok-read to see their CURRENT state\n`;
+      prompt += `2. SEARCH for broken symbols via grok-search if root cause isn't obvious\n`;
+      prompt += `3. For SMALL edits (a few lines): use grok-write (search/replace)\n`;
+      prompt += `4. For LARGE fixes (rewriting most of the file): output COMPLETE // file: code blocks — Lamby auto-applies them\n`;
+      prompt += `5. VERIFY via grok-read or wait for Lamby's screenshot response\n\n`;
     }
+    prompt += `⚠ OUTPUT FORMAT FOR FILE CHANGES:\n`;
+    prompt += `Every code block MUST contain the COMPLETE, FULL file — every import, every function, every closing brace.\n`;
+    prompt += `Lamby OVERWRITES the entire file with your code block. Returning a snippet permanently deletes the rest.\n`;
+    prompt += `FORBIDDEN: "// ... rest unchanged", "// remaining code", ellipsis (...), any abbreviated content.\n`;
+    prompt += `Use this format for each file:\n`;
+    prompt += `// file: path/to/file.tsx\n\`\`\`tsx\n[COMPLETE file content — every line]\n\`\`\`\n`;
 
     return prompt;
   }, [previewPanels, activePanel, previewLogs, activeProject, visionEnabled, autonomousState.originalGoal]);
@@ -2689,15 +2686,14 @@ const GrokBridge: React.FC = () => {
         const visionApiSection = buildSandboxApiSection(freshVis.snapUrl, freshVis.cmdUrl, activeProject || '', freshVis.online, freshVis.proxyUrl, freshVis.editUrl);
         if (visionApiSection) visionPrompt += visionApiSection;
         if (freshVis.cmdUrl) {
-          visionPrompt += `USE THE SANDBOX API to fix these visual issues. Follow this workflow:\n`;
-          visionPrompt += `1. read_file the CSS/component files responsible for the broken layout or styling\n`;
-          visionPrompt += `2. grep for relevant class names, styles, or component references\n`;
-          visionPrompt += `3. write_file with corrected styles, classes, or JSX structure\n`;
-          visionPrompt += `4. run_command or check console logs to verify no build errors after your fix\n`;
-          visionPrompt += `Respond with a \`\`\`json code block containing {"actions": [...]} so Lamby auto-executes your fix.\n`;
-        } else {
-          visionPrompt += `Please fix these visual problems. Provide COMPLETE, FULL file content for every affected file. ⚠ NO SNIPPETS — Lamby overwrites files entirely. Never use "// ... rest unchanged" or partial code.`;
+          visionPrompt += `FIX WORKFLOW (bridge is online):\n`;
+          visionPrompt += `1. READ the CSS/component files via grok-read to see current state\n`;
+          visionPrompt += `2. SEARCH for relevant class names or styles via grok-search\n`;
+          visionPrompt += `3. For SMALL style fixes: use grok-write (search/replace)\n`;
+          visionPrompt += `4. For LARGE fixes: output COMPLETE // file: code blocks — Lamby auto-applies them\n`;
+          visionPrompt += `5. VERIFY via grok-read or wait for Lamby's screenshot response\n\n`;
         }
+        visionPrompt += `⚠ Every code block MUST be the COMPLETE file — Lamby overwrites files entirely. Never use "// ... rest unchanged" or partial code.`;
         if (mode === 'api') {
           setInput(visionPrompt);
           setStatusMessage('Vision analysis injected into chat — send to fix visual issues');
@@ -5366,19 +5362,18 @@ const GrokBridge: React.FC = () => {
     let errorPrompt = `The following errors occurred after applying code changes:\n\n${errorText}\n\n` +
       analysisSection + errorApiSection;
     if (freshErr.cmdUrl) {
-      errorPrompt += `\nYOU MUST USE THE SANDBOX API TO FIX THESE ERRORS. Follow this workflow:\n`;
-      errorPrompt += `1. read_file the files mentioned in the error messages above\n`;
-      errorPrompt += `2. grep for broken imports, missing exports, or undefined symbols\n`;
-      errorPrompt += `3. write_file with corrected code for every broken file\n`;
-      errorPrompt += `4. run_command to verify the build succeeds\n`;
-      errorPrompt += `5. Fetch console logs to confirm errors are gone\n`;
-      errorPrompt += `Respond with \`\`\`json {"actions": [...]} so Lamby auto-executes your fix.\n\n`;
-    } else {
-      errorPrompt += `Please fix these errors. Return COMPLETE, FULL file content for every affected file.\n` +
-        `⚠ NO SNIPPETS: Lamby OVERWRITES files entirely — returning a snippet permanently deletes the rest of the file.\n` +
-        `FORBIDDEN: "// ... rest unchanged", "// remaining code", ellipsis (...), any abbreviated content.\n` +
-        `Use this format:\n// file: path/to/file.tsx\n\`\`\`tsx\n[COMPLETE file content — every line]\n\`\`\`\n\n`;
+      errorPrompt += `\nFIX WORKFLOW (bridge is online — use it for reads and small edits):\n`;
+      errorPrompt += `1. READ broken files via grok-read to see their CURRENT state\n`;
+      errorPrompt += `2. SEARCH for broken imports or symbols via grok-search\n`;
+      errorPrompt += `3. For SMALL edits (a few lines): use grok-write (search/replace)\n`;
+      errorPrompt += `4. For LARGE fixes (rewriting most of the file): output COMPLETE // file: code blocks — Lamby auto-applies them\n`;
+      errorPrompt += `5. VERIFY via grok-read or wait for Lamby's screenshot response\n\n`;
     }
+    errorPrompt += `⚠ OUTPUT FORMAT FOR FILE CHANGES:\n` +
+      `Every code block MUST contain the COMPLETE, FULL file — every import, every function, every closing brace.\n` +
+      `Lamby OVERWRITES the entire file with your code block. Returning a snippet permanently deletes the rest.\n` +
+      `FORBIDDEN: "// ... rest unchanged", "// remaining code", ellipsis (...), any abbreviated content.\n` +
+      `Use this format:\n// file: path/to/file.tsx\n\`\`\`tsx\n[COMPLETE file content — every line]\n\`\`\`\n\n`;
     if (!errBridgeOnline && projectContext) {
       errorPrompt += `Current project context:\n${projectContext.slice(0, 3000)}`;
     }
