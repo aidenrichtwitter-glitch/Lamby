@@ -1,198 +1,155 @@
 === LEVEL 3: MULTI-FILE + GIT COMMIT TEST ===
 === OBJECTIVE: Create a new page, wire it into routing and navigation, commit to git ===
 
-This is the full stress test. You will:
-- Create a brand new page component (Metrics.tsx)
-- Add it to the app's routing (App.tsx PAGES map)
-- Add it to the navigation menu (Navigation.tsx NAV_ITEMS)
-- Verify everything compiles
-- Commit to git
+You will create Metrics.tsx, add it to App.tsx routing, add it to Navigation.tsx, and git commit.
 
-CRITICAL STOP RULES (READ THESE FIRST):
-- You have a MAXIMUM of 30 browse_page calls for this entire test. If you exceed 30, STOP immediately.
-- Once you post the FINAL coord note (L3 REVIEW), you are DONE. Do NOT make any more browse_page calls.
-- Do NOT retry any step more than 2 times. If it fails twice, post the failure and move on.
-- Do NOT loop back to earlier steps after completing later ones.
-- Each grok-write call should be made EXACTLY ONCE per file. Do NOT call grok-write on the same file multiple times for the same change.
+STOP RULES:
+- Maximum 30 browse_page calls. If you exceed 30, STOP.
+- Once you post "L3 REVIEW", you are DONE. No more browse_page calls.
+- Do NOT retry any step more than once.
 
-CRITICAL APPROACH — WHAT WORKS (TESTED AND VERIFIED):
-- For CREATING new files (Metrics.tsx): Use grok-create-chunk (NOT grok-create).
-  The file will be >1000 chars. browse_page has a ~2048 char URL limit. grok-create WILL FAIL.
-  Split into ~500 raw-char chunks. URL-encode each chunk. Send as separate GET requests:
-  GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=FILE&content=ENCODED_CHUNK&chunk=N&total=TOTAL
-  Encoding adds ~1.7x overhead. ~500 raw → ~850 encoded → fits in URL.
-  Chunks must be sent IN ORDER (0, 1, 2, ...). Send ALL back-to-back, no waiting.
-  File only appears on disk when the FINAL chunk lands.
+THIS TEST HAS 4 PHASES. Complete each phase fully before starting the next.
 
-- For EDITING App.tsx: Use grok-create (read → modify → write full file).
-  DO NOT USE grok-write ON APP.TSX. The desktop runs on Windows with \r\n line endings.
-  grok-write search strings use \n but the file has \r\n — this causes SILENT FAILURE (0 replacements).
-  App.tsx is small (~920 chars), so grok-create with the full updated content works perfectly.
+==============================
+PHASE 1 — READ (4 calls)
+==============================
+Gather all information. No writes. No decisions yet.
 
-- For EDITING Navigation.tsx: grok-write WORKS for SINGLE-LINE replacements (no \r issue when
-  matching within one line). Use it for the nav item. Do NOT call it more than ONCE.
+1a. CLEANUP — restore files to clean baseline (1 call):
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/components/App.tsx,src/components/Navigation.tsx,src/pages/Dashboard.tsx
+    Also delete stale Metrics if it exists (1 call):
+    GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/pages/Metrics.tsx
+    → "File not found" = success. Do NOT retry.
 
-- Activity icon is ALREADY imported in Navigation.tsx. Do NOT add a duplicate import.
+1b. READ App.tsx (1 call):
+    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/App.tsx
+    → Save the FULL CONTENT in memory — you will modify and rewrite it in Phase 3.
 
-*** CRITICAL: Do each step ONCE. Do NOT restart from step 0 if a later step fails. ***
-*** Fix the failing step in place. Restarting wastes browse_page calls and compounds errors ***
-*** (e.g., calling grok-write multiple times creates duplicate entries). ***
+1c. READ Navigation.tsx (1 call):
+    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
+    → Note the NAV_ITEMS array. Note that Activity icon is ALREADY imported.
 
-STEPS (do them in order, post to coord after each):
+→ Post to coord: "L3-P1: reads done, App [N chars], Nav [N chars]"
 
-0. CLEANUP — ENSURE CLEAN BASELINE (3 calls only):
-   Restore all modified files and delete Metrics.tsx if it exists. Do NOT retry or loop — each call is idempotent.
+==============================
+PHASE 2 — PLAN (0 calls)
+==============================
+Do ALL planning in your head. Do NOT call browse_page during this phase.
 
-   a) RESTORE tracked files to HEAD (1 call — restores App.tsx, Navigation.tsx, Dashboard.tsx):
-      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/components/App.tsx,src/components/Navigation.tsx,src/pages/Dashboard.tsx
+Plan A — Metrics.tsx content:
+  Generate a complete Metrics.tsx component with:
+  - Named export: export const Metrics: React.FC = () => { ... }
+  - Default export: export default Metrics (MUST be the LAST line)
+  - At least 3 metric cards (bridge latency, uptime, requests)
+  - useState and useEffect hooks
+  - TypeScript types (interface MetricCard)
+  - Dark mode support (dark: classes)
+  - At least 80 lines of real code
 
-   b) DELETE Metrics.tsx (1 call — ignore "File not found" error, that just means it's already clean):
-      GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/pages/Metrics.tsx
-      → "File not found" is SUCCESS — it means there's nothing to clean up. Do NOT retry.
+  Then split the content into chunks of ~500 raw characters each.
+  Count the total number of chunks. You will URL-encode each chunk in Phase 3.
 
-   c) GIT STATUS (1 call — verify clean):
-      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=status
+Plan B — Updated App.tsx content:
+  Take the App.tsx you read in Phase 1 and modify it:
+  a) Add import: import { Metrics } from '../pages/Metrics'
+  b) Add to PAGES map: metrics: Metrics
+  Prepare the FULL updated file content. You will URL-encode it in Phase 3.
+  (~920 chars raw → ~1500 encoded → fits in one grok-create URL)
 
-   That's it. 3 calls. Do NOT add extra checks, retries, or reads. Move on.
-   → Post to coord: "L3-S0: cleanup done, baseline clean"
+Plan C — Navigation.tsx edit:
+  You will use grok-write with a SINGLE-LINE search/replace:
+  Search: { id: 'settings', label: 'Settings', icon: Settings }
+  Replace: { id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }
+  DO NOT add an Activity import — it is ALREADY imported.
+  This will be exactly ONE grok-write call. No retries.
 
-1. READ TREE: Call /api/grok-tree?project={{PROJECT}}
-   → Post to coord: "L3-S1: tree read"
+==============================
+PHASE 3 — EXECUTE (fast burst, ~10 calls)
+==============================
+Fire all writes back-to-back. No thinking between calls. No verification between calls.
 
-2. READ APP FILE: Call /api/grok-read?project={{PROJECT}}&path=src/components/App.tsx
-   → Study it carefully. Note:
-   - The exact import lines (e.g., "import Settings from '../pages/Settings'")
-   - The PAGES map entries (e.g., "settings: Settings")
-   - You will need the FULL CONTENT of this file for step 6
-   - IMPORTANT: Save/remember this content exactly — you'll modify it and write it back
-   → Post to coord: "L3-S2: App read"
+3a. Send ALL Metrics.tsx chunks (5-7 calls):
+    For each chunk, URL-encode the content and send:
+    GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=ENCODED_CHUNK&chunk=N&total=TOTAL
 
-3. READ NAVIGATION: Call /api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
-   → Note the exact NAV_ITEMS array and which icons are ALREADY imported
-   → Activity icon IS already imported — do NOT add it again
-   → Post to coord: "L3-S3: Nav read, Activity already imported"
+    ENCODING IS MANDATORY — raw newlines in URLs are SILENTLY STRIPPED by HTTP.
+    Encoding adds ~1.7x overhead. ~500 raw chars → ~850 encoded → fits in URL.
+    Send ALL chunks back-to-back. No waiting. No verifying individual chunks.
 
-4. CREATE METRICS PAGE: Use grok-create-chunk (NOT grok-create).
+3b. Write App.tsx (1 call):
+    URL-encode the full updated App.tsx content from Plan B:
+    GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/components/App.tsx&content=ENCODED_FULL_CONTENT
 
-   Build a Metrics.tsx component with these requirements:
-   - Named export: export const Metrics: React.FC = () => { ... }
-   - Default export: export default Metrics
-   - At least 3 metric cards (bridge latency, uptime, requests)
-   - useState and useEffect hooks
-   - TypeScript types (interface MetricCard)
-   - Dark mode support (dark: classes)
-   - At least 80 lines of real code
+3c. Write Navigation.tsx (1 call — EXACTLY ONE, never more):
+    GET {{RELAY_BASE}}/api/grok-write?project={{PROJECT}}&path=src/components/Navigation.tsx&search=SEARCH_TEXT&replace=REPLACE_TEXT
+    If this returns replacements:0, do NOT retry. You will fix it in Phase 4.
+    If this returns replacements:1, it worked.
 
-   Split the content into chunks of ~500 raw chars each (expect 5-7 chunks for a ~3000-char file). For each chunk:
-   GET {{RELAY_BASE}}/api/grok-create-chunk?project={{PROJECT}}&path=src/pages/Metrics.tsx&content=ENCODED_CHUNK&chunk=N&total=TOTAL
-   ENCODING IS MANDATORY:
-   - You MUST URL-encode each chunk (encodeURIComponent). Raw newlines in URLs are SILENTLY STRIPPED by HTTP.
-   - Encoding roughly doubles the length (~1.7x for JSX). ~500 raw chars → ~850 encoded → safely fits in URL.
-   - The relay has smartDecode — it handles single-encoded AND double-encoded content. Encoding is ALWAYS safe.
-   CHUNK RULES:
-   - Send chunks IN ORDER: chunk=0, then chunk=1, then chunk=2, etc.
-   - The file only appears on disk when the last chunk (chunk=total-1) arrives.
-   - Send ALL chunks back-to-back WITHOUT waiting. Chunks buffer in memory — no 15s wait needed.
-   - Do NOT verify individual chunks. Verify ONCE after the last chunk via grok-read.
+→ Post to coord: "L3-P3: all writes sent"
 
-   DO NOT use grok-create (single URL) for this — it WILL fail because the URL is too long.
-   → Post to coord: "L3-S4: Metrics.tsx chunks sent" (post ONCE after ALL chunks are sent)
+==============================
+PHASE 4 — VERIFY & COMMIT (~8 calls)
+==============================
+Now verify everything and fix any issues.
 
-5. VERIFY METRICS: Call grok-read for src/pages/Metrics.tsx
-   → This is the ONLY verification needed — do NOT verify individual chunks.
-   → Check ALL of these:
-     a) File exists (status: success)
-     b) Contains "export const Metrics"
-     c) Contains "export default Metrics" — this MUST be the last meaningful line
-     d) At least 80 lines of code
-   → If ANY check fails, the file is TRUNCATED. The chunks did not all land.
-     Delete the file: GET {{RELAY_BASE}}/api/grok-delete?project={{PROJECT}}&path=src/pages/Metrics.tsx
-     Then retry step 4 from chunk=0 with ALL chunks. Retry ONCE only.
-   → Post to coord: "L3-S5: Metrics.tsx verified, N lines, has default export"
+4a. VERIFY Metrics.tsx (1 call):
+    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/pages/Metrics.tsx
+    Check ALL of these:
+    - File exists
+    - Contains "export const Metrics"
+    - Contains "export default Metrics"
+    - At least 80 lines
+    → If ANY fail: file is TRUNCATED. Delete it, resend ALL chunks from 3a. Retry ONCE only.
 
-6. UPDATE APP.TSX — USE GROK-CREATE (NOT grok-write):
-   *** WINDOWS LINE ENDING WARNING: The desktop project uses \r\n line endings. ***
-   *** grok-write search/replace WILL FAIL SILENTLY because it sends \n but the file has \r\n. ***
-   *** This is a KNOWN BUG. The ONLY reliable approach for App.tsx is grok-create. ***
+4b. VERIFY App.tsx (1 call):
+    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/App.tsx
+    - Contains "import { Metrics }"
+    - Contains "metrics: Metrics" in PAGES map
+    - File is >900 chars
+    → If broken: rewrite with grok-create again.
 
-   Take the App.tsx content you read in step 2 and modify it:
-   a) Add after the last import line: import { Metrics } from '../pages/Metrics'
-   b) Add to the PAGES map after the last entry: metrics: Metrics (with comma after the previous entry)
+4c. VERIFY Navigation.tsx (1 call):
+    GET {{RELAY_BASE}}/api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
+    - Count occurrences of "'metrics'" — must be EXACTLY 1.
+    - If count > 1: duplicates exist. Read full file, remove duplicates, rewrite with grok-create.
+    - If count = 0: grok-write failed. Read full file, add the metrics entry manually, rewrite with grok-create.
+    - No duplicate Activity imports.
 
-   Then URL-encode the entire updated content and write it:
-   GET {{RELAY_BASE}}/api/grok-create?project={{PROJECT}}&path=src/components/App.tsx&content=ENCODED_FULL_CONTENT
+4d. CONSOLE CHECK (1 call):
+    GET {{RELAY_BASE}}/api/grok-proxy?project={{PROJECT}}&payload=ENCODED_JSON
+    payload: {"actions":[{"type":"get_console_errors","project":"{{PROJECT}}"}]}
+    → Must be 0 errors. If errors: fix before committing.
 
-   The file is ~920 chars raw → ~1500 chars encoded. This fits in a single grok-create URL.
-   → Post to coord: "L3-S6: App.tsx updated via grok-create"
+4e. GIT ADD + COMMIT (2 calls):
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=add&args=.
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=commit&message=L3:%20Add%20Metrics%20page%20with%20routing%20and%20navigation
 
-7. VERIFY APP: grok-read App.tsx
-   → Confirm "import { Metrics }" is present
-   → Confirm "metrics: Metrics" is present in the PAGES map
-   → Confirm the file is >900 chars (if truncated to <100 chars, the write failed — restore and retry)
-   → Post to coord: "L3-S7: App.tsx verified, import yes, route yes"
-   → If EITHER missing: Read the file, fix it with grok-create, verify again. Do NOT continue without both.
+4f. VERIFY COMMIT (1 call):
+    GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=log&count=3
+    → Confirm new commit is present.
 
-8. UPDATE NAVIGATION: Use grok-write to add ONE metrics nav item.
-   *** ONE CALL ONLY. If grok-write returns replacements:0, do NOT retry — move to step 9 and fix there. ***
-   *** If grok-write returns replacements:1, it worked. Do NOT call grok-write again. ***
-   Search for: { id: 'settings', label: 'Settings', icon: Settings }
-   Replace with: { id: 'settings', label: 'Settings', icon: Settings },\n  { id: 'metrics', label: 'Metrics', icon: Activity }
-   This is a SINGLE-LINE search so \r\n line endings do NOT affect it.
-   DO NOT add an import for Activity — it is ALREADY imported.
-   → Post to coord: "L3-S8: Navigation.tsx updated"
+4g. FINAL REVIEW:
+    → Post to coord: "L3 REVIEW: [PASS/FAIL] — Metrics [present/missing/truncated], App [updated/unchanged], Nav [updated/unchanged/duplicates], console [clean/errors]"
 
-9. VERIFY NAVIGATION: grok-read Navigation.tsx
-   → Count how many times "'metrics'" appears in the content. Must be EXACTLY 1.
-   → If count > 1: Grok-write ran multiple times and created duplicates. You MUST fix this:
-     Read the full file, remove ALL duplicate metrics entries (keep only one), then write the
-     corrected full file with grok-create. Verify the fix with another grok-read.
-   → If count = 0: The grok-write in step 8 failed. Use grok-create to write the full Nav file
-     with the metrics entry added manually.
-   → Confirm no duplicate Activity imports.
-   → Post to coord: "L3-S9: Nav verified, metrics entries: [count]"
-
-10. CONSOLE CHECK: Use grok-proxy (raw JSON) + get_console_errors
-    → Post to coord: "L3-S10: console clean" or "L3-S10: console errors: [details]"
-    → If errors: Fix them before continuing. Do NOT commit with errors.
-
-11. PRE-COMMIT SANITY CHECK (IMPORTANT):
-    → grok-read Dashboard.tsx — confirm it does NOT start with "//" (no stale L2 comment headers)
-    → If Dashboard.tsx is corrupted, restore it:
-      GET {{RELAY_BASE}}/api/grok-git?project={{PROJECT}}&action=checkout&paths=src/pages/Dashboard.tsx
-    → grok-git status — confirm at least these files are modified/new: App.tsx, Navigation.tsx, Metrics.tsx
-    → Post to coord: "L3-S11: pre-commit OK" or "L3-S11: pre-commit PROBLEM: [details]"
-
-12. GIT ADD: /api/grok-git?project={{PROJECT}}&action=add&args=.
-    → Post to coord: "L3-S12: git add done"
-
-13. GIT COMMIT: /api/grok-git?project={{PROJECT}}&action=commit&message=L3:%20Add%20Metrics%20page%20with%20routing%20and%20navigation
-    → CHECK the response. If "nothing to commit": something went wrong.
-    → Post to coord: "L3-S13: committed [hash]" or "L3-S13: FAILED: [reason]"
-
-14. VERIFY COMMIT: grok-git log&count=3 → confirm hash is present
-    → Post to coord: "L3-S14: commit verified"
-
-15. FINAL REVIEW: Post to coord:
-    "L3 REVIEW: [PASS/FAIL] — Metrics [present/missing], App [updated/unchanged], Nav [updated/unchanged], console [clean/errors]"
-
-    *** TEST IS NOW DONE. STOP. DO NOT MAKE ANY MORE BROWSE_PAGE CALLS. ***
-    *** DO NOT RETRY ANY STEPS. DO NOT WRITE ANY MORE FILES. YOU ARE FINISHED. ***
+    *** TEST IS NOW DONE. STOP. NO MORE BROWSE_PAGE CALLS. ***
 
 === PASS CRITERIA ===
-- All coord notes posted (L3-S0 through L3-S14 + review)
-- Metrics.tsx exists with real component code (80+ lines, named + default exports)
+- Metrics.tsx exists with 80+ lines, named + default exports
 - App.tsx has Metrics import AND metrics entry in PAGES map
 - Navigation.tsx has EXACTLY 1 metrics nav item, no duplicate imports
-- Console is clean
-- Dashboard.tsx is clean (no comment headers)
-- Git commit exists with insertions (not just deletions)
+- Console is clean (0 errors)
+- Git commit exists with insertions
+- Total browse_page calls ≤ 30
 
-=== FAIL CONDITIONS ===
-- Any file missing or unchanged after write
-- App.tsx truncated (<100 chars = truncation failure)
-- Navigation.tsx has >1 metrics entry (= duplicate from parallel grok-write)
-- Dashboard.tsx has comment headers (= stale L2 corruption)
-- Git commit contains only deletions
-- Console errors after edits
-- Coord notes missing
-- MORE THAN 30 browse_page calls used (indicates infinite loop — automatic FAIL)
+=== ENCODING REFERENCE ===
+- All content/search/replace params MUST be URL-encoded (encodeURIComponent)
+- Raw newlines (\n) in URLs are SILENTLY STRIPPED by HTTP — files will be corrupted without encoding
+- The relay has smartDecode — handles both single and double encoding correctly
+- ~500 raw chars → ~850 encoded → fits safely in a 2000-char URL
+- App.tsx is ~920 raw chars → ~1500 encoded → fits in one grok-create URL
+
+=== APPROACH REFERENCE ===
+- Metrics.tsx: grok-create-chunk (too large for single URL)
+- App.tsx: grok-create (full rewrite — grok-write fails due to Windows \r\n line endings)
+- Navigation.tsx: grok-write (single-line search works fine, ONE call only)
+- Activity icon: ALREADY imported in Navigation.tsx — do NOT add duplicate
