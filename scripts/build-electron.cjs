@@ -41,7 +41,7 @@ run('npm install', ELECTRON_DIR);
 const isLinux = process.argv.includes('--linux');
 const platform = isLinux ? '--linux' : '--win --x64';
 console.log(`\n=== Step 4/4: Packaging ${isLinux ? 'Linux' : 'Windows'} app ===`);
-run(`npx --yes electron-builder@latest ${platform}`, ELECTRON_DIR);
+run(`npx electron-builder ${platform}`, ELECTRON_DIR);
 
 console.log('\n=== BUILD COMPLETE ===');
 const outputDir = path.join(ELECTRON_DIR, 'dist-electron');

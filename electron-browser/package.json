@@ -1,7 +1,39 @@
 {
   "name": "guardian-ai-electron",
+  "description": "Guardian AI Desktop Application",
+  "author": "Guardian AI",
   "private": true,
   "version": "1.0.0",
   "type": "commonjs",
-  "main": "src/main.js"
+  "main": "src/main.js",
+  "dependencies": {
+    "electron": "^33.0.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.guardian-ai.desktop",
+    "productName": "Guardian AI",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "src/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Development"
+    }
+  }
 }
