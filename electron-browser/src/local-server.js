@@ -1315,6 +1315,7 @@ const server = http.createServer(async (req, res) => {
     delete fwdHeaders["transfer-encoding"];
     delete fwdHeaders["connection"];
     delete fwdHeaders["keep-alive"];
+    delete fwdHeaders["accept-encoding"];
     const proxyReq = http.request(
       {
         hostname: "127.0.0.1",
@@ -1373,6 +1374,7 @@ const server = http.createServer(async (req, res) => {
     delete assetFwdHeaders["transfer-encoding"];
     delete assetFwdHeaders["connection"];
     delete assetFwdHeaders["keep-alive"];
+    delete assetFwdHeaders["accept-encoding"];
     const proxyReq = http.request(
       {
         hostname: "127.0.0.1",
@@ -1476,6 +1478,7 @@ if (WebSocketServer) {
         socket.pipe(proxySocket);
         proxySocket.pipe(socket);
       });
+      proxySocket.setTimeout(30000, () => { try { proxySocket.destroy(); socket.destroy(); } catch {} });
       proxySocket.on("error", () => { try { socket.destroy(); } catch {} });
       socket.on("error", () => { try { proxySocket.destroy(); } catch {} });
       return;
