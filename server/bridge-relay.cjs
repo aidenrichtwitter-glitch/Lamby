@@ -11,6 +11,7 @@ const pendingRelayRequests = new Map();
 const pendingSandboxRelayRequests = new Map();
 const pendingConsoleLogRequests = new Map();
 const sandboxAuditLog = [];
+let runTestsInFlight = false;
 
 function sendJson(res, obj, status) {
   res.writeHead(status || 200, {
@@ -470,14 +471,50 @@ const server = http.createServer(async (req, res) => {
         grokInteract: "/api/grok-interact?project=NAME&action=ACTION&selector=CSS",
         screenshot: "/api/screenshot/:project?fullPage=true&waitMs=8000",
         commands: "/api/commands",
+        runTests: "/api/run-tests?project=PROJECT_NAME",
       },
       notes: "No authentication required — the relay URL is the secret. All grok-proxy, grok-edit, and grok-interact endpoints are GET-based for use with browse_page. The payload for grok-proxy is base64-encoded JSON: {actions:[{type,project,...}]}. For HTML content in grok-edit, use searchB64 and replaceB64 (base64-encoded) instead of search/replace.",
     });
     return;
   }
 
+  if (pathname === "/api/run-tests") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    if (runTestsInFlight) { sendJson(res, { error: "Test suite already running — try again later" }, 429); return; }
+    const testProject = url.searchParams.get("project") || "groks-app";
+    const { execFile } = require("child_process");
+    const testScript = path.join(__dirname, "..", "scripts", "bridge-test.cjs");
+    if (!fs.existsSync(testScript)) {
+      sendJson(res, { error: "Test script not found at " + testScript }, 404);
+      return;
+    }
+    const selfDomain = process.env.REPLIT_DEV_DOMAIN || process.env.REPL_SLUG
+      ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+      : `localhost:${PORT}`;
+    runTestsInFlight = true;
+    execFile(process.execPath, [testScript], {
+      env: { ...process.env, BRIDGE_RELAY_DOMAIN: selfDomain, BRIDGE_TEST_PROJECT: testProject },
+      timeout: 120000,
+      maxBuffer: 5 * 1024 * 1024,
+    }, (err, stdout, stderr) => {
+      runTestsInFlight = false;
+      if (err && !stdout) {
+        sendJson(res, { error: `Test runner failed: ${err.message}`, stderr: stderr.slice(-2000) }, 500);
+        return;
+      }
+      try {
+        const report = JSON.parse(stdout);
+        const httpStatus = report.tiers && Object.values(report.tiers).some(t => t.failed > 0) ? 200 : 200;
+        sendJson(res, report, httpStatus);
+      } catch {
+        sendJson(res, { error: "Failed to parse test output", stdout: stdout.slice(-2000), stderr: stderr.slice(-2000) }, 500);
+      }
+    });
+    return;
+  }
+
   res.writeHead(404, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ error: "Not found", endpoints: ["/", "/api/grok", "/api/screenshot/:project", "/api/grok-edit", "/api/grok-interact", "/api/grok-proxy", "/api/snapshot-key", "/api/bridge-status", "/api/snapshot/:project", "/api/console-logs", "/api/sandbox/execute", "/api/sandbox/audit-log", "/api/commands"] }));
+  res.end(JSON.stringify({ error: "Not found", endpoints: ["/", "/api/grok", "/api/screenshot/:project", "/api/grok-edit", "/api/grok-interact", "/api/grok-proxy", "/api/snapshot-key", "/api/bridge-status", "/api/snapshot/:project", "/api/console-logs", "/api/sandbox/execute", "/api/sandbox/audit-log", "/api/commands", "/api/run-tests"] }));
 });
 
 server.on("upgrade", (req, socket, head) => {
