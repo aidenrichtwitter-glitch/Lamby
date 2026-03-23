@@ -488,9 +488,10 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, { error: "Test script not found at " + testScript }, 404);
       return;
     }
-    const selfDomain = process.env.REPLIT_DEV_DOMAIN || process.env.REPL_SLUG
-      ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
-      : `localhost:${PORT}`;
+    const selfDomain = process.env.REPLIT_DEV_DOMAIN
+      || (process.env.REPL_SLUG && process.env.REPL_OWNER
+        ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+        : `localhost:${PORT}`);
     runTestsInFlight = true;
     execFile(process.execPath, [testScript], {
       env: { ...process.env, BRIDGE_RELAY_DOMAIN: selfDomain, BRIDGE_TEST_PROJECT: testProject },

@@ -57,8 +57,18 @@ function sandboxExecute(actions) {
   }).then((r) => ({ status: r.status, data: parseJson(r.body) || r.body }));
 }
 
+function extractContent(data) {
+  const results = data?.results || data;
+  const entry = Array.isArray(results) ? results[0] : results;
+  return entry?.data?.content || entry?.content || (typeof entry === "string" ? entry : "");
+}
+
 async function safeDelete(filePath) {
   try { await sandboxExecute([{ type: "delete_file", project: PROJECT, path: filePath }]); } catch {}
+}
+
+async function safeKillProcess(project) {
+  try { await sandboxExecute([{ type: "kill_process", project }]); } catch {}
 }
 
 const results = [];
@@ -171,8 +181,9 @@ async function main() {
     const tier2Tests = [
       "snapshot", "list-tree", "read-file", "write-read-delete-roundtrip",
       "git-status", "grep-search", "console-logs", "screenshot",
-      "detect-structure", "grok-proxy-roundtrip", "grok-proxy-gzip",
+      "detect-structure", "grok-proxy-roundtrip-compare", "grok-proxy-gzip",
       "grok-edit-roundtrip", "grok-edit-base64", "grok-interact",
+      "grok-interact-missing-params",
     ];
     for (const t of tier2Tests) skip(t, 2, "No desktop client connected");
   } else {
@@ -189,8 +200,8 @@ async function main() {
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const d = res.data;
       if (!d || d.error) throw new Error(d?.error || "Empty response");
-      const results = d.results || d;
-      const treeData = Array.isArray(results) ? results[0] : results;
+      const r = d.results || d;
+      const treeData = Array.isArray(r) ? r[0] : r;
       if (!treeData) throw new Error("No tree data returned");
       return `tree returned`;
     });
@@ -212,9 +223,7 @@ async function main() {
           const retryRes = await sandboxExecute([{ type: "read_file", project: PROJECT, path: altPath }]);
           const rd = retryRes.data;
           if (rd && rd.success !== false) {
-            const rr = rd.results || rd;
-            const rf = Array.isArray(rr) ? rr[0] : rr;
-            const c = rf?.data?.content || rf?.content || (typeof rf === "string" ? rf : "");
+            const c = extractContent(rd);
             if (c) {
               const p = parseJson(c);
               return `package.json (at ${altPath}) name=${p?.name || "?"}`;
@@ -224,9 +233,7 @@ async function main() {
         return `read_file works (package.json not at root — project may use nested structure)`;
       }
       if (d && d.error) throw new Error(d.error);
-      const fileResults = d?.results || d;
-      const fileData = Array.isArray(fileResults) ? fileResults[0] : fileResults;
-      const content = fileData?.data?.content || fileData?.content || (typeof fileData === "string" ? fileData : "");
+      const content = extractContent(d);
       if (!content || typeof content !== "string") throw new Error("No file content returned");
       const parsed = parseJson(content);
       return `package.json name=${parsed?.name || "?"}`;
@@ -239,22 +246,17 @@ async function main() {
       try {
         const writeRes = await sandboxExecute([{ type: "write_file", project: PROJECT, path: markerFile, content: marker }]);
         if (writeRes.status !== 200) throw new Error(`Write failed: ${writeRes.status}`);
-        const wd = writeRes.data;
-        if (wd && wd.error) throw new Error(`Write error: ${wd.error}`);
+        if (writeRes.data?.error) throw new Error(`Write error: ${writeRes.data.error}`);
 
         const readRes = await sandboxExecute([{ type: "read_file", project: PROJECT, path: markerFile }]);
         if (readRes.status !== 200) throw new Error(`Read failed: ${readRes.status}`);
-        const rd = readRes.data;
-        if (rd && rd.error) throw new Error(`Read error: ${rd.error}`);
-        const rdResults = rd.results || rd;
-        const fileData = Array.isArray(rdResults) ? rdResults[0] : rdResults;
-        const readContent = fileData?.data?.content || fileData?.content || (typeof fileData === "string" ? fileData : "");
+        if (readRes.data?.error) throw new Error(`Read error: ${readRes.data.error}`);
+        const readContent = extractContent(readRes.data);
         if (!readContent.includes(marker)) throw new Error(`Content mismatch: expected "${marker}", got "${readContent.slice(0, 100)}"`);
 
         const delRes = await sandboxExecute([{ type: "delete_file", project: PROJECT, path: markerFile }]);
         if (delRes.status !== 200) throw new Error(`Delete failed: ${delRes.status}`);
-        const dd = delRes.data;
-        if (dd && dd.error) throw new Error(`Delete error: ${dd.error}`);
+        if (delRes.data?.error) throw new Error(`Delete error: ${delRes.data.error}`);
 
         return `wrote/read/deleted "${markerFile}" with marker ${marker}`;
       } finally {
@@ -265,16 +267,14 @@ async function main() {
     await runTest("git-status", 2, async () => {
       const res = await sandboxExecute([{ type: "git_status", project: PROJECT }]);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
-      const d = res.data;
-      if (d && d.error) throw new Error(d.error);
+      if (res.data?.error) throw new Error(res.data.error);
       return `git status returned`;
     });
 
     await runTest("grep-search", 2, async () => {
       const res = await sandboxExecute([{ type: "grep", project: PROJECT, pattern: "package" }]);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
-      const d = res.data;
-      if (d && d.error) throw new Error(d.error);
+      if (res.data?.error) throw new Error(res.data.error);
       return `grep returned`;
     });
 
@@ -293,26 +293,44 @@ async function main() {
       const d = parseJson(r.body);
       if (!d) throw new Error("Non-JSON response");
       if (d.error) throw new Error(d.error);
-      return `screenshot response received`;
+      const rr = d.results || d;
+      const entry = Array.isArray(rr) ? rr[0] : rr;
+      const hasImage = entry?.data?.screenshotUrl || entry?.data?.screenshot || entry?.data?.captured || entry?.screenshot || entry?.image;
+      if (!hasImage) log("Warning: screenshot response had no image data, but no error either — desktop may not support screenshots");
+      return `screenshot response received${hasImage ? " (image present)" : " (no image data)"}`;
     });
 
     await runTest("detect-structure", 2, async () => {
       const res = await sandboxExecute([{ type: "detect_structure", project: PROJECT }]);
       if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
-      const d = res.data;
-      if (d && d.error) throw new Error(d.error);
+      if (res.data?.error) throw new Error(res.data.error);
       return `structure detection returned`;
     });
 
-    await runTest("grok-proxy-roundtrip", 2, async () => {
+    let directTreeResult = null;
+
+    await runTest("grok-proxy-roundtrip-compare", 2, async () => {
+      const directRes = await sandboxExecute([{ type: "list_tree", project: PROJECT }]);
+      if (directRes.status !== 200) throw new Error(`Direct call failed: ${directRes.status}`);
+      directTreeResult = JSON.stringify(directRes.data);
+
       const payload = JSON.stringify({ actions: [{ type: "list_tree", project: PROJECT }] });
       const b64 = Buffer.from(payload).toString("base64");
       const r = await fetch(`${RELAY_BASE}/api/grok-proxy?payload=${encodeURIComponent(b64)}&project=${encodeURIComponent(PROJECT)}`);
-      if (r.status !== 200) throw new Error(`Expected 200, got ${r.status}`);
-      const d = parseJson(r.body);
-      if (!d) throw new Error("Non-JSON response");
-      if (d.error) throw new Error(d.error);
-      return `proxy list_tree returned`;
+      if (r.status !== 200) throw new Error(`Proxy call failed: ${r.status}`);
+      const proxyData = parseJson(r.body);
+      if (!proxyData) throw new Error("Non-JSON proxy response");
+      if (proxyData.error) throw new Error(proxyData.error);
+
+      const proxyStr = JSON.stringify(proxyData);
+      const directKeys = Object.keys(parseJson(directTreeResult) || {}).sort().join(",");
+      const proxyKeys = Object.keys(proxyData).sort().join(",");
+      if (directKeys !== proxyKeys) {
+        log(`Direct keys: ${directKeys}`);
+        log(`Proxy keys: ${proxyKeys}`);
+        throw new Error(`Proxy response structure differs from direct call: direct=[${directKeys}] proxy=[${proxyKeys}]`);
+      }
+      return `proxy matches direct call (keys: ${proxyKeys})`;
     });
 
     await runTest("grok-proxy-gzip", 2, async () => {
@@ -336,10 +354,7 @@ async function main() {
         const d = parseJson(r.body);
         if (d && d.error) throw new Error(d.error);
         const readRes = await sandboxExecute([{ type: "read_file", project: PROJECT, path: testFile }]);
-        const rd = readRes.data;
-        const rdResults = rd?.results || rd;
-        const fileData = Array.isArray(rdResults) ? rdResults[0] : rdResults;
-        const content = fileData?.data?.content || fileData?.content || (typeof fileData === "string" ? fileData : "");
+        const content = extractContent(readRes.data);
         if (!content.includes("goodbye")) throw new Error(`Edit did not apply: "${content.slice(0, 100)}"`);
         return `edit hello→goodbye verified`;
       } finally {
@@ -358,10 +373,7 @@ async function main() {
         const r = await fetch(`${RELAY_BASE}/api/grok-edit?project=${encodeURIComponent(PROJECT)}&path=${encodeURIComponent(testFile)}&searchB64=${encodeURIComponent(searchB64)}&replaceB64=${encodeURIComponent(replaceB64)}`);
         if (r.status !== 200) throw new Error(`Expected 200, got ${r.status}`);
         const readRes = await sandboxExecute([{ type: "read_file", project: PROJECT, path: testFile }]);
-        const rd = readRes.data;
-        const rdResults = rd?.results || rd;
-        const fileData = Array.isArray(rdResults) ? rdResults[0] : rdResults;
-        const content = fileData?.data?.content || fileData?.content || (typeof fileData === "string" ? fileData : "");
+        const content = extractContent(readRes.data);
         if (!content.includes('class="new"')) throw new Error(`Base64 edit did not apply: "${content.slice(0, 100)}"`);
         return `base64 edit verified`;
       } finally {
@@ -405,15 +417,36 @@ async function main() {
       if (d && d.error && !d.error.includes("already")) throw new Error(d.error);
       const procResults = d?.results || d;
       const procData = Array.isArray(procResults) ? procResults[0] : procResults;
-      const previewPort = procData?.data?.port || procData?.port || null;
+      const port = procData?.data?.port || procData?.port || null;
       previewStarted = true;
-      return `preview started${previewPort ? ` on port ${previewPort}` : ""}`;
+      return `preview process started${port ? ` (port ${port})` : ""} — response indicates process launched`;
     });
 
     if (previewStarted) {
       await runTest("wait-preview-ready", 3, async () => {
-        await new Promise((r) => setTimeout(r, 8000));
-        return `waited 8s for preview startup`;
+        const maxWait = 20000;
+        const pollInterval = 2000;
+        const start = Date.now();
+        let lastStatus = "not started";
+        while (Date.now() - start < maxWait) {
+          try {
+            const logRes = await fetch(`${RELAY_BASE}/api/console-logs?project=${encodeURIComponent(PROJECT)}`);
+            if (logRes.status === 200) {
+              const logData = parseJson(logRes.body);
+              if (logData && Array.isArray(logData.previews)) {
+                for (const p of logData.previews) {
+                  const output = (p.stdout || "") + (p.stderr || "");
+                  if (output.includes("ready") || output.includes("localhost:") || output.includes("Local:") || output.includes("listening")) {
+                    return `preview ready after ${Date.now() - start}ms (detected ready signal in output)`;
+                  }
+                  lastStatus = output.length > 0 ? `output: ${output.length} chars` : "no output yet";
+                }
+              }
+            }
+          } catch {}
+          await new Promise((r) => setTimeout(r, pollInterval));
+        }
+        return `waited ${maxWait}ms for preview (${lastStatus}) — continuing with tests`;
       });
 
       await runTest("screenshot-running-preview", 3, async () => {
@@ -421,7 +454,10 @@ async function main() {
         if (r.status !== 200) throw new Error(`Expected 200, got ${r.status}`);
         const d = parseJson(r.body);
         if (d && d.error) throw new Error(d.error);
-        return `screenshot captured`;
+        const rr = d?.results || d;
+        const entry = Array.isArray(rr) ? rr[0] : rr;
+        const hasImage = entry?.data?.screenshotUrl || entry?.data?.screenshot || entry?.data?.captured || entry?.screenshot || entry?.image;
+        return `screenshot captured${hasImage ? " (image present)" : ""}`;
       });
 
       await runTest("console-logs-after-preview", 3, async () => {
@@ -430,17 +466,21 @@ async function main() {
         const d = parseJson(r.body);
         if (!d) throw new Error("Non-JSON response");
         if (d.error) throw new Error(d.error);
-        const previewCount = (d.previews || []).length;
-        return `${previewCount} preview(s) with logs`;
+        const previews = d.previews || [];
+        if (previews.length === 0 && !d.message) throw new Error("No preview entries in console logs — preview may not have started");
+        let totalOutput = 0;
+        for (const p of previews) {
+          totalOutput += (p.stdout || "").length + (p.stderr || "").length;
+        }
+        return `${previews.length} preview(s), ${totalOutput} chars of output${totalOutput === 0 ? " (buffer may have been flushed)" : ""}`;
       });
 
       await runTest("inject-error", 3, async () => {
         const brokenContent = "export default function BridgeTest() {\n  return <div>Test</div\n}\n";
         const writeRes = await sandboxExecute([{ type: "write_file", project: PROJECT, path: errorMarkerFile, content: brokenContent }]);
-        const wd = writeRes.data;
-        if (wd && wd.error) throw new Error(wd.error);
-        await new Promise((r) => setTimeout(r, 3000));
-        return `injected syntax error into ${errorMarkerFile}`;
+        if (writeRes.data?.error) throw new Error(writeRes.data.error);
+        await new Promise((r) => setTimeout(r, 5000));
+        return `injected syntax error into ${errorMarkerFile}, waited 5s for HMR`;
       });
 
       await runTest("capture-error-state", 3, async () => {
@@ -448,29 +488,51 @@ async function main() {
         if (r.status !== 200) throw new Error(`Expected 200, got ${r.status}`);
         const d = parseJson(r.body);
         if (!d) throw new Error("Non-JSON response");
-        return `console state captured after error injection`;
+        const previews = d.previews || [];
+        let hasError = false;
+        for (const p of previews) {
+          const combined = ((p.stdout || "") + (p.stderr || "")).toLowerCase();
+          if (combined.includes("error") || combined.includes("err") || combined.includes("syntax") || combined.includes("fail")) {
+            hasError = true;
+          }
+        }
+        return `error state captured${hasError ? " (error detected in logs)" : " (no explicit error text found — may be in HMR overlay only)"}`;
       });
 
       await runTest("fix-error", 3, async () => {
         const fixedContent = "export default function BridgeTest() {\n  return <div>Test</div>;\n}\n";
         const writeRes = await sandboxExecute([{ type: "write_file", project: PROJECT, path: errorMarkerFile, content: fixedContent }]);
-        const wd = writeRes.data;
-        if (wd && wd.error) throw new Error(wd.error);
-        await new Promise((r) => setTimeout(r, 3000));
-        return `fixed syntax error in ${errorMarkerFile}`;
+        if (writeRes.data?.error) throw new Error(writeRes.data.error);
+        await new Promise((r) => setTimeout(r, 5000));
+        return `fixed syntax error in ${errorMarkerFile}, waited 5s for HMR recovery`;
       });
 
       await runTest("verify-recovery", 3, async () => {
-        const r = await fetch(`${RELAY_BASE}/api/console-logs?project=${encodeURIComponent(PROJECT)}`);
-        if (r.status !== 200) throw new Error(`Expected 200, got ${r.status}`);
+        const logRes = await fetch(`${RELAY_BASE}/api/console-logs?project=${encodeURIComponent(PROJECT)}`);
+        if (logRes.status !== 200) throw new Error(`Console logs failed: ${logRes.status}`);
+        const logData = parseJson(logRes.body);
+        if (!logData) throw new Error("Non-JSON console log response");
+
         const screenshotRes = await fetch(`${RELAY_BASE}/api/screenshot/${PROJECT}?waitMs=3000`);
         if (screenshotRes.status !== 200) throw new Error(`Screenshot failed: ${screenshotRes.status}`);
-        return `recovery verified — logs and screenshot captured`;
+        const ssData = parseJson(screenshotRes.body);
+        if (ssData && ssData.error) throw new Error(`Screenshot error: ${ssData.error}`);
+
+        let hasNewErrors = false;
+        for (const p of (logData.previews || [])) {
+          const recent = ((p.stdout || "") + (p.stderr || ""));
+          const last200 = recent.slice(-200).toLowerCase();
+          if (last200.includes("syntax") || last200.includes("unexpected token")) {
+            hasNewErrors = true;
+          }
+        }
+        return `recovery verified — logs and screenshot captured${hasNewErrors ? " (WARNING: residual errors in tail)" : " (clean tail)"}`;
       });
 
       await runTest("cleanup", 3, async () => {
         await safeDelete(errorMarkerFile);
-        return `cleaned up test files`;
+        await safeKillProcess(PROJECT);
+        return `cleaned up test files and stopped preview`;
       });
     } else {
       const tier3Remaining = [
