@@ -291,6 +291,7 @@ function connectToBridgeRelay() {
 
 const previewProcesses = new Map();
 const previewStoppedManually = new Set();
+const recentExitedPreviews = new Map();
 const sandboxAuditLog = [];
 
 const projectPort = (name) => {
@@ -830,6 +831,12 @@ const server = http.createServer(async (req, res) => {
       const pm = detectPmForDir(effectiveProjectDir);
       stripPackageManagerField(effectiveProjectDir);
 
+      const cleanEnv = (extra = {}) => {
+        const e = { ...process.env, ...extra };
+        delete e.ELECTRON_RUN_AS_NODE;
+        return e;
+      };
+
       const hasNodeModules = fs.existsSync(path.join(effectiveProjectDir, "node_modules"));
       if (hasPkg && !hasNodeModules) {
         console.log(`[Preview] Installing dependencies for ${name}...`);
@@ -841,10 +848,12 @@ const server = http.createServer(async (req, res) => {
               timeout: 120000,
               stdio: "pipe",
               shell: true,
-              env: { ...process.env, HUSKY: "0", DISABLE_OPENCOLLECTIVE: "true", ADBLOCK: "1" },
+              env: cleanEnv({ HUSKY: "0", DISABLE_OPENCOLLECTIVE: "true", ADBLOCK: "1" }),
             });
             break;
-          } catch {}
+          } catch (installErr) {
+            console.log(`[Preview] Install cmd failed (${cmd}): ${installErr.message}`);
+          }
         }
       }
 
@@ -856,30 +865,46 @@ const server = http.createServer(async (req, res) => {
       if (isNext) patchNextConfig(effectiveProjectDir);
 
       let devCmd;
+      let detectedCommand = "";
       if (scripts.dev) {
-        devCmd = { cmd: "npx", args: [pm === "npm" ? "npm" : pm, "run", "dev"] };
+        const devScript = scripts.dev || "";
+        const usesVite = devScript.includes("vite") || deps.vite || fs.existsSync(path.join(effectiveProjectDir, "vite.config.ts")) || fs.existsSync(path.join(effectiveProjectDir, "vite.config.js"));
+        if (usesVite) {
+          devCmd = { cmd: "npx", args: [pm === "npm" ? "npm" : pm, "run", "dev", "--", "--port", String(port), "--host", "0.0.0.0"] };
+        } else if (isNext) {
+          devCmd = { cmd: "npx", args: [pm === "npm" ? "npm" : pm, "run", "dev", "--", "--port", String(port)] };
+        } else if (isNuxt) {
+          devCmd = { cmd: "npx", args: [pm === "npm" ? "npm" : pm, "run", "dev", "--", "--port", String(port)] };
+        } else {
+          devCmd = { cmd: "npx", args: [pm === "npm" ? "npm" : pm, "run", "dev"] };
+        }
+        detectedCommand = `${pm} run dev`;
       } else if (deps.vite || fs.existsSync(path.join(effectiveProjectDir, "vite.config.ts")) || fs.existsSync(path.join(effectiveProjectDir, "vite.config.js"))) {
         devCmd = { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", String(port)] };
+        detectedCommand = "vite";
       } else if (isNext) {
         devCmd = { cmd: "npx", args: ["next", "dev", "--port", String(port)] };
+        detectedCommand = "next dev";
       } else if (isNuxt) {
         devCmd = { cmd: "npx", args: ["nuxi", "dev", "--port", String(port)] };
+        detectedCommand = "nuxi dev";
       } else if (scripts.start) {
         devCmd = { cmd: "npx", args: [pm === "npm" ? "npm" : pm, "run", "start"] };
+        detectedCommand = `${pm} run start`;
       } else {
         devCmd = { cmd: "npx", args: ["vite", "--host", "0.0.0.0", "--port", String(port)] };
+        detectedCommand = "vite (fallback)";
       }
 
       devCmd = resolveLocalBin(devCmd, effectiveProjectDir);
 
-      const env = {
-        ...process.env,
+      const env = cleanEnv({
         PORT: String(port),
         HOST: "0.0.0.0",
         BROWSER: "none",
         FORCE_COLOR: "1",
         VITE_CJS_IGNORE_WARNING: "true",
-      };
+      });
 
       console.log(`[Preview] Starting ${name} on port ${port}: ${devCmd.cmd} ${devCmd.args.join(" ")}`);
       const proc = spawn(devCmd.cmd, devCmd.args, {
@@ -892,34 +917,91 @@ const server = http.createServer(async (req, res) => {
 
       const logBuf = { stdout: "", stderr: "" };
       const entry = { process: proc, port, logs: logBuf };
-      proc.stdout?.on("data", (d) => {
-        const chunk = d.toString();
-        logBuf.stdout += chunk;
-        if (logBuf.stdout.length > 20000) logBuf.stdout = logBuf.stdout.slice(-10000);
-        const portMatch = chunk.match(/Local:\s+https?:\/\/localhost:(\d+)/);
-        if (portMatch) {
-          const actualPort = parseInt(portMatch[1], 10);
-          if (actualPort !== entry.port) {
-            console.log(`[Preview] ${name} actual port changed: ${entry.port} → ${actualPort}`);
-            entry.port = actualPort;
+      let portDetected = false;
+      let procExited = false;
+      let procExitCode = null;
+
+      const portPromise = new Promise((resolve) => {
+        const timeout = setTimeout(() => {
+          console.log(`[Preview] ${name} port detection timed out after 20s — using calculated port ${port}`);
+          resolve(port);
+        }, 20000);
+
+        proc.stdout?.on("data", (d) => {
+          const chunk = d.toString();
+          logBuf.stdout += chunk;
+          if (logBuf.stdout.length > 20000) logBuf.stdout = logBuf.stdout.slice(-10000);
+          const portMatch = chunk.match(/(?:Local|localhost|127\.0\.0\.1|0\.0\.0\.0):\s*https?:\/\/[^:]+:(\d+)/i) ||
+                            chunk.match(/listening\s+(?:on\s+)?(?:port\s+)?(\d{4,5})/i) ||
+                            chunk.match(/https?:\/\/localhost:(\d+)/);
+          if (portMatch && !portDetected) {
+            portDetected = true;
+            const actualPort = parseInt(portMatch[1], 10);
+            if (actualPort !== entry.port) {
+              console.log(`[Preview] ${name} actual port: ${actualPort} (calculated was ${entry.port})`);
+              entry.port = actualPort;
+            }
+            clearTimeout(timeout);
+            resolve(actualPort);
           }
-        }
+        });
+        proc.stderr?.on("data", (d) => {
+          const chunk = d.toString();
+          logBuf.stderr += chunk;
+          if (logBuf.stderr.length > 20000) logBuf.stderr = logBuf.stderr.slice(-10000);
+          if (!portDetected) {
+            const portMatch = chunk.match(/(?:Local|localhost|127\.0\.0\.1|0\.0\.0\.0):\s*https?:\/\/[^:]+:(\d+)/i) ||
+                              chunk.match(/listening\s+(?:on\s+)?(?:port\s+)?(\d{4,5})/i) ||
+                              chunk.match(/https?:\/\/localhost:(\d+)/);
+            if (portMatch) {
+              portDetected = true;
+              const actualPort = parseInt(portMatch[1], 10);
+              if (actualPort !== entry.port) {
+                console.log(`[Preview] ${name} actual port (stderr): ${actualPort} (calculated was ${entry.port})`);
+                entry.port = actualPort;
+              }
+              clearTimeout(timeout);
+              resolve(actualPort);
+            }
+          }
+        });
+
+        proc.on("exit", (code) => {
+          procExited = true;
+          procExitCode = code;
+          console.log(`[Preview] ${name} exited with code ${code}`);
+          recentExitedPreviews.set(name, { exitCode: code, stdout: logBuf.stdout.slice(-2000), stderr: logBuf.stderr.slice(-2000), exitedAt: Date.now() });
+          previewProcesses.delete(name);
+          if (!previewStoppedManually.has(name) && code !== 0) {
+            console.log(`[Preview] ${name} crashed. stderr: ${logBuf.stderr.slice(-500)}`);
+          }
+          previewStoppedManually.delete(name);
+          if (!portDetected) {
+            clearTimeout(timeout);
+            resolve(null);
+          }
+        });
       });
-      proc.stderr?.on("data", (d) => { logBuf.stderr += d.toString(); if (logBuf.stderr.length > 20000) logBuf.stderr = logBuf.stderr.slice(-10000); });
 
       previewProcesses.set(name, entry);
 
-      proc.on("exit", (code) => {
-        console.log(`[Preview] ${name} exited with code ${code}`);
-        previewProcesses.delete(name);
-        if (!previewStoppedManually.has(name) && code !== 0) {
-          console.log(`[Preview] ${name} crashed — will not auto-restart`);
-        }
-        previewStoppedManually.delete(name);
-      });
+      const resolvedPort = await portPromise;
 
-      await new Promise(r => setTimeout(r, 2000));
-      sendJson(res, { success: true, name, port, url: `http://localhost:${port}` });
+      if (procExited && !portDetected) {
+        const errSnippet = (logBuf.stderr || logBuf.stdout || "No output captured").slice(-1000);
+        sendJson(res, {
+          success: false,
+          started: false,
+          name,
+          error: `Dev server exited with code ${procExitCode} before becoming ready`,
+          output: errSnippet,
+          detectedCommand,
+        });
+      } else {
+        const finalPort = resolvedPort || port;
+        entry.port = finalPort;
+        sendJson(res, { success: true, name, port: finalPort, url: `http://localhost:${finalPort}`, detectedCommand, packageManager: pm });
+      }
     } catch (err) {
       sendJson(res, { error: err.message }, 500);
     }
@@ -932,9 +1014,26 @@ const server = http.createServer(async (req, res) => {
       const { name } = JSON.parse(await readBody(req));
       const entry = previewProcesses.get(name);
       if (entry) {
-        sendJson(res, { running: true, port: entry.port, url: `http://localhost:${entry.port}` });
+        sendJson(res, {
+          running: true,
+          port: entry.port,
+          url: `http://localhost:${entry.port}`,
+          stdout: (entry.logs.stdout || "").slice(-2000),
+          stderr: (entry.logs.stderr || "").slice(-2000),
+        });
       } else {
-        sendJson(res, { running: false });
+        const recent = recentExitedPreviews.get(name);
+        if (recent && (Date.now() - recent.exitedAt) < 120000) {
+          sendJson(res, {
+            running: false,
+            crashed: true,
+            exitCode: recent.exitCode,
+            stdout: recent.stdout,
+            stderr: recent.stderr,
+          });
+        } else {
+          sendJson(res, { running: false });
+        }
       }
     } catch (err) {
       sendJson(res, { error: err.message }, 500);

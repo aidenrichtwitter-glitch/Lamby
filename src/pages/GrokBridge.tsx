@@ -2071,14 +2071,80 @@ const PreviewFrame = React.forwardRef<HTMLIFrameElement, PreviewFrameProps>(
   ({ previewKey, src, title, previewLogs, activeProject, panelId }, ref) => {
     const [iframeLoaded, setIframeLoaded] = useState(false);
     const [serverDown, setServerDown] = useState(false);
+    const [loadTimedOut, setLoadTimedOut] = useState(false);
+    const [serverOutput, setServerOutput] = useState('');
+    const [elapsedSec, setElapsedSec] = useState(0);
     const checkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
       setIframeLoaded(false);
       setServerDown(false);
+      setLoadTimedOut(false);
+      setServerOutput('');
+      setElapsedSec(0);
       if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
-      return () => { if (checkTimerRef.current) clearTimeout(checkTimerRef.current); };
-    }, [previewKey]);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (tickRef.current) clearInterval(tickRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
+
+      tickRef.current = setInterval(() => setElapsedSec(s => s + 1), 1000);
+
+      timeoutRef.current = setTimeout(() => {
+        setLoadTimedOut(true);
+        if (activeProject) {
+          fetch('/api/projects/preview-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: activeProject }),
+          }).then(r => r.json()).then(data => {
+            if (data.stderr || data.stdout) {
+              setServerOutput((data.stderr || data.stdout || '').slice(-500));
+            }
+            if (!data.running) {
+              setServerOutput(prev => prev || 'Dev server process is not running — it may have crashed before starting.');
+            }
+          }).catch(() => {});
+        }
+      }, 30000);
+
+      pollRef.current = setInterval(() => {
+        if (activeProject) {
+          fetch('/api/projects/preview-info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: activeProject }),
+          }).then(r => r.json()).then(data => {
+            if (!data.running) {
+              setLoadTimedOut(true);
+              if (data.crashed) {
+                setServerOutput(`Dev server crashed (exit code ${data.exitCode}):\n${(data.stderr || data.stdout || '').slice(-500)}`);
+              } else {
+                setServerOutput(data.stderr || data.stdout || 'Dev server exited unexpectedly.');
+              }
+            }
+          }).catch(() => {});
+        }
+      }, 5000);
+
+      return () => {
+        if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if (tickRef.current) clearInterval(tickRef.current);
+        if (pollRef.current) clearInterval(pollRef.current);
+      };
+    }, [previewKey, activeProject]);
+
+    useEffect(() => {
+      if (iframeLoaded) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if (tickRef.current) clearInterval(tickRef.current);
+        if (pollRef.current) clearInterval(pollRef.current);
+        setLoadTimedOut(false);
+      }
+    }, [iframeLoaded]);
 
     const handleIframeLoad = useCallback(() => {
       setIframeLoaded(true);
@@ -2115,11 +2181,30 @@ const PreviewFrame = React.forwardRef<HTMLIFrameElement, PreviewFrameProps>(
           onLoad={handleIframeLoad}
           onError={handleIframeError}
         />
-        {!iframeLoaded && (
+        {!iframeLoaded && !loadTimedOut && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[hsl(220_15%_8%)] z-10" data-testid="preview-loading-overlay">
             <Loader2 className="w-8 h-8 text-primary/60 animate-spin" />
             <span className="text-sm text-muted-foreground/70 font-medium">Loading {activeProject || 'preview'}...</span>
-            <span className="text-[10px] text-muted-foreground/40">Starting dev server & bundling</span>
+            <span className="text-[10px] text-muted-foreground/40">Starting dev server & bundling ({elapsedSec}s)</span>
+          </div>
+        )}
+        {!iframeLoaded && loadTimedOut && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[hsl(220_15%_8%)] z-10 px-6" data-testid="preview-timeout-overlay">
+            <AlertTriangle className="w-10 h-10 text-red-400/80" />
+            <span className="text-sm text-red-300 font-medium">Dev server failed to start</span>
+            <span className="text-[10px] text-muted-foreground/60 text-center max-w-sm">
+              The preview server did not respond within 30 seconds. It may have crashed or failed to install dependencies.
+            </span>
+            {serverOutput && (
+              <pre className="text-[9px] text-red-400/70 bg-black/40 rounded px-3 py-2 max-w-md max-h-32 overflow-auto whitespace-pre-wrap font-mono w-full" data-testid="text-server-output">
+                {serverOutput}
+              </pre>
+            )}
+            {errorCount > 0 && (
+              <span className="text-[10px] text-red-400/80">
+                {errorCount} error{errorCount > 1 ? 's' : ''} in console — check logs below
+              </span>
+            )}
           </div>
         )}
         {serverDown && iframeLoaded && (
