@@ -505,8 +505,8 @@ const server = http.createServer(async (req, res) => {
       }
       try {
         const report = JSON.parse(stdout);
-        const httpStatus = report.tiers && Object.values(report.tiers).some(t => t.failed > 0) ? 200 : 200;
-        sendJson(res, report, httpStatus);
+        const hasFailures = report.tiers && Object.values(report.tiers).some(t => t.failed > 0);
+        sendJson(res, report, hasFailures ? 207 : 200);
       } catch {
         sendJson(res, { error: "Failed to parse test output", stdout: stdout.slice(-2000), stderr: stderr.slice(-2000) }, 500);
       }

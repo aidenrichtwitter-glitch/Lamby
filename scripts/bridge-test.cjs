@@ -400,31 +400,41 @@ async function main() {
 
   console.error(`\n  TIER 3: Full Cycle Simulation\n`);
 
-  if (!desktopConnected) {
+  const tier2Failed = results.filter(r => r.tier === 2 && r.status === "fail").length > 0;
+
+  if (!desktopConnected || tier2Failed) {
+    const skipReason = !desktopConnected ? "No desktop client connected" : "Tier 2 had failures";
     const tier3Tests = [
       "start-preview", "wait-preview-ready", "screenshot-running-preview",
       "console-logs-after-preview", "inject-error", "capture-error-state",
       "fix-error", "verify-recovery", "cleanup",
     ];
-    for (const t of tier3Tests) skip(t, 3, "No desktop client connected");
+    for (const t of tier3Tests) skip(t, 3, skipReason);
   } else {
     let previewStarted = false;
     const errorMarkerFile = "_bridge_error_test.js";
 
     await runTest("start-preview", 3, async () => {
       const res = await sandboxExecute([{ type: "start_process", project: PROJECT, cmd: "npm run dev" }]);
+      if (res.status !== 200) throw new Error(`Expected 200, got ${res.status}`);
       const d = res.data;
       if (d && d.error && !d.error.includes("already")) throw new Error(d.error);
       const procResults = d?.results || d;
       const procData = Array.isArray(procResults) ? procResults[0] : procResults;
-      const port = procData?.data?.port || procData?.port || null;
+      const status = procData?.data?.status || procData?.status || procData?.data?.started;
+      if (d.error && d.error.includes("already")) {
+        previewStarted = true;
+        return `preview already running`;
+      }
+      if (!procData && !d.success) throw new Error("No process data returned from start_process");
       previewStarted = true;
-      return `preview process started${port ? ` (port ${port})` : ""} — response indicates process launched`;
+      const port = procData?.data?.port || procData?.port || null;
+      return `preview started${port ? ` on port ${port}` : ""}`;
     });
 
     if (previewStarted) {
       await runTest("wait-preview-ready", 3, async () => {
-        const maxWait = 20000;
+        const maxWait = 25000;
         const pollInterval = 2000;
         const start = Date.now();
         let lastStatus = "not started";
@@ -444,9 +454,22 @@ async function main() {
               }
             }
           } catch {}
+          try {
+            const ssRes = await fetch(`${RELAY_BASE}/api/screenshot/${PROJECT}?waitMs=2000`);
+            if (ssRes.status === 200) {
+              const ssData = parseJson(ssRes.body);
+              if (ssData && ssData.success) {
+                const rr = ssData.results || ssData;
+                const entry = Array.isArray(rr) ? rr[0] : rr;
+                if (entry?.status === "success" || entry?.data?.url || entry?.data?.port) {
+                  return `preview ready after ${Date.now() - start}ms (confirmed via screenshot endpoint — port ${entry?.data?.port || "?"})`;
+                }
+              }
+            }
+          } catch {}
           await new Promise((r) => setTimeout(r, pollInterval));
         }
-        return `waited ${maxWait}ms for preview (${lastStatus}) — continuing with tests`;
+        throw new Error(`Preview did not become ready within ${maxWait}ms (last status: ${lastStatus})`);
       });
 
       await runTest("screenshot-running-preview", 3, async () => {
@@ -484,19 +507,31 @@ async function main() {
       });
 
       await runTest("capture-error-state", 3, async () => {
-        const r = await fetch(`${RELAY_BASE}/api/console-logs?project=${encodeURIComponent(PROJECT)}`);
-        if (r.status !== 200) throw new Error(`Expected 200, got ${r.status}`);
-        const d = parseJson(r.body);
-        if (!d) throw new Error("Non-JSON response");
-        const previews = d.previews || [];
         let hasError = false;
-        for (const p of previews) {
-          const combined = ((p.stdout || "") + (p.stderr || "")).toLowerCase();
-          if (combined.includes("error") || combined.includes("err") || combined.includes("syntax") || combined.includes("fail")) {
-            hasError = true;
+        let source = "";
+        const r = await fetch(`${RELAY_BASE}/api/console-logs?project=${encodeURIComponent(PROJECT)}`);
+        if (r.status === 200) {
+          const d = parseJson(r.body);
+          if (d) {
+            for (const p of (d.previews || [])) {
+              const combined = ((p.stdout || "") + (p.stderr || "")).toLowerCase();
+              if (combined.includes("error") || combined.includes("syntax") || combined.includes("fail") || combined.includes("unexpected")) {
+                hasError = true;
+                source = "console logs";
+              }
+            }
           }
         }
-        return `error state captured${hasError ? " (error detected in logs)" : " (no explicit error text found — may be in HMR overlay only)"}`;
+        if (!hasError) {
+          const readRes = await sandboxExecute([{ type: "read_file", project: PROJECT, path: errorMarkerFile }]);
+          const content = extractContent(readRes.data);
+          if (content && content.includes("<div>Test</div\n")) {
+            hasError = true;
+            source = "file verification (confirmed broken syntax persists on disk)";
+          }
+        }
+        if (!hasError) throw new Error("No error state detected — neither console logs show errors nor is the broken file present");
+        return `error state confirmed via ${source}`;
       });
 
       await runTest("fix-error", 3, async () => {
@@ -518,15 +553,14 @@ async function main() {
         const ssData = parseJson(screenshotRes.body);
         if (ssData && ssData.error) throw new Error(`Screenshot error: ${ssData.error}`);
 
-        let hasNewErrors = false;
         for (const p of (logData.previews || [])) {
           const recent = ((p.stdout || "") + (p.stderr || ""));
           const last200 = recent.slice(-200).toLowerCase();
           if (last200.includes("syntax") || last200.includes("unexpected token")) {
-            hasNewErrors = true;
+            throw new Error("Residual syntax errors found in log tail after fix — recovery failed");
           }
         }
-        return `recovery verified — logs and screenshot captured${hasNewErrors ? " (WARNING: residual errors in tail)" : " (clean tail)"}`;
+        return `recovery verified — clean log tail and screenshot captured`;
       });
 
       await runTest("cleanup", 3, async () => {
