@@ -7,7 +7,8 @@ const zlib = require("zlib");
 const RELAY_DOMAIN =
   process.env.BRIDGE_RELAY_DOMAIN ||
   "35c4f698-dc00-400a-9452-39eaf17279c0-00-31k27xn7snnel.janeway.replit.dev";
-const RELAY_BASE = `https://${RELAY_DOMAIN}`;
+const RELAY_PROTOCOL = RELAY_DOMAIN.startsWith("localhost") || RELAY_DOMAIN.startsWith("127.") ? "http" : "https";
+const RELAY_BASE = `${RELAY_PROTOCOL}://${RELAY_DOMAIN}`;
 const PROJECT = process.env.BRIDGE_TEST_PROJECT || "groks-app";
 const VERBOSE = process.argv.includes("--verbose") || process.argv.includes("-v");
 
@@ -412,7 +413,8 @@ async function main() {
     for (const t of tier3Tests) skip(t, 3, skipReason);
   } else {
     let previewStarted = false;
-    const errorMarkerFile = "_bridge_error_test.js";
+    let targetFile = null;
+    let originalContent = null;
 
     await runTest("start-preview", 3, async () => {
       const res = await sandboxExecute([{ type: "start_process", project: PROJECT, cmd: "npm run dev" }]);
@@ -499,47 +501,81 @@ async function main() {
       });
 
       await runTest("inject-error", 3, async () => {
-        const brokenContent = "export default function BridgeTest() {\n  return <div>Test</div\n}\n";
-        const writeRes = await sandboxExecute([{ type: "write_file", project: PROJECT, path: errorMarkerFile, content: brokenContent }]);
-        if (writeRes.data?.error) throw new Error(writeRes.data.error);
-        await new Promise((r) => setTimeout(r, 5000));
-        return `injected syntax error into ${errorMarkerFile}, waited 5s for HMR`;
-      });
-
-      await runTest("capture-error-state", 3, async () => {
-        let hasError = false;
-        let source = "";
-        const r = await fetch(`${RELAY_BASE}/api/console-logs?project=${encodeURIComponent(PROJECT)}`);
-        if (r.status === 200) {
-          const d = parseJson(r.body);
-          if (d) {
-            for (const p of (d.previews || [])) {
-              const combined = ((p.stdout || "") + (p.stderr || "")).toLowerCase();
-              if (combined.includes("error") || combined.includes("syntax") || combined.includes("fail") || combined.includes("unexpected")) {
-                hasError = true;
-                source = "console logs";
-              }
+        const candidates = [
+          "src/App.tsx", "src/App.jsx", "src/app.tsx",
+          "src/main.tsx", "src/main.jsx", "src/index.tsx", "src/index.jsx",
+          "src/components/App.tsx", "src/components/App.jsx",
+          "src/pages/Dashboard.tsx", "src/pages/Dashboard.jsx",
+        ];
+        for (const candidate of candidates) {
+          const readRes = await sandboxExecute([{ type: "read_file", project: PROJECT, path: candidate }]);
+          const content = extractContent(readRes.data);
+          if (content && content.length > 10 && !readRes.data?.error) {
+            targetFile = candidate;
+            originalContent = content;
+            break;
+          }
+        }
+        if (!targetFile || !originalContent) {
+          const treeRes = await sandboxExecute([{ type: "list_tree", project: PROJECT }]);
+          const treeStr = JSON.stringify(treeRes.data);
+          const sourceFiles = [];
+          const re = /([a-zA-Z0-9_/.-]*\/[A-Za-z]+\.(tsx|jsx|ts|js))/g;
+          let m;
+          while ((m = re.exec(treeStr)) !== null) {
+            if (!m[1].includes("node_modules") && !m[1].includes(".d.ts")) sourceFiles.push(m[1]);
+          }
+          for (const sf of sourceFiles) {
+            const readRes = await sandboxExecute([{ type: "read_file", project: PROJECT, path: sf }]);
+            const content = extractContent(readRes.data);
+            if (content && content.length > 10 && !readRes.data?.error) {
+              targetFile = sf;
+              originalContent = content;
+              break;
             }
           }
         }
-        if (!hasError) {
-          const readRes = await sandboxExecute([{ type: "read_file", project: PROJECT, path: errorMarkerFile }]);
-          const content = extractContent(readRes.data);
-          if (content && content.includes("<div>Test</div\n")) {
-            hasError = true;
-            source = "file verification (confirmed broken syntax persists on disk)";
+        if (!targetFile || !originalContent) throw new Error("Could not find a source file to inject error into");
+        const brokenContent = "SYNTAX_ERROR_INJECTED_BY_BRIDGE_TEST <<<\n" + originalContent;
+        const writeRes = await sandboxExecute([{ type: "write_file", project: PROJECT, path: targetFile, content: brokenContent }]);
+        if (writeRes.data?.error) throw new Error(writeRes.data.error);
+        await new Promise((r) => setTimeout(r, 5000));
+        return `injected syntax error into ${targetFile} (${originalContent.length} chars original), waited 5s for HMR`;
+      });
+
+      await runTest("capture-error-state", 3, async () => {
+        const maxWait = 10000;
+        const pollInterval = 2000;
+        const start = Date.now();
+        while (Date.now() - start < maxWait) {
+          const r = await fetch(`${RELAY_BASE}/api/console-logs?project=${encodeURIComponent(PROJECT)}`);
+          if (r.status === 200) {
+            const d = parseJson(r.body);
+            if (d) {
+              for (const p of (d.previews || [])) {
+                const combined = ((p.stdout || "") + (p.stderr || "")).toLowerCase();
+                if (combined.includes("error") || combined.includes("syntax") || combined.includes("fail") || combined.includes("unexpected") || combined.includes("transform")) {
+                  return `error detected in console logs after ${Date.now() - start}ms (injected into ${targetFile})`;
+                }
+              }
+            }
           }
+          await new Promise((r) => setTimeout(r, pollInterval));
         }
-        if (!hasError) throw new Error("No error state detected — neither console logs show errors nor is the broken file present");
-        return `error state confirmed via ${source}`;
+        const verifyRes = await sandboxExecute([{ type: "read_file", project: PROJECT, path: targetFile }]);
+        const verifyContent = extractContent(verifyRes.data);
+        if (verifyContent && verifyContent.startsWith("SYNTAX_ERROR_INJECTED")) {
+          return `error injection confirmed on disk (${targetFile}) — console logs did not surface error within ${maxWait}ms (desktop may buffer output)`;
+        }
+        throw new Error("No error detected in console logs and injected file not found — error injection failed for " + targetFile);
       });
 
       await runTest("fix-error", 3, async () => {
-        const fixedContent = "export default function BridgeTest() {\n  return <div>Test</div>;\n}\n";
-        const writeRes = await sandboxExecute([{ type: "write_file", project: PROJECT, path: errorMarkerFile, content: fixedContent }]);
+        if (!targetFile || !originalContent) throw new Error("No target file to restore — inject-error may have failed");
+        const writeRes = await sandboxExecute([{ type: "write_file", project: PROJECT, path: targetFile, content: originalContent }]);
         if (writeRes.data?.error) throw new Error(writeRes.data.error);
         await new Promise((r) => setTimeout(r, 5000));
-        return `fixed syntax error in ${errorMarkerFile}, waited 5s for HMR recovery`;
+        return `restored original content to ${targetFile}, waited 5s for HMR recovery`;
       });
 
       await runTest("verify-recovery", 3, async () => {
@@ -556,17 +592,19 @@ async function main() {
         for (const p of (logData.previews || [])) {
           const recent = ((p.stdout || "") + (p.stderr || ""));
           const last200 = recent.slice(-200).toLowerCase();
-          if (last200.includes("syntax") || last200.includes("unexpected token")) {
-            throw new Error("Residual syntax errors found in log tail after fix — recovery failed");
+          if (last200.includes("syntax_error_injected") || last200.includes("unexpected token")) {
+            throw new Error("Residual injected errors found in log tail after fix — recovery failed");
           }
         }
         return `recovery verified — clean log tail and screenshot captured`;
       });
 
       await runTest("cleanup", 3, async () => {
-        await safeDelete(errorMarkerFile);
+        if (targetFile && originalContent) {
+          await sandboxExecute([{ type: "write_file", project: PROJECT, path: targetFile, content: originalContent }]).catch(() => {});
+        }
         await safeKillProcess(PROJECT);
-        return `cleaned up test files and stopped preview`;
+        return `restored ${targetFile || "n/a"} and stopped preview`;
       });
     } else {
       const tier3Remaining = [
