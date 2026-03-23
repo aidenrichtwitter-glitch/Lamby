@@ -1,309 +1,301 @@
-# Lambda Recursive (Guardian AI)
+<div align="center">
+  <img src="docs/lamby-logo.png" alt="Lamby Logo" width="180" />
+  
+  # Lamby
 
-A self-evolving desktop IDE built with React, Vite, TypeScript, and Electron. Combines AI-powered code generation with a closed error feedback loop, GitHub repo cloning, live preview, and a shared community knowledge base.
+  **Autonomous AI Development Loop for Desktop**
 
-![Lambda Recursive](https://img.shields.io/badge/Lambda-Recursive-blueviolet?style=for-the-badge)
-![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)
-![React](https://img.shields.io/badge/React-61DAFB?style=for-the-badge&logo=react&logoColor=black)
-![Electron](https://img.shields.io/badge/Electron-47848F?style=for-the-badge&logo=electron&logoColor=white)
-![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
+  An Electron-powered desktop IDE that connects to Grok-4 through a WebSocket relay bridge,
+  enabling fully autonomous code generation, error detection, and self-repair cycles.
 
----
+  [![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
+  [![Electron](https://img.shields.io/badge/Electron-33-47848F?style=flat-square&logo=electron&logoColor=white)](https://electronjs.org)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://typescriptlang.org)
+  [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+  [![Vite](https://img.shields.io/badge/Vite-5-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev)
+  [![Grok-4](https://img.shields.io/badge/Grok--4-Powered-000000?style=flat-square&logo=x&logoColor=white)](https://x.ai)
+  [![Platform](https://img.shields.io/badge/platform-Windows-0078D6?style=flat-square&logo=windows&logoColor=white)](https://github.com/aidenrichtwitter-glitch/Lamby/releases)
 
-## What Is This?
+  <br />
+  
+  [Download](#-quick-start) · [Features](#-key-features) · [How It Works](#-how-it-works) · [Build From Source](#-build-from-source) · [Architecture](#-architecture)
 
-Lambda Recursive is a Replit-like development environment that runs on your desktop. You paste AI responses (from Grok, ChatGPT, Claude, etc.) and it:
+</div>
 
-1. **Extracts code blocks** from the AI response with correct file paths
-2. **Applies them to your project** with safety validation and backup
-3. **Runs the project** in a live preview with hot reload
-4. **Captures errors** from the preview console
-5. **Sends errors back to the AI** with full context for a fix
-6. **Repeats** until the project works
-
-The goal is zero-friction AI-assisted development: paste response, apply, see result, fix errors, ship.
-
----
-
-## Features
-
-### AI Bridge
-The main workspace. Embeds Grok, ChatGPT, Claude, GitHub, X, and Perplexity directly in the app (via Electron webview) or opens them in browser tabs (web mode). Supports:
-
-- **Browser Mode**: AI sites embedded as tabs with persistent login sessions
-- **API Mode**: Direct API integration with chat interface
-- **Auto Mode**: Automated context building and response application
-- **Code Extractor**: Parses any AI response into structured code blocks, dependencies, action items, and GitHub URLs
-- **Batch Apply**: One-click applies all code blocks, installs dependencies, and commits to git
-- **Auto-Apply**: Safe changes apply automatically with 5-second undo window
-
-### GitHub Repository Import
-Clone any public GitHub repo directly into a project with one click:
-
-- **Tarball download**: Single HTTP request downloads the entire repo (no file-by-file API calls)
-- **Smart package manager detection**: Detects bun/pnpm/yarn/npm from lockfiles
-- **Framework detection**: Identifies Next.js, Nuxt, Angular, Svelte, Astro, Vue, React
-- **Automatic dependency install**: Runs the correct install command with fallback retry
-- **Auto-detected in AI responses**: GitHub URLs in any Grok/ChatGPT response get "Clone" buttons
-- **Works with GITHUB_TOKEN**: Set the env var for private repos and higher rate limits
-
-### Live Preview System
-Every project gets its own dev server with:
-
-- **Framework-aware startup**: Detects the correct dev command from package.json scripts and dependencies
-- **Package manager-aware**: Uses pnpm/yarn/bun/npm based on lockfile presence
-- **Embedded preview**: Split-view iframe alongside the AI browser
-- **Console log capture**: Errors, warnings, and logs from the preview are captured and displayed
-- **Error feedback loop**: "Send Logs to Grok" bundles errors + affected file contents into a diagnostic prompt
-- **HMR-first updates**: Normal file writes use Hot Module Replacement; full restart only for config changes
-
-### Ollama Toaster
-A local Ollama instance acts as a dumb, reliable pre/post-processor (temperature 0.0):
-
-- **Pre-Grok**: Analyzes preview errors + file tree to select only relevant files for context
-- **Post-Grok**: Extracts structured code blocks from raw AI responses
-- **Quick Actions**: Suggests context-aware action buttons based on project state
-- **Graceful fallback**: If Ollama isn't running, falls back to regex parsing and heuristics
-
-### Self-Evolution Engine
-The IDE can scan, analyze, and improve its own source code:
-
-- **Recursion loop**: Autonomously scans code, identifies improvements, and applies them
-- **Evolution tracking**: Visualizes capability growth over time
-- **Goal system**: Self-directed goals with autonomous execution
-- **Safety engine**: Validates all changes before applying (balanced brackets, circular imports, infinite loops, JSX balance)
-
-### Community Knowledge Base
-Shared GitHub org for publishing and discovering proven builds:
-
-- **Publish**: Push successful builds with `GUARDIAN-META.json` metadata
-- **Search**: Query past builds by keyword, stack, or pattern
-- **Priority system**: Public repos first, proven builds second, fresh start last
-- **Grok decides**: AI makes the final repo selection, no conflicting suggestions
+<br />
 
 ---
+
+<br />
+
+## Overview
+
+Lamby is a desktop application that creates a closed-loop autonomous development environment. It monitors Grok-4's webview for response completion, automatically extracts code blocks, applies them to your project files, takes screenshots of errors, and loops back with context — all without manual intervention.
+
+Think of it as **Cursor or Windsurf, but using Grok-4 through the browser** — fully autonomous, with a WebSocket relay bridge connecting the desktop app to a cloud-hosted relay server.
+
+<br />
+
+<div align="center">
+  <img src="docs/screenshots/bridge-main.png" alt="Lamby Bridge Interface" width="800" />
+  <br />
+  <sub>The Grok Bridge — Lamby's primary interface for autonomous AI development</sub>
+</div>
+
+<br />
+
+## Key Features
+
+<table>
+  <tr>
+    <td width="50%">
+      <h3>Autonomous Development Loop</h3>
+      <ul>
+        <li>Monitors Grok-4 webview for response completion</li>
+        <li>Extracts code blocks and applies them to project files</li>
+        <li>Takes screenshots of errors via CDP/Puppeteer</li>
+        <li>Automatically loops back with error context</li>
+        <li>Runs until the task is done — no babysitting</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>WebSocket Relay Bridge</h3>
+      <ul>
+        <li>Cloud-hosted relay connects desktop to web</li>
+        <li>Raw TLS sockets (no <code>ws</code> library dependency)</li>
+        <li>Auto-reconnect with exponential backoff</li>
+        <li>Bi-directional command execution</li>
+        <li>Snapshot & console log streaming</li>
+      </ul>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <h3>Intelligent Code Extraction</h3>
+      <ul>
+        <li>Parses <code>// file: path/to/file</code> markers</li>
+        <li>Supports full file writes and targeted edits</li>
+        <li>Automatic backup before every write</li>
+        <li>Handles TypeScript, JavaScript, JSON, CSS, HTML</li>
+        <li>Sequential action ordering preservation</li>
+      </ul>
+    </td>
+    <td width="50%">
+      <h3>Project Management</h3>
+      <ul>
+        <li>GitHub repo cloning with automatic setup</li>
+        <li>Live preview with hot reload</li>
+        <li>Multi-project workspace support</li>
+        <li>File tree navigation and editing</li>
+        <li>Package manager auto-detection (npm/yarn/pnpm/bun)</li>
+      </ul>
+    </td>
+  </tr>
+</table>
+
+<br />
+
+<div align="center">
+  <img src="docs/screenshots/desktop-app.png" alt="Lamby Desktop Application" width="800" />
+  <br />
+  <sub>Full desktop application with integrated file management and live preview</sub>
+</div>
+
+<br />
+
+## How It Works
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    LAMBY DESKTOP APP                     │
+│                                                         │
+│  ┌─────────────┐    ┌──────────────┐    ┌────────────┐ │
+│  │  Grok-4     │───▶│ Code Parser  │───▶│  File      │ │
+│  │  Webview    │    │ & Extractor  │    │  Writer    │ │
+│  └──────▲──────┘    └──────────────┘    └─────┬──────┘ │
+│         │                                      │        │
+│         │         ┌──────────────┐              │        │
+│         └─────────│ Error Loop   │◀─────────────┘        │
+│                   │ (Screenshot) │                        │
+│                   └──────────────┘                        │
+│                          │                                │
+│  ┌───────────────────────▼───────────────────────────┐  │
+│  │              LOCAL SERVER (:4999)                   │  │
+│  │         WebSocket Bridge Connector                 │  │
+│  └───────────────────────┬───────────────────────────┘  │
+└──────────────────────────┼───────────────────────────────┘
+                           │ wss://
+                           ▼
+              ┌────────────────────────┐
+              │    RELAY SERVER        │
+              │  (Cloud-hosted)        │
+              │                        │
+              │  Desktop ◀──▶ Browser  │
+              └────────────────────────┘
+```
+
+### The Autonomous Loop
+
+1. **You give Grok a task** — "Build a login page" or "Fix the API routes"
+2. **Grok responds with code** — Lamby detects response completion via DOM monitoring
+3. **Code is extracted** — The parser identifies `// file:` blocks and edit commands
+4. **Files are written** — Code is applied to your project with automatic backups
+5. **Results are checked** — Screenshots capture any errors or the running app
+6. **Loop continues** — Errors are fed back to Grok with full context until resolved
+
+<br />
+
+<div align="center">
+  <img src="docs/screenshots/toolbar.png" alt="Lamby Toolbar" width="800" />
+  <br />
+  <sub>Feature-rich toolbar with AI Bridge, Browser Mode, Auto Mode, and Context controls</sub>
+</div>
+
+<br />
 
 ## Quick Start
 
-### Web Mode (Browser Only)
-```bash
+### Download
+
+Grab the latest release from the [Releases page](https://github.com/aidenrichtwitter-glitch/Lamby/releases).
+
+### Build From Source
+
+> Requires [Node.js 18+](https://nodejs.org) — the build script auto-downloads all other dependencies
+
+```powershell
 # Clone the repo
-git clone https://github.com/AidenRichTwitter-Glitch/guardian-ai.git
-cd guardian-ai
+git clone https://github.com/aidenrichtwitter-glitch/Lamby.git
+cd Lamby
 
 # Install dependencies
 npm install
 
-# Start the dev server
-npm run dev
+# Build the Windows installer
+npm run build
+
+# Output: exe/Lamby-Setup.exe
 ```
-Open `http://localhost:5000` in your browser. AI sites open in new tabs instead of embedded webviews.
 
-### Desktop Mode (Full Experience)
-```bash
-# Install main dependencies
-npm install
+### Development Mode
 
-# Install Electron dependencies
-cd electron-browser && npm install && cd ..
-
-# Start Vite + Electron together
+```powershell
+# Run the full desktop experience (Vite + Electron + Bridge)
 npm run electron:dev
-```
-This gives you embedded AI browsers with persistent login, file system access, git integration, and the full apply pipeline.
 
-### Desktop Build
-```bash
-npm run electron:build
+# Or web-only mode
+npx vite
 ```
 
----
+<br />
 
 ## Architecture
 
-```
-src/
-  pages/
-    GrokBridge.tsx          # AI Bridge - main workspace
-    Index.tsx               # Self-recursion IDE view
-    Evolution.tsx           # Evolution visualization
-    PatternAnalysis.tsx     # Evolution cycle analysis
-  components/
-    ProjectExplorer.tsx     # File tree + GitHub import UI
-    FileEditor.tsx          # Monaco editor for hand-editing
-    LogsPanel.tsx           # Preview console log capture
-    CodeViewer.tsx          # Code display with syntax highlighting
-    AIChat.tsx              # API mode chat interface
-    SettingsModal.tsx       # Configuration panel
-    ui/                     # shadcn/ui components
-  lib/
-    code-parser.ts          # AI response parsing (code blocks, deps, actions)
-    ollama-toaster.ts       # Ollama pre/post-processor
-    recursion-engine.ts     # Self-evolution loop
-    evolution-bridge.ts     # Grok-to-Evolution pipeline
-    autonomy-engine.ts      # Autonomous goal execution
-    safety-engine.ts        # Code validation before apply
-    guardian-publish.ts     # Community publish pipeline
-    guardian-knowledge.ts   # Knowledge registry search
-    project-manager.ts      # Project CRUD operations
-    cloud-memory.ts         # Supabase persistence
-    50+ capability modules  # Auto-generated evolution capabilities
+### Tech Stack
 
-electron-browser/
-  src/main.js               # Electron main process
-  src/preload.js            # IPC bridge
-  index.html                # Desktop browser UI
-  package.json              # Electron dependencies
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Frontend** | React 18, TypeScript, Tailwind CSS, shadcn/ui | Desktop UI and bridge interface |
+| **Desktop** | Electron 33 | Native window, webview management, file system access |
+| **Bridge** | Raw TLS WebSockets | Bi-directional relay between desktop and browser |
+| **AI** | Grok-4 (via webview) | Code generation, error analysis, autonomous development |
+| **Build** | Vite 5 | Frontend bundling, HMR, dev server |
+| **Installer** | Inno Setup 6 | Modern Windows installer with branding |
+| **Backend** | Supabase | Database, auth, edge functions |
 
-vite.config.ts              # Dev server + all API endpoints
-```
-
-### API Endpoints (Vite Dev Server)
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/projects/list` | POST | List all projects |
-| `/api/projects/create` | POST | Create empty project |
-| `/api/projects/delete` | POST | Delete project |
-| `/api/projects/import-github` | POST | Clone GitHub repo via tarball |
-| `/api/projects/files` | POST | Get project file tree |
-| `/api/projects/read-file` | POST | Read a project file |
-| `/api/projects/write-file` | POST | Write a project file |
-| `/api/projects/preview` | POST | Start dev server for project |
-| `/api/projects/stop-preview` | POST | Stop project dev server |
-| `/api/projects/restart-preview` | POST | Restart project dev server |
-| `/api/projects/install-deps` | POST | Install npm packages |
-| `/api/projects/run-command` | POST | Run whitelisted shell command |
-| `/api/programs/install` | POST | Install system programs |
-
----
-
-## How the AI Loop Works
+### Project Structure
 
 ```
-User pastes AI response
-        |
-   Code Extractor parses:
-   - Code blocks (with file paths)
-   - Dependencies (npm/yarn/pnpm/bun)
-   - Action items (env vars, commands)
-   - GitHub URLs (clone buttons)
-        |
-   Safety Engine validates:
-   - Balanced brackets
-   - No circular imports
-   - No infinite loops
-   - Import resolution
-   - Package reference check
-        |
-   Apply (with backup):
-   - Write files to project
-   - Install dependencies
-   - Run action items
-        |
-   Live Preview:
-   - Dev server starts/HMR reloads
-   - Console captures errors
-        |
-   If errors detected:
-   - "Diagnose & Fix" button appears
-   - Bundles errors + file contents + context
-   - Copies diagnostic prompt to clipboard
-        |
-   Paste into AI -> Get fix -> Repeat
+Lamby/
+├── electron-browser/          # Electron desktop app
+│   ├── src/
+│   │   ├── main.js            # Electron main process
+│   │   ├── local-server.js    # Bridge connector & HTTP API
+│   │   └── grok-ipc-handlers.js  # Grok webview automation
+│   └── build/                 # Installer assets (icons, ISS script)
+├── src/                       # React frontend
+│   ├── pages/
+│   │   └── GrokBridge.tsx     # Primary bridge interface
+│   ├── lib/
+│   │   ├── code-parser.ts     # Code block extraction engine
+│   │   └── evolution-bridge.ts # Self-evolution system
+│   └── components/            # UI components
+├── server/
+│   └── bridge-connector.cjs   # Raw TLS WebSocket connector
+├── scripts/
+│   └── build-electron.cjs     # 5-step build pipeline
+└── public/                    # Static assets
 ```
 
----
+### Bridge Communication
+
+The relay bridge enables real-time communication between the desktop app and any browser client:
+
+| Command | Direction | Description |
+|---------|----------|-------------|
+| `grok-read` | Browser → Desktop | Read file contents from the project |
+| `grok-write` | Browser → Desktop | Write/edit project files |
+| `snapshot-request` | Browser → Desktop | Capture screenshot via CDP |
+| `console-logs-request` | Browser → Desktop | Stream console output |
+| `sandbox-execute-request` | Browser → Desktop | Execute commands on disk |
+| `relay-log` | Both | Diagnostic logging |
+
+<br />
 
 ## Configuration
 
 ### Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_SUPABASE_URL` | Yes | Supabase project URL |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Yes | Supabase anon key |
-| `GITHUB_TOKEN` | No | GitHub PAT for private repos and higher API rate limits |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LAMBY_PORT` | `4999` | Local API server port |
+| `VITE_PORT` | `5000` | Vite dev server port |
+| `PROJECT_DIR` | `~/.guardian-ai/projects` | Project storage directory |
+| `XAI_API` | — | xAI API key (for API mode) |
 
-### Ollama Setup (Optional)
-```bash
-# Install Ollama
-curl -fsSL https://ollama.ai/install.sh | sh
+### Supported Models
 
-# Pull a recommended model
-ollama pull qwen2.5-coder:7b
+| Model | Status | Notes |
+|-------|--------|-------|
+| **Grok-4** | Supported | Primary model, browser mode |
+| Others | — | Not supported |
 
-# The toaster auto-connects to localhost:11434
+<br />
+
+## Build Pipeline
+
+The `npm run build` command executes a 5-step pipeline:
+
 ```
-Configure endpoint URL and model in the settings panel (gear icon).
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18, TypeScript, Tailwind CSS, shadcn/ui |
-| Build | Vite 5 |
-| Desktop | Electron |
-| Editor | Monaco Editor |
-| Animations | Framer Motion |
-| State | TanStack Query, React Router v6 |
-| Database | Supabase (PostgreSQL + Edge Functions) |
-| AI Pre/Post | Ollama (local) |
-| PWA | vite-plugin-pwa |
-
----
-
-## Development
-
-```bash
-# Dev server (web mode)
-npm run dev
-
-# Desktop dev (Electron + Vite)
-npm run electron:dev
-
-# Run tests
-npm test
-
-# Watch mode tests
-npm run test:watch
-
-# Build for production
-npm run build
-
-# Build desktop app
-npm run electron:build
+Step 1/5  →  Vite builds web assets (React app → dist/)
+Step 2/5  →  Copies dist/ into electron-browser/dist/
+Step 3/5  →  Installs Electron dependencies
+Step 4/5  →  electron-builder packages unpacked app
+Step 5/5  →  Inno Setup compiles the installer → exe/Lamby-Setup.exe
 ```
 
-### Testing
-- `src/test/safety-engine.test.ts` - Safety validation tests
-- `src/test/pipeline.test.ts` - Code parser unit tests
-- `src/test/pipeline-e2e.test.ts` - End-to-end theme change test
+<br />
 
----
+## Contributing
 
-## GitHub Import Details
+1. Fork the repo
+2. Create your feature branch (`git checkout -b feature/something-cool`)
+3. Commit your changes (`git commit -m 'Add something cool'`)
+4. Push to the branch (`git push origin feature/something-cool`)
+5. Open a Pull Request
 
-The import system uses GitHub's tarball API for reliable, fast cloning:
-
-1. **Single request**: Downloads entire repo as `.tar.gz` (vs hundreds of individual file requests)
-2. **Extracts with `tar`**: `--strip-components=1` removes the GitHub wrapper directory
-3. **Cleans up**: Removes `node_modules`, `.git`, `.next`, `.turbo`, `dist`, `.cache`
-4. **Detects framework**: Reads `package.json` dependencies to identify the tech stack
-5. **Detects package manager**: Checks for `bun.lockb`, `pnpm-lock.yaml`, `yarn.lock`
-6. **Installs dependencies**: Runs the correct install command with `--ignore-scripts` for security
-7. **Falls back**: If the detected PM fails, retries with `npm install --legacy-peer-deps`
-
-### Supported Frameworks
-Next.js, Nuxt, Angular, Svelte/SvelteKit, Astro, Vue, React (CRA, Vite), vanilla JS/TS
-
-### Preview Command Detection
-Reads `package.json` scripts in order: `dev` -> `start` -> dependency inference -> `vite.config` existence -> fallback to `npx vite`
-
----
+<br />
 
 ## License
 
-MIT
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+<br />
+
+---
+
+<div align="center">
+  <sub>Built with frustration and determination by <a href="https://github.com/aidenrichtwitter-glitch">aidenrichtwitter-glitch</a></sub>
+  <br />
+  <sub>Powered by Grok-4 · Electron · React · TypeScript</sub>
+</div>
