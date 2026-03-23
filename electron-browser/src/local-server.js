@@ -1432,7 +1432,8 @@ if (WebSocketServer) {
       const targetPath = previewWsMatch[2] || "/";
       const proxySocket = net.connect(previewPort, "127.0.0.1", () => {
         const reqLine = `${req.method || "GET"} ${targetPath} HTTP/1.1\r\n`;
-        const headers = Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join("\r\n");
+        const patchedHeaders = { ...req.headers, host: `localhost:${previewPort}` };
+        const headers = Object.entries(patchedHeaders).map(([k, v]) => `${k}: ${v}`).join("\r\n");
         proxySocket.write(reqLine + headers + "\r\n\r\n");
         if (head && head.length) proxySocket.write(head);
         socket.pipe(proxySocket);
