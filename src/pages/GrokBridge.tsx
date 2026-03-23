@@ -2065,10 +2065,11 @@ interface PreviewFrameProps {
   previewLogs: LogEntry[];
   activeProject: string | null;
   panelId?: string;
+  onRetry?: () => void;
 }
 
 const PreviewFrame = React.forwardRef<HTMLIFrameElement, PreviewFrameProps>(
-  ({ previewKey, src, title, previewLogs, activeProject, panelId }, ref) => {
+  ({ previewKey, src, title, previewLogs, activeProject, panelId, onRetry }, ref) => {
     const [iframeLoaded, setIframeLoaded] = useState(false);
     const [serverDown, setServerDown] = useState(false);
     const [loadTimedOut, setLoadTimedOut] = useState(false);
@@ -2204,6 +2205,15 @@ const PreviewFrame = React.forwardRef<HTMLIFrameElement, PreviewFrameProps>(
               <span className="text-[10px] text-red-400/80">
                 {errorCount} error{errorCount > 1 ? 's' : ''} in console — check logs below
               </span>
+            )}
+            {onRetry && (
+              <button
+                onClick={() => { setLoadTimedOut(false); setServerOutput(''); setElapsedSec(0); onRetry(); }}
+                className="mt-1 px-4 py-1.5 rounded bg-primary/20 hover:bg-primary/30 text-primary text-xs font-medium transition-colors"
+                data-testid="button-retry-preview"
+              >
+                Retry
+              </button>
             )}
           </div>
         )}
@@ -7049,6 +7059,7 @@ const GrokBridge: React.FC = () => {
                             previewLogs={panel.logs}
                             panelId={panel.id}
                             activeProject={panel.projectName}
+                            onRetry={startPreview}
                           />
                           {!isActive && (
                             <div

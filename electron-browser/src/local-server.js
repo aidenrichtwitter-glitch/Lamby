@@ -900,6 +900,7 @@ const server = http.createServer(async (req, res) => {
 
       const env = cleanEnv({
         PORT: String(port),
+        VITE_PORT: String(port),
         HOST: "0.0.0.0",
         BROWSER: "none",
         FORCE_COLOR: "1",
@@ -923,9 +924,9 @@ const server = http.createServer(async (req, res) => {
 
       const portPromise = new Promise((resolve) => {
         const timeout = setTimeout(() => {
-          console.log(`[Preview] ${name} port detection timed out after 20s — using calculated port ${port}`);
+          console.log(`[Preview] ${name} port detection timed out after 15s — using calculated port ${port}`);
           resolve(port);
-        }, 20000);
+        }, 15000);
 
         proc.stdout?.on("data", (d) => {
           const chunk = d.toString();
@@ -1000,7 +1001,10 @@ const server = http.createServer(async (req, res) => {
       } else {
         const finalPort = resolvedPort || port;
         entry.port = finalPort;
-        sendJson(res, { success: true, name, port: finalPort, url: `http://localhost:${finalPort}`, detectedCommand, packageManager: pm });
+        const resp = { success: true, name, port: finalPort, url: `http://localhost:${finalPort}`, detectedCommand, packageManager: pm };
+        if (!portDetected && logBuf.stderr) resp.stderr = logBuf.stderr.slice(-1000);
+        if (!portDetected && logBuf.stdout) resp.stdout = logBuf.stdout.slice(-1000);
+        sendJson(res, resp);
       }
     } catch (err) {
       sendJson(res, { error: err.message }, 500);
