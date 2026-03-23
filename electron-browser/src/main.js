@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, clipboard, session, Menu, utilityProcess } = require('electron');
+const { app, BrowserWindow, ipcMain, clipboard, session, Menu } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -53,23 +53,18 @@ function startLocalServer() {
     return;
   }
   log(`Starting local server on port ${LAMBY_PORT} (packaged: ${app.isPackaged})`);
+  const serverEnv = { ...process.env, LAMBY_PORT: String(LAMBY_PORT), PROJECT_DIR: PROJECTS_DIR };
   if (app.isPackaged) {
-    localServerProcess = utilityProcess.fork(serverPath, [], {
-      env: { ...process.env, LAMBY_PORT: String(LAMBY_PORT), PROJECT_DIR: PROJECTS_DIR },
-    });
-    localServerProcess.stdout.on('data', (d) => { try { log(`[local-server] ${d.toString().trim()}`); } catch (_) {} });
-    localServerProcess.stderr.on('data', (d) => { try { logErr(`[local-server] ${d.toString().trim()}`); } catch (_) {} });
-    localServerProcess.on('exit', (code) => { try { log(`[local-server] exited with code ${code}`); } catch (_) {} });
-  } else {
-    localServerProcess = spawn(process.execPath, [serverPath], {
-      env: { ...process.env, LAMBY_PORT: String(LAMBY_PORT), PROJECT_DIR: PROJECTS_DIR },
-      stdio: 'pipe',
-      windowsHide: true,
-    });
-    localServerProcess.stdout.on('data', (d) => { try { log(`[local-server] ${d.toString().trim()}`); } catch (_) {} });
-    localServerProcess.stderr.on('data', (d) => { try { logErr(`[local-server] ${d.toString().trim()}`); } catch (_) {} });
-    localServerProcess.on('exit', (code) => { try { log(`[local-server] exited with code ${code}`); } catch (_) {} });
+    serverEnv.ELECTRON_RUN_AS_NODE = '1';
   }
+  localServerProcess = spawn(process.execPath, [serverPath], {
+    env: serverEnv,
+    stdio: 'pipe',
+    windowsHide: true,
+  });
+  localServerProcess.stdout.on('data', (d) => { try { log(`[local-server] ${d.toString().trim()}`); } catch (_) {} });
+  localServerProcess.stderr.on('data', (d) => { try { logErr(`[local-server] ${d.toString().trim()}`); } catch (_) {} });
+  localServerProcess.on('exit', (code) => { try { log(`[local-server] exited with code ${code}`); } catch (_) {} });
 }
 
 function proxyToLocalServer(method, apiPath, body) {
