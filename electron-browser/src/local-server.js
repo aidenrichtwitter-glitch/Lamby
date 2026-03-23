@@ -921,13 +921,16 @@ const server = http.createServer(async (req, res) => {
         VITE_CJS_IGNORE_WARNING: "true",
       });
 
+      const isWin = process.platform === "win32";
+      const spawnCmd = isWin ? "cmd.exe" : devCmd.cmd;
+      const spawnArgs = isWin ? ["/c", devCmd.cmd, ...devCmd.args] : devCmd.args;
       console.log(`[Preview] Starting ${name} on port ${port}: ${devCmd.cmd} ${devCmd.args.join(" ")}`);
-      const proc = spawn(devCmd.cmd, devCmd.args, {
+      const proc = spawn(spawnCmd, spawnArgs, {
         cwd: effectiveProjectDir,
         env,
         stdio: ["pipe", "pipe", "pipe"],
-        detached: true,
-        shell: process.platform === "win32",
+        detached: !isWin,
+        shell: false,
         windowsHide: true,
       });
 
@@ -1308,23 +1311,40 @@ const server = http.createServer(async (req, res) => {
     }
     const targetPath = previewMatch[2] || "/";
     _activePreviewPort = previewPort;
+    const fwdHeaders = Object.assign({}, req.headers, { host: `localhost:${previewPort}` });
+    delete fwdHeaders["transfer-encoding"];
+    delete fwdHeaders["connection"];
+    delete fwdHeaders["keep-alive"];
     const proxyReq = http.request(
       {
         hostname: "127.0.0.1",
         port: previewPort,
         path: targetPath + (url.search || ""),
         method: req.method,
-        headers: { ...req.headers, host: `localhost:${previewPort}` },
+        headers: fwdHeaders,
+        timeout: 15000,
       },
       (proxyRes) => {
-        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+        const resHeaders = Object.assign({}, proxyRes.headers);
+        delete resHeaders["content-security-policy"];
+        delete resHeaders["x-frame-options"];
+        res.writeHead(proxyRes.statusCode || 200, resHeaders);
         proxyRes.pipe(res, { end: true });
       }
     );
+    proxyReq.on("timeout", () => {
+      proxyReq.destroy();
+      if (!res.headersSent) { res.writeHead(504); res.end("Preview server timeout"); }
+    });
     proxyReq.on("error", () => {
       if (!res.headersSent) { res.writeHead(502); res.end("Preview server not responding"); }
     });
-    req.pipe(proxyReq, { end: true });
+    const hasBody = req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS";
+    if (hasBody) {
+      req.pipe(proxyReq, { end: true });
+    } else {
+      proxyReq.end();
+    }
     return;
   }
 
@@ -1349,23 +1369,37 @@ const server = http.createServer(async (req, res) => {
 
   const PREVIEW_ASSET_PREFIXES = ["/_next/", "/__nextjs", "/__vite", "/@vite/", "/@react-refresh", "/@id/", "/@fs/", "/node_modules/", "/src/", "/favicon.ico", "/opengraph-image", "/apple-touch-icon", "/manifest.json", "/workbox-", "/static/", "/sockjs-node/", "/build/", "/_assets/", "/assets/", "/public/", "/polyfills", "/.vite/", "/hmr", "/__webpack_hmr", "/@tailwindcss/"];
   if (_activePreviewPort && PREVIEW_ASSET_PREFIXES.some(p => pathname.startsWith(p))) {
+    const assetFwdHeaders = Object.assign({}, req.headers, { host: `localhost:${_activePreviewPort}` });
+    delete assetFwdHeaders["transfer-encoding"];
+    delete assetFwdHeaders["connection"];
+    delete assetFwdHeaders["keep-alive"];
     const proxyReq = http.request(
       {
         hostname: "127.0.0.1",
         port: _activePreviewPort,
         path: rawUrl,
         method: req.method,
-        headers: { ...req.headers, host: `localhost:${_activePreviewPort}` },
+        headers: assetFwdHeaders,
+        timeout: 10000,
       },
       (proxyRes) => {
         res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
         proxyRes.pipe(res, { end: true });
       }
     );
+    proxyReq.on("timeout", () => {
+      proxyReq.destroy();
+      if (!res.headersSent) { res.writeHead(504); res.end("Preview asset timeout"); }
+    });
     proxyReq.on("error", () => {
       if (!res.headersSent) { res.writeHead(502); res.end("Preview asset server not responding"); }
     });
-    req.pipe(proxyReq, { end: true });
+    const assetHasBody = req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS";
+    if (assetHasBody) {
+      req.pipe(proxyReq, { end: true });
+    } else {
+      proxyReq.end();
+    }
     return;
   }
 
