@@ -1298,9 +1298,9 @@ const server = http.createServer(async (req, res) => {
   const previewMatch = pathname.match(/^\/__preview\/(\d+)(\/.*)?$/);
   if (previewMatch) {
     const previewPort = parseInt(previewMatch[1], 10);
-    if (previewPort < 1024 || previewPort > 65535) {
+    if (previewPort < 5100 || previewPort > 65535) {
       res.writeHead(400);
-      res.end("Port out of range");
+      res.end("Port out of preview range (5100-65535)");
       return;
     }
     const targetPath = previewMatch[2] || "/";
@@ -1428,7 +1428,7 @@ if (WebSocketServer) {
     const previewWsMatch = req.url && req.url.match(/^\/__preview\/(\d+)(\/.*)?$/);
     if (previewWsMatch) {
       const previewPort = parseInt(previewWsMatch[1], 10);
-      if (previewPort < 1024 || previewPort > 65535) { socket.destroy(); return; }
+      if (previewPort < 5100 || previewPort > 65535) { socket.destroy(); return; }
       const targetPath = previewWsMatch[2] || "/";
       const proxySocket = net.connect(previewPort, "127.0.0.1", () => {
         const reqLine = `${req.method || "GET"} ${targetPath} HTTP/1.1\r\n`;
