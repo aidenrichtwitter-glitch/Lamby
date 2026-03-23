@@ -142,7 +142,7 @@ async function main() {
     if (r.status !== 200) throw new Error(`Expected 200, got ${r.status}`);
     const d = parseJson(r.body);
     if (!d || !Array.isArray(d.commands)) throw new Error(`Bad commands response`);
-    if (d.commands.length < 50) throw new Error(`Expected 50+ commands, got ${d.commands.length}`);
+    if (d.commands.length < 100) throw new Error(`Expected 100+ commands, got ${d.commands.length}`);
     return `${d.total} commands`;
   });
 
@@ -544,7 +544,7 @@ async function main() {
       });
 
       await runTest("capture-error-state", 3, async () => {
-        const maxWait = 10000;
+        const maxWait = 15000;
         const pollInterval = 2000;
         const start = Date.now();
         while (Date.now() - start < maxWait) {
@@ -564,10 +564,10 @@ async function main() {
         }
         const verifyRes = await sandboxExecute([{ type: "read_file", project: PROJECT, path: targetFile }]);
         const verifyContent = extractContent(verifyRes.data);
-        if (verifyContent && verifyContent.startsWith("SYNTAX_ERROR_INJECTED")) {
-          return `error injection confirmed on disk (${targetFile}) — console logs did not surface error within ${maxWait}ms (desktop may buffer output)`;
+        if (!verifyContent || !verifyContent.startsWith("SYNTAX_ERROR_INJECTED")) {
+          throw new Error(`Error injection failed — broken file not found on disk at ${targetFile}`);
         }
-        throw new Error("No error detected in console logs and injected file not found — error injection failed for " + targetFile);
+        throw new Error(`Console logs did not surface compilation error within ${maxWait}ms after injecting syntax error into ${targetFile} (file confirmed broken on disk — desktop output buffering may prevent error capture)`);
       });
 
       await runTest("fix-error", 3, async () => {
