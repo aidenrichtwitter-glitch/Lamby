@@ -1,4 +1,5 @@
 const http = require("http");
+const net = require("net");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -144,6 +145,7 @@ const USER_DATA_DIR = _USER_DATA;
 const PROJECTS_DIR = path.resolve(process.env.PROJECT_DIR || path.join(USER_DATA_DIR, "projects"));
 const BRIDGE_CONFIG_PATH = path.join(USER_DATA_DIR, "bridge-config.json");
 const PORT = parseInt(process.env.LAMBY_PORT || "4999", 10);
+let _activePreviewPort = null;
 
 if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
 
@@ -421,6 +423,10 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
+
+  if (pathname === "/" || pathname === "/index.html") {
+    _activePreviewPort = null;
+  }
 
   if (pathname === "/api/snapshot-key") {
     if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
@@ -1289,12 +1295,39 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  const previewMatch = pathname.match(/^\/__preview\/(\d+)(\/.*)?$/);
+  if (previewMatch) {
+    const previewPort = parseInt(previewMatch[1], 10);
+    if (previewPort < 1024 || previewPort > 65535) {
+      res.writeHead(400);
+      res.end("Port out of range");
+      return;
+    }
+    const targetPath = previewMatch[2] || "/";
+    _activePreviewPort = previewPort;
+    const proxyReq = http.request(
+      {
+        hostname: "127.0.0.1",
+        port: previewPort,
+        path: targetPath + (url.search || ""),
+        method: req.method,
+        headers: { ...req.headers, host: `localhost:${previewPort}` },
+      },
+      (proxyRes) => {
+        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+        proxyRes.pipe(res, { end: true });
+      }
+    );
+    proxyReq.on("error", () => {
+      if (!res.headersSent) { res.writeHead(502); res.end("Preview server not responding"); }
+    });
+    req.pipe(proxyReq, { end: true });
+    return;
+  }
+
   const DIST_DIR = path.join(__dirname, "..", "dist");
   if (fs.existsSync(DIST_DIR)) {
     let filePath = path.join(DIST_DIR, pathname === "/" ? "index.html" : pathname);
-    if (!fs.existsSync(filePath) && !path.extname(filePath)) {
-      filePath = path.join(DIST_DIR, "index.html");
-    }
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       const ext = path.extname(filePath).toLowerCase();
       const MIME = {
@@ -1307,6 +1340,37 @@ const server = http.createServer(async (req, res) => {
       };
       res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
       fs.createReadStream(filePath).pipe(res);
+      return;
+    }
+  }
+
+  const PREVIEW_ASSET_PREFIXES = ["/_next/", "/__nextjs", "/__vite", "/@vite/", "/@react-refresh", "/@id/", "/@fs/", "/node_modules/", "/src/", "/favicon.ico", "/opengraph-image", "/apple-touch-icon", "/manifest.json", "/workbox-", "/static/", "/sockjs-node/", "/build/", "/_assets/", "/assets/", "/public/", "/polyfills", "/.vite/", "/hmr", "/__webpack_hmr", "/@tailwindcss/"];
+  if (_activePreviewPort && PREVIEW_ASSET_PREFIXES.some(p => pathname.startsWith(p))) {
+    const proxyReq = http.request(
+      {
+        hostname: "127.0.0.1",
+        port: _activePreviewPort,
+        path: rawUrl,
+        method: req.method,
+        headers: { ...req.headers, host: `localhost:${_activePreviewPort}` },
+      },
+      (proxyRes) => {
+        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+        proxyRes.pipe(res, { end: true });
+      }
+    );
+    proxyReq.on("error", () => {
+      if (!res.headersSent) { res.writeHead(502); res.end("Preview asset server not responding"); }
+    });
+    req.pipe(proxyReq, { end: true });
+    return;
+  }
+
+  if (fs.existsSync(DIST_DIR)) {
+    const fallbackPath = path.join(DIST_DIR, "index.html");
+    if (fs.existsSync(fallbackPath)) {
+      res.writeHead(200, { "Content-Type": "text/html" });
+      fs.createReadStream(fallbackPath).pipe(res);
       return;
     }
   }
@@ -1360,6 +1424,25 @@ if (WebSocketServer) {
       });
       return;
     }
+
+    const previewWsMatch = req.url && req.url.match(/^\/__preview\/(\d+)(\/.*)?$/);
+    if (previewWsMatch) {
+      const previewPort = parseInt(previewWsMatch[1], 10);
+      if (previewPort < 1024 || previewPort > 65535) { socket.destroy(); return; }
+      const targetPath = previewWsMatch[2] || "/";
+      const proxySocket = net.connect(previewPort, "127.0.0.1", () => {
+        const reqLine = `${req.method || "GET"} ${targetPath} HTTP/1.1\r\n`;
+        const headers = Object.entries(req.headers).map(([k, v]) => `${k}: ${v}`).join("\r\n");
+        proxySocket.write(reqLine + headers + "\r\n\r\n");
+        if (head && head.length) proxySocket.write(head);
+        socket.pipe(proxySocket);
+        proxySocket.pipe(socket);
+      });
+      proxySocket.on("error", () => { try { socket.destroy(); } catch {} });
+      socket.on("error", () => { try { proxySocket.destroy(); } catch {} });
+      return;
+    }
+
     socket.destroy();
   });
 }
