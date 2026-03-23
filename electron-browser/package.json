@@ -28,6 +28,10 @@
       {
         "from": "../server/bridge-connector.cjs",
         "to": "server/bridge-connector.cjs"
+      },
+      {
+        "from": "../server/sandbox-dispatcher.cjs",
+        "to": "server/sandbox-dispatcher.cjs"
       }
     ],
     "win": {

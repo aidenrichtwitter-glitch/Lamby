@@ -34,6 +34,91 @@ console.log(`[Lamby Local] Node ${process.version} | PID ${process.pid} | ${proc
 console.log(`[Lamby Local] CWD: ${process.cwd()}`);
 console.log(`[Lamby Local] Log file: ${LOG_FILE}`);
 
+function _fallbackDetectPmForDir(projDir) {
+  if (fs.existsSync(path.join(projDir, "bun.lockb")) || fs.existsSync(path.join(projDir, "bun.lock"))) return "bun";
+  if (fs.existsSync(path.join(projDir, "pnpm-lock.yaml")) || fs.existsSync(path.join(projDir, "pnpm-workspace.yaml"))) return "pnpm";
+  if (fs.existsSync(path.join(projDir, "yarn.lock"))) return "yarn";
+  return "npm";
+}
+
+function _fallbackBuildPmCommand(pm, action, args = "") {
+  const a = args ? ` ${args}` : "";
+  if (action === "install") {
+    if (pm === "bun") return `npx bun install${a}`;
+    if (pm === "pnpm") return `npx pnpm install --no-frozen-lockfile${a}`;
+    if (pm === "yarn") return `npx yarn install --ignore-engines${a}`;
+    return `npm install --legacy-peer-deps${a}`;
+  }
+  if (action === "run") return `${pm} run${a}`;
+  return `${pm} ${action}${a}`;
+}
+
+function _fallbackBuildInstallCascade(pm) {
+  if (pm === "bun") return ["npx bun install", "npm install --legacy-peer-deps"];
+  if (pm === "pnpm") return ["npx pnpm install --no-frozen-lockfile", "npm install --legacy-peer-deps"];
+  if (pm === "yarn") return ["npx yarn install --ignore-engines", "npm install --legacy-peer-deps"];
+  return ["npm install --legacy-peer-deps", "npm install --legacy-peer-deps --force", "npm install --force --ignore-scripts"];
+}
+
+function _fallbackValidateProjectPath(projectName, filePath, projectsDir) {
+  if (!projectName || /[\/\\]|\.\./.test(projectName) || projectName === '.' || projectName.startsWith('.')) {
+    return { valid: false, resolved: "", error: "Invalid project name" };
+  }
+  const projectDir = path.resolve(projectsDir, projectName);
+  if (!projectDir.startsWith(projectsDir + path.sep) && projectDir !== projectsDir) {
+    return { valid: false, resolved: "", error: "Path traversal blocked" };
+  }
+  if (filePath) {
+    const resolved = path.resolve(projectDir, filePath);
+    if (!resolved.startsWith(projectDir + path.sep) && resolved !== projectDir) {
+      return { valid: false, resolved: "", error: "File path traversal blocked" };
+    }
+    return { valid: true, resolved };
+  }
+  return { valid: true, resolved: projectDir };
+}
+
+function _fallbackGatherProjectSnapshot(projectName, projectsDir) {
+  const projectDir = path.resolve(projectsDir, projectName);
+  if (!fs.existsSync(projectDir)) return `Error: Project "${projectName}" not found.`;
+  const SKIP = new Set(["node_modules", ".cache", "dist", ".git", ".next", ".nuxt", "build"]);
+  const CODE_EXTS = new Set([".ts", ".tsx", ".js", ".jsx", ".json", ".css", ".html", ".py", ".md"]);
+  const files = [];
+  function walk(dir, base) {
+    try {
+      for (const name of fs.readdirSync(dir)) {
+        if (name.startsWith(".") || SKIP.has(name)) continue;
+        const full = path.join(dir, name);
+        const rel = base ? base + "/" + name : name;
+        try {
+          const s = fs.lstatSync(full);
+          if (s.isDirectory()) walk(full, rel);
+          else files.push(rel);
+        } catch {}
+      }
+    } catch {}
+  }
+  walk(projectDir, "");
+  let out = `=== LAMBY PROJECT SNAPSHOT ===\nProject: ${projectName}\n\n=== FILE TREE ===\n`;
+  for (const f of files) out += `- ${f}\n`;
+  out += `\nTotal files: ${files.length}\n\n=== SOURCE FILES ===\n`;
+  let budget = out.length;
+  for (const f of files) {
+    if (budget > 80000) break;
+    const ext = path.extname(f).toLowerCase();
+    if (!CODE_EXTS.has(ext)) continue;
+    try {
+      let content = fs.readFileSync(path.join(projectDir, f), "utf-8");
+      if (content.length > 12000) content = content.substring(0, 12000) + "\n... (truncated)";
+      const block = `\n--- ${f} ---\n${content}\n`;
+      budget += block.length;
+      out += block;
+    } catch {}
+  }
+  out += `\n=== END SNAPSHOT ===\n`;
+  return out;
+}
+
 let executeSandboxActions, gatherProjectSnapshot, validateProjectPath, detectPmForDir, buildPmCommand, buildInstallCascade;
 try {
   const sandbox = require("../../server/sandbox-dispatcher.cjs");
@@ -45,8 +130,13 @@ try {
   buildInstallCascade = sandbox.buildInstallCascade;
   console.log(`[Lamby Local] Loaded sandbox-dispatcher.cjs OK`);
 } catch (e) {
-  console.error(`[Lamby Local] FATAL: Failed to load sandbox-dispatcher.cjs: ${e.message}`);
-  console.error(e.stack);
+  console.warn(`[Lamby Local] sandbox-dispatcher.cjs not found — using built-in fallbacks: ${e.message}`);
+  detectPmForDir = _fallbackDetectPmForDir;
+  buildPmCommand = _fallbackBuildPmCommand;
+  buildInstallCascade = _fallbackBuildInstallCascade;
+  validateProjectPath = _fallbackValidateProjectPath;
+  gatherProjectSnapshot = _fallbackGatherProjectSnapshot;
+  executeSandboxActions = async () => ({ error: "sandbox-dispatcher not available" });
 }
 
 
