@@ -115,6 +115,14 @@ supabase/
 - **NEVER tell Grok to respond with JSON `{"actions":[...]}` format.** That is a dead format. Grok's output rules: (1) READ files via bridge grok-read endpoints, (2) SMALL edits via grok-write search/replace, (3) LARGE file rewrites via `// file: path\n```tsx\n[COMPLETE content]\n``` ` auto-apply blocks. This rule applies to ALL prompt builders: diagnose-fix, error feedback, vision fix.
 - All code changes must be tested and validated for the Electron context.
 - `local-server.js` and `vite.config.ts` must ALWAYS be 1:1 mirrors (IPC handlers in `main.js` are Electron-only — exempt from mirror rule).
+
+## Packaged Exe Architecture
+- In packaged mode, `main.js` loads `http://localhost:4999` (NOT `file://`) — the local server serves the `dist/` static files AND all `/api/` routes from port 4999.
+- `main.js` uses `waitForLocalServer()` to poll the local server's `/health` endpoint before loading the URL, with a `file://` fallback if the server never responds.
+- This means `HashRouter` is NOT needed — the app always loads via HTTP, so `BrowserRouter` works everywhere.
+- All `fetch('/api/...')` calls in the frontend naturally resolve to `localhost:4999/api/...` without needing URL rewriting.
+- The local server has static file serving at the bottom of its route handler, serving `dist/` with proper MIME types and SPA fallback (non-file paths → index.html).
+- Missing routes from vite.config.ts that are NOT available in desktop mode: `/api/grok-responses`, `/api/grok-browse`, `/api/grok-fix`, `/api/validate-file`, `/api/programs/install`, `/api/download-source` — these return 501 "Not available in desktop mode".
 - When making changes to browser-mode IPC handlers in `main.js`, always add visible logging so the user can see what's happening in Electron DevTools.
 - Include `BROWSER_MODE_VERSION` (currently `v26.2`) in both `grok-ipc-handlers.js` and `GrokBridge.tsx` — version mismatch warnings appear in status bar and console when Electron hasn't been rebuilt with latest code.
 - `grok-ipc-handlers.js` is a standalone module exporting `registerGrokIpcHandlers(getWebviewContents?)`. If no getter is passed, it auto-finds the Grok webview via `webContents.getAllWebContents()`. User's `main.js` must `require('./grok-ipc-handlers')` and call `registerGrokIpcHandlers()` after app ready.

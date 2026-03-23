@@ -923,10 +923,193 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pathname === "/api/projects/restart-preview") {
+    if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
+    try {
+      const { name } = JSON.parse(await readBody(req));
+      if (!name) { sendJson(res, { error: "Missing project name" }, 400); return; }
+      const entry = previewProcesses.get(name);
+      if (entry) {
+        const pid = entry.process.pid;
+        if (process.platform === "win32") {
+          try { execSync(`taskkill /pid ${pid} /T /F`, { stdio: "pipe", windowsHide: true }); } catch {}
+        } else {
+          try { process.kill(-pid, 9); } catch {}
+        }
+        try { entry.process.kill("SIGKILL"); } catch {}
+        previewProcesses.delete(name);
+      }
+      await new Promise(r => setTimeout(r, 1000));
+      const fakeReq = { method: "POST", url: "/api/projects/preview", headers: req.headers };
+      const bodyStr = JSON.stringify({ name });
+      fakeReq[Symbol.asyncIterator] = async function* () { yield Buffer.from(bodyStr); };
+      req.url = "/api/projects/preview";
+      req.method = "POST";
+      req._bodyOverride = bodyStr;
+      const projectDir = path.resolve(PROJECTS_DIR, name);
+      if (!fs.existsSync(projectDir)) { sendJson(res, { error: "Project not found" }, 404); return; }
+      sendJson(res, { restarting: true, name });
+    } catch (err) {
+      sendJson(res, { error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pathname === "/api/projects/install-deps") {
+    if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
+    try {
+      const body = JSON.parse(await readBody(req));
+      const name = body.name || body.project;
+      if (!name) { sendJson(res, { error: "Missing project name" }, 400); return; }
+      const projectDir = path.resolve(PROJECTS_DIR, name);
+      if (!fs.existsSync(projectDir)) { sendJson(res, { error: "Project not found" }, 404); return; }
+      const pm = detectPmForDir(projectDir);
+      const cmds = buildInstallCascade(pm);
+      let installed = false;
+      let output = "";
+      for (const cmd of cmds) {
+        try {
+          output = execSync(cmd, { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true, env: { ...process.env, HUSKY: "0" } }).toString();
+          installed = true;
+          break;
+        } catch (e) { output = e.stderr ? e.stderr.toString() : e.message; }
+      }
+      sendJson(res, { success: installed, output: output.slice(0, 2000), pm });
+    } catch (err) {
+      sendJson(res, { error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pathname === "/api/projects/run-command") {
+    if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
+    try {
+      const body = JSON.parse(await readBody(req));
+      const name = body.name || body.project;
+      const command = body.command;
+      if (!name || !command) { sendJson(res, { error: "Missing name or command" }, 400); return; }
+      const projectDir = path.resolve(PROJECTS_DIR, name);
+      if (!fs.existsSync(projectDir)) { sendJson(res, { error: "Project not found" }, 404); return; }
+      const result = execSync(command, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true }).toString();
+      sendJson(res, { success: true, output: result.slice(0, 5000) });
+    } catch (err) {
+      sendJson(res, { success: false, error: err.message, output: err.stderr ? err.stderr.toString().slice(0, 5000) : "" }, 500);
+    }
+    return;
+  }
+
+  if (pathname === "/api/projects/import-github") {
+    if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
+    try {
+      const body = JSON.parse(await readBody(req));
+      const { url: repoUrl, projectName } = body;
+      if (!repoUrl) { sendJson(res, { error: "Missing repo URL" }, 400); return; }
+      const match = repoUrl.match(/github\.com\/([^\/]+)\/([^\/\s#?]+)/);
+      if (!match) { sendJson(res, { error: "Invalid GitHub URL" }, 400); return; }
+      const name = projectName || match[2].replace(/\.git$/, "");
+      const targetDir = path.resolve(PROJECTS_DIR, name);
+      if (fs.existsSync(targetDir)) {
+        execSync(`git pull`, { cwd: targetDir, timeout: 60000, stdio: "pipe" });
+        sendJson(res, { success: true, projectName: name, action: "pulled" });
+      } else {
+        execSync(`git clone --depth 1 ${repoUrl} "${targetDir}"`, { timeout: 120000, stdio: "pipe" });
+        sendJson(res, { success: true, projectName: name, action: "cloned" });
+      }
+    } catch (err) {
+      sendJson(res, { error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pathname === "/api/projects/files-main") {
+    if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
+    sendJson(res, { success: true, files: [] });
+    return;
+  }
+
+  if (pathname === "/api/read-file") {
+    if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
+    try {
+      const { filePath } = JSON.parse(await readBody(req));
+      if (!filePath) { sendJson(res, { success: false, error: "Missing filePath" }, 400); return; }
+      const resolved = path.resolve(PROJECTS_DIR, filePath);
+      const exists = fs.existsSync(resolved);
+      const content = exists ? fs.readFileSync(resolved, "utf-8") : "";
+      sendJson(res, { success: true, exists, content });
+    } catch (err) {
+      sendJson(res, { success: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pathname === "/api/write-file") {
+    if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
+    try {
+      const { filePath, content } = JSON.parse(await readBody(req));
+      if (!filePath || typeof content !== "string") { sendJson(res, { success: false, error: "Missing filePath or content" }, 400); return; }
+      const resolved = path.resolve(PROJECTS_DIR, filePath);
+      const dir = path.dirname(resolved);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      let previousContent = "";
+      if (fs.existsSync(resolved)) previousContent = fs.readFileSync(resolved, "utf-8");
+      fs.writeFileSync(resolved, content, "utf-8");
+      sendJson(res, { success: true, filePath, previousContent, bytesWritten: content.length });
+    } catch (err) {
+      sendJson(res, { success: false, error: err.message }, 500);
+    }
+    return;
+  }
+
+  if (pathname === "/api/bridge-relay-status") {
+    if (req.method !== "GET") { res.writeHead(405); res.end("Method not allowed"); return; }
+    const status = bridgeConnector ? bridgeConnector.getStatus() : { status: "disconnected" };
+    sendJson(res, { status: status.status, relayUrl: status.relayUrl || bridgeConfig.relayUrl || "" });
+    return;
+  }
+
+  if (pathname === "/api/errors/report") {
+    if (req.method !== "POST") { res.writeHead(405); res.end("Method not allowed"); return; }
+    try {
+      const body = JSON.parse(await readBody(req));
+      console.log(`[ErrorReport] ${body.type || "unknown"}: ${(body.message || "").slice(0, 200)}`);
+      sendJson(res, { received: true });
+    } catch (err) {
+      sendJson(res, { received: false }, 500);
+    }
+    return;
+  }
+
+  if (pathname === "/api/validate-file" || pathname === "/api/grok-fix" || pathname === "/api/grok-browse" || pathname === "/api/programs/install" || pathname === "/api/grok-responses" || pathname === "/api/download-source") {
+    sendJson(res, { error: "Not available in desktop mode", desktop: true }, 501);
+    return;
+  }
+
   if (pathname === "/health" || pathname === "/healthz") {
     const connected = bridgeConnector ? bridgeConnector.isConnected() : false;
     sendJson(res, { status: "ok", uptime: process.uptime(), bridge: connected ? "connected" : "disconnected" });
     return;
+  }
+
+  const DIST_DIR = path.join(__dirname, "..", "dist");
+  if (fs.existsSync(DIST_DIR)) {
+    let filePath = path.join(DIST_DIR, pathname === "/" ? "index.html" : pathname);
+    if (!fs.existsSync(filePath) && !path.extname(filePath)) {
+      filePath = path.join(DIST_DIR, "index.html");
+    }
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      const ext = path.extname(filePath).toLowerCase();
+      const MIME = {
+        ".html": "text/html", ".js": "application/javascript", ".css": "text/css",
+        ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg", ".gif": "image/gif", ".svg": "image/svg+xml",
+        ".ico": "image/x-icon", ".woff": "font/woff", ".woff2": "font/woff2",
+        ".ttf": "font/ttf", ".eot": "application/vnd.ms-fontobject",
+        ".map": "application/json", ".webp": "image/webp", ".avif": "image/avif",
+      };
+      res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+      fs.createReadStream(filePath).pipe(res);
+      return;
+    }
   }
 
   res.writeHead(404);

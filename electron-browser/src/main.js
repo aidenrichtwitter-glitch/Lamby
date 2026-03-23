@@ -91,6 +91,31 @@ function proxyToLocalServer(method, apiPath, body) {
   });
 }
 
+function waitForLocalServer(maxWaitMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    const check = () => {
+      const req = http.get(`http://127.0.0.1:${LAMBY_PORT}/health`, (res) => {
+        let data = '';
+        res.on('data', (c) => { data += c; });
+        res.on('end', () => {
+          log(`Local server ready (${Date.now() - start}ms)`);
+          resolve();
+        });
+      });
+      req.on('error', () => {
+        if (Date.now() - start > maxWaitMs) {
+          reject(new Error(`Timeout waiting for local server on port ${LAMBY_PORT}`));
+        } else {
+          setTimeout(check, 200);
+        }
+      });
+      req.setTimeout(2000, () => { req.destroy(); setTimeout(check, 200); });
+    };
+    check();
+  });
+}
+
 function createWindow() {
   Menu.setApplicationMenu(null);
 
@@ -107,9 +132,15 @@ function createWindow() {
   });
 
   if (app.isPackaged) {
-    const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
-    log(`Packaged mode — loading ${indexPath}`);
-    mainWindow.loadFile(indexPath);
+    log(`Packaged mode — loading http://localhost:${LAMBY_PORT} (local server serves dist/)`);
+    waitForLocalServer().then(() => {
+      mainWindow.loadURL(`http://localhost:${LAMBY_PORT}`);
+    }).catch((err) => {
+      logErr(`Local server never became ready: ${err.message}`);
+      const indexPath = path.join(__dirname, '..', 'dist', 'index.html');
+      log(`Falling back to file:// loading: ${indexPath}`);
+      mainWindow.loadFile(indexPath);
+    });
   } else {
     log(`Dev mode — loading http://localhost:${VITE_PORT}`);
     mainWindow.loadURL(`http://localhost:${VITE_PORT}`);
