@@ -7059,7 +7059,7 @@ const GrokBridge: React.FC = () => {
                             previewLogs={panel.logs}
                             panelId={panel.id}
                             activeProject={panel.projectName}
-                            onRetry={startPreview}
+                            onRetry={() => { setActiveProjectState(panel.projectName); persistActiveProject(panel.projectName); setTimeout(() => startPreview(), 50); }}
                           />
                           {!isActive && (
                             <div

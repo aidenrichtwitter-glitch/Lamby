@@ -292,6 +292,12 @@ function connectToBridgeRelay() {
 const previewProcesses = new Map();
 const previewStoppedManually = new Set();
 const recentExitedPreviews = new Map();
+setInterval(() => {
+  const cutoff = Date.now() - 120000;
+  for (const [k, v] of recentExitedPreviews) {
+    if (v.exitedAt < cutoff) recentExitedPreviews.delete(k);
+  }
+}, 60000);
 const sandboxAuditLog = [];
 
 const projectPort = (name) => {
