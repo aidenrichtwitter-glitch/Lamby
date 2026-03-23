@@ -659,6 +659,7 @@ const server = http.createServer(async (req, res) => {
               timeout: 120000,
               stdio: "pipe",
               shell: true,
+              windowsHide: true,
               env: { ...process.env, HUSKY: "0", DISABLE_OPENCOLLECTIVE: "true", ADBLOCK: "1" },
             });
             installed = true;
@@ -860,6 +861,7 @@ const server = http.createServer(async (req, res) => {
               timeout: 120000,
               stdio: "pipe",
               shell: true,
+              windowsHide: true,
               env: cleanEnv({ HUSKY: "0", DISABLE_OPENCOLLECTIVE: "true", ADBLOCK: "1" }),
             });
             break;
@@ -926,6 +928,7 @@ const server = http.createServer(async (req, res) => {
         stdio: ["pipe", "pipe", "pipe"],
         detached: true,
         shell: process.platform === "win32",
+        windowsHide: true,
       });
 
       const logBuf = { stdout: "", stderr: "" };
@@ -1174,7 +1177,7 @@ const server = http.createServer(async (req, res) => {
       let output = "";
       for (const cmd of cmds) {
         try {
-          output = execSync(cmd, { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true, env: { ...process.env, HUSKY: "0" } }).toString();
+          output = execSync(cmd, { cwd: projectDir, timeout: 120000, stdio: "pipe", shell: true, windowsHide: true, env: { ...process.env, HUSKY: "0" } }).toString();
           installed = true;
           break;
         } catch (e) { output = e.stderr ? e.stderr.toString() : e.message; }
@@ -1195,7 +1198,7 @@ const server = http.createServer(async (req, res) => {
       if (!name || !command) { sendJson(res, { error: "Missing name or command" }, 400); return; }
       const projectDir = path.resolve(PROJECTS_DIR, name);
       if (!fs.existsSync(projectDir)) { sendJson(res, { error: "Project not found" }, 404); return; }
-      const result = execSync(command, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true }).toString();
+      const result = execSync(command, { cwd: projectDir, timeout: 60000, stdio: "pipe", shell: true, windowsHide: true }).toString();
       sendJson(res, { success: true, output: result.slice(0, 5000) });
     } catch (err) {
       sendJson(res, { success: false, error: err.message, output: err.stderr ? err.stderr.toString().slice(0, 5000) : "" }, 500);
@@ -1214,10 +1217,10 @@ const server = http.createServer(async (req, res) => {
       const name = projectName || match[2].replace(/\.git$/, "");
       const targetDir = path.resolve(PROJECTS_DIR, name);
       if (fs.existsSync(targetDir)) {
-        execSync(`git pull`, { cwd: targetDir, timeout: 60000, stdio: "pipe" });
+        execSync(`git pull`, { cwd: targetDir, timeout: 60000, stdio: "pipe", windowsHide: true });
         sendJson(res, { success: true, projectName: name, action: "pulled" });
       } else {
-        execSync(`git clone --depth 1 ${repoUrl} "${targetDir}"`, { timeout: 120000, stdio: "pipe" });
+        execSync(`git clone --depth 1 ${repoUrl} "${targetDir}"`, { timeout: 120000, stdio: "pipe", windowsHide: true });
         sendJson(res, { success: true, projectName: name, action: "cloned" });
       }
     } catch (err) {
