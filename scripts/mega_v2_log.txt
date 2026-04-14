@@ -1,0 +1,213 @@
+═══ MEGA SCENE v2: 16 UNIQUE LIGHTWEIGHT MODELS ═══
+
+── anime_girl ──
+15:24:22 | INFO: Data are loaded, start creating Blender stuff
+15:24:22 | INFO: Blender create Mesh node RetopoFlow.001_uv_grid_0
+15:24:22 | INFO: Blender create Mesh node RetopoFlow.018_uv_grid_0
+15:24:22 | INFO: Blender create Mesh node Plane_uv_grid_0
+15:24:22 | INFO: Blender create Mesh node RetopoFlow.017_uv_grid_0
+15:24:23 | INFO: glTF import finished in 0.44s
+  Objects: 17
+  Native: 31.252m → target: 2.5m
+  Placed: 1
+
+── stylized_tree ──
+15:24:23 | INFO: Data are loaded, start creating Blender stuff
+15:24:23 | INFO: Blender create Mesh node Object_0
+15:24:23 | INFO: Blender create Mesh node Object_1
+15:24:23 | INFO: Blender create Mesh node Object_2
+15:24:23 | INFO: Blender create Mesh node Object_3
+15:24:23 | INFO: glTF import finished in 0.01s
+  Objects: 9
+  Native: 6.263m → target: 7.0m
+  Placed: 5
+
+── lowpoly_tree ──
+15:24:23 | INFO: Data are loaded, start creating Blender stuff
+15:24:23 | INFO: Blender create Mesh node Object_0
+15:24:23 | INFO: Blender create Mesh node Object_1
+15:24:23 | INFO: glTF import finished in 0.01s
+  Objects: 6
+  Native: 3.645m → target: 6.0m
+  Placed: 5
+
+── cartoon_tree ──
+15:24:23 | INFO: Data are loaded, start creating Blender stuff
+15:24:23 | INFO: Blender create Mesh node Object_0
+15:24:23 | INFO: Blender create Mesh node Object_1
+15:24:23 | INFO: Blender create Mesh node Object_2
+15:24:23 | INFO: Blender create Mesh node Object_3
+15:24:23 | INFO: glTF import finished in 0.01s
+  Objects: 11
+  Native: 6.557m → target: 5.5m
+  Placed: 4
+
+── fir_tree ──
+15:24:23 | INFO: Data are loaded, start creating Blender stuff
+15:24:23 | INFO: Blender create Mesh node Circle.002_Bark_0
+15:24:23 | INFO: Blender create Mesh node st.001_Bark_0
+15:24:23 | INFO: Blender create Mesh node Plane.007_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.008_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.009_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.010_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.011_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.012_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.013_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.014_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.015_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.016_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.017_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.018_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.019_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.020_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.021_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.022_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.023_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.024_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.025_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.026_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.027_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.028_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.029_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.030_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.031_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.032_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.033_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.034_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.035_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.036_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.037_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.038_Branches_0
+15:24:23 | INFO: Blender create Mesh node Plane.039_Branches_0
+15:24:23 | INFO: glTF import finished in 0.05s
+  Objects: 73
+  Native: 29.886m → target: 6.5m
+  Placed: 4
+
+── palm_tree ──
+15:24:23 | INFO: Data are loaded, start creating Blender stuff
+15:24:23 | INFO: Blender create Mesh node PalmWood_PalmWood_0
+15:24:23 | INFO: Blender create Mesh node PalmLeaf.002_PalmLeaf_0
+15:24:23 | INFO: Blender create Mesh node PalmLeaf.003_PalmLeaf_0
+15:24:23 | INFO: Blender create Mesh node PalmLeaf.004_PalmLeaf_0
+15:24:23 | INFO: Blender create Mesh node PalmLeaf.005_PalmLeaf_0
+15:24:23 | INFO: Blender create Mesh node PalmLeaf.006_PalmLeaf_0
+15:24:23 | INFO: Blender create Mesh node PalmLeaf_PalmLeaf_0
+15:24:23 | INFO: Blender create Mesh node PalmLeaf.001_PalmLeaf_0
+15:24:23 | INFO: glTF import finished in 0.03s
+  Objects: 19
+  Native: 5.447m → target: 5.0m
+  Placed: 2
+
+── mossy_boulder ──
+15:24:23 | INFO: Data are loaded, start creating Blender stuff
+15:24:23 | INFO: Blender create Mesh node Tundra_Mossy_Rock_Tundra_Mossy_Rock_0
+15:24:23 | INFO: Blender create Mesh node Tundra_Mossy_Rock_LOD_01_Tundra_Mossy_Rock_0
+15:24:23 | INFO: Blender create Mesh node Tundra_Mossy_Rock_LOD_02_Tundra_Mossy_Rock_0
+15:24:23 | INFO: Blender create Mesh node Tundra_Mossy_Rock_LOD_03_Tundra_Mossy_Rock_0
+15:24:23 | INFO: glTF import finished in 0.03s
+  Objects: 11
+  Native: 1.363m → target: 0.7m
+  Placed: 5
+
+── fungi_stump ──
+15:24:23 | INFO: Data are loaded, start creating Blender stuff
+15:24:23 | INFO: Blender create Mesh node Model_material0_0
+15:24:23 | INFO: Blender create Mesh node Model_material0_0
+15:24:24 | INFO: Blender create Mesh node Model_material0_0
+15:24:24 | INFO: Blender create Mesh node Model_material0_0
+15:24:24 | INFO: Blender create Mesh node Model_material0_0
+15:24:24 | INFO: Blender create Mesh node Model_material0_0
+15:24:24 | INFO: Blender create Mesh node Model_material0_0
+15:24:24 | INFO: glTF import finished in 0.97s
+  Objects: 11
+  Native: 1.188m → target: 0.5m
+  Placed: 3
+
+── fallen_spruce ──
+15:24:25 | INFO: Data are loaded, start creating Blender stuff
+15:24:25 | INFO: Blender create Mesh node Object_0
+15:24:25 | INFO: Blender create Mesh node Object_1
+15:24:25 | INFO: glTF import finished in 0.07s
+  Objects: 4
+  Native: 1.122m → target: 1.0m
+  Placed: 2
+
+── mossy_trunk ──
+15:24:25 | INFO: Data are loaded, start creating Blender stuff
+15:24:25 | INFO: Blender create Mesh node Object_0
+15:24:25 | INFO: Blender create Mesh node Object_1
+15:24:25 | INFO: Blender create Mesh node Object_2
+15:24:25 | INFO: Blender create Mesh node Object_3
+15:24:25 | INFO: glTF import finished in 0.46s
+  Objects: 6
+  Native: 27.779m → target: 0.8m
+  Placed: 2
+
+── grass_patch ──
+15:24:26 | INFO: Data are loaded, start creating Blender stuff
+15:24:26 | INFO: Blender create Mesh node Grass01-132-polys_Grass-Material_0
+15:24:26 | INFO: Blender create Mesh node Grass02-256-polys_Grass-Material_0
+15:24:26 | INFO: Blender create Mesh node Grass03-212-polys_Grass-Material_0
+15:24:26 | INFO: Blender create Mesh node Grass04-180-polys_Grass-Material_0
+15:24:26 | INFO: Blender create Mesh node Grass05-172-polys_Grass-Material_0
+15:24:26 | INFO: Blender create Mesh node Grass06-180-polys_Grass-Material_0
+15:24:26 | INFO: Blender create Mesh node Plane001_02 - Default_0
+15:24:26 | INFO: glTF import finished in 0.11s
+  Objects: 17
+  Native: 0.049m → target: 0.25m
+  Placed: 10
+
+── street_lamp ──
+15:24:26 | INFO: Data are loaded, start creating Blender stuff
+15:24:26 | INFO: Blender create Mesh node defaultMaterial
+15:24:26 | INFO: glTF import finished in 0.04s
+  Objects: 4
+  Native: 362.797m → target: 3.5m
+  Placed: 2
+
+── fantasy_lantern ──
+15:24:26 | INFO: Data are loaded, start creating Blender stuff
+15:24:26 | INFO: Blender create Mesh node Base__0
+15:24:26 | INFO: Blender create Mesh node Cube__0
+15:24:26 | INFO: Blender create Mesh node Torus__0
+15:24:26 | INFO: Blender create Mesh node Cube.001__0
+15:24:26 | INFO: Blender create Mesh node Cube.003__0
+15:24:26 | INFO: Blender create Mesh node Torus.001__0
+15:24:26 | INFO: Blender create Mesh node Cube.004__0
+15:24:26 | INFO: Blender create Mesh node Torus.002__0
+15:24:26 | INFO: Blender create Mesh node Torus.003__0
+15:24:26 | INFO: Blender create Mesh node Cube.005__0
+15:24:26 | INFO: Blender create Mesh node Cylinder.001__0
+15:24:26 | INFO: Blender create Mesh node Sphere__0
+15:24:26 | INFO: Blender create Mesh node HoldRing__0
+15:24:26 | INFO: Blender create Mesh node Hold__0
+15:24:26 | INFO: Blender create Mesh node Cube.006__0
+15:24:26 | INFO: Blender create Mesh node Torus.004__0
+15:24:26 | INFO: glTF import finished in 0.13s
+  Objects: 36
+  Native: 14.684m → target: 2.0m
+  Placed: 2
+
+── old_bench ──
+15:24:26 | INFO: Data are loaded, start creating Blender stuff
+15:24:26 | INFO: Blender create Mesh node mesh0_bench_0
+15:24:27 | INFO: glTF import finished in 0.05s
+  Objects: 5
+  Native: 0.161m → target: 0.9m
+  Placed: 1
+
+── cute_deer ──
+15:24:27 | INFO: Data are loaded, start creating Blender stuff
+15:24:27 | INFO: Blender create Mesh node Object_0
+15:24:27 | INFO: glTF import finished in 0.04s
+  Objects: 3
+  Native: 4.427m → target: 1.0m
+  Placed: 2
+
+── butterfly ──
+15:24:27 | INFO: Data are loaded, start creating Blender stuff
+15:24:27 | INFO: Blender create Mesh node Object_0
+15:24:27 | INFO: glTF import finished in 0.40s
+00:06.609  cycles           | WARNING HIPEW initialization failed: Error opening HIP dynamic library
+Blender 5.1.0 (hash adfe2921d5f3 built 2026-03-17 01:37:32)

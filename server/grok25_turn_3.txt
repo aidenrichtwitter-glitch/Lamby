@@ -1,0 +1,3 @@
+```json
+{"actions": [{"type": "read_file", "project": "landing-page", "path": "app/css/style.css"}]}
+```

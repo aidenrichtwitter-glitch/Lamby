@@ -1,0 +1,274 @@
+Here is a **simple, self-contained, modern frontend-only SoundCloud downloader** using your preferred stack (**React + Vite + TypeScript + TailwindCSS**).
+
+It uses the public `https://soundcloud-downloader.com` API (or similar free endpoints that wrap yt-dlp / SoundCloud extraction). This avoids needing to run a backend yourself right now. Many people use this approach in 2025–2026 because SoundCloud direct API access for streams is very restricted / frequently broken.
+
+### Important warnings first
+
+- This downloads **public** tracks only (no private / Go+ exclusive without auth).
+- Online converter APIs can stop working, change domains, add captchas, lower quality, or disappear — it's not 100% reliable long-term.
+- For a truly stable solution → run your own backend with **yt-dlp** (like the repo you linked does).
+- 320 kbps is usually achievable, but depends on what the extractor provides.
+
+### Quick start – Frontend-only version
+
+1. Create project (if not already done)
+
+```bash
+npm create vite@latest soundcloud-downloader -- --template react-ts
+cd soundcloud-downloader
+npm install
+```
+
+2. Install Tailwind (if not set up yet)
+
+```bash
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+```
+
+`tailwind.config.js`
+
+```js
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+```
+
+`src/index.css`
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+3. Replace `src/App.tsx` with this:
+
+```tsx
+import { useState, useRef } from 'react';
+import { Download, Loader2, AlertCircle, CheckCircle2, Music } from 'lucide-react';
+
+function App() {
+  const [url, setUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState<'idle' | 'fetching' | 'converting' | 'ready' | 'error'>('idle');
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [title, setTitle] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleDownload = async () => {
+    if (!url.trim()) {
+      setErrorMsg("Please paste a SoundCloud track URL");
+      return;
+    }
+
+    setErrorMsg(null);
+    setLoading(true);
+    setStatus('fetching');
+    setProgress(0);
+    setDownloadUrl(null);
+    setTitle(null);
+
+    try {
+      // Option A: soundcloud-downloader.com (most popular in 2025/26)
+      const apiUrl = `https://soundcloud-downloader.com/api/download?url=${encodeURIComponent(url)}`;
+
+      const res = await fetch(apiUrl);
+      if (!res.ok) throw new Error(`API returned ${res.status}`);
+
+      const data = await res.json();
+
+      if (!data.success || !data.link) {
+        throw new Error(data.message || "Could not get download link");
+      }
+
+      setTitle(data.title || "Downloaded Track");
+      setDownloadUrl(data.link);
+      setStatus('ready');
+      setProgress(100);
+
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || "Something went wrong. Try another track or check if URL is public.");
+      setStatus('error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const reset = () => {
+    setUrl('');
+    setStatus('idle');
+    setDownloadUrl(null);
+    setTitle(null);
+    setErrorMsg(null);
+    setProgress(0);
+    if (inputRef.current) inputRef.current.focus();
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-slate-800/60 backdrop-blur-xl border border-slate-700/50 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="p-8">
+          <div className="flex items-center justify-center gap-3 mb-8">
+            <Music className="w-10 h-10 text-indigo-400" />
+            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
+              SoundCloud Downloader
+            </h1>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <label htmlFor="url" className="block text-sm font-medium text-slate-300 mb-2">
+                Paste SoundCloud track URL
+              </label>
+              <input
+                ref={inputRef}
+                id="url"
+                type="text"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder="https://soundcloud.com/artist/track-name"
+                className="w-full px-4 py-3 bg-slate-900/60 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-white placeholder-slate-500"
+                disabled={loading}
+              />
+            </div>
+
+            {errorMsg && (
+              <div className="flex items-center gap-2 text-red-400 text-sm bg-red-950/40 p-3 rounded-lg border border-red-800/50">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            {title && status === 'ready' && (
+              <div className="text-center text-lg font-medium text-emerald-400">
+                {title}
+              </div>
+            )}
+
+            <div className="relative pt-1">
+              <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-slate-700">
+                <div
+                  style={{ width: `${progress}%` }}
+                  className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center transition-all duration-500 ${
+                    status === 'error' ? 'bg-red-600' :
+                    status === 'ready' ? 'bg-emerald-500' :
+                    'bg-indigo-600'
+                  }`}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {status !== 'ready' ? (
+                <button
+                  onClick={handleDownload}
+                  disabled={loading || !url.trim()}
+                  className="w-full py-3 px-6 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg font-medium transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-900/30"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5" />
+                      Download Track
+                    </>
+                  )}
+                </button>
+              ) : (
+                <>
+                  <a
+                    href={downloadUrl ?? '#'}
+                    download
+                    className="w-full py-3 px-6 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    Download MP3 Now
+                  </a>
+
+                  <button
+                    onClick={reset}
+                    className="w-full py-3 px-6 bg-slate-700 hover:bg-slate-600 rounded-lg font-medium transition"
+                  >
+                    Download Another
+                  </button>
+                </>
+              )}
+            </div>
+
+            <p className="text-xs text-slate-500 text-center pt-4">
+              Public tracks only • No login required • Quality depends on source
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+```
+
+4. Install Lucide icons (used above)
+
+```bash
+npm install lucide-react
+```
+
+5. Run
+
+```bash
+npm run dev
+```
+
+Paste any public SoundCloud track URL → press Download Track → wait → get MP3.
+
+### If the API stops working (very common)
+
+Try replacing the fetch line with one of these alternatives (2025–2026 working ones — test them):
+
+```ts
+// Option B – klickaud.co
+const apiUrl = `https://klickaud.co/api/?url=${encodeURIComponent(url)}`;
+
+// Option C – another popular one
+const apiUrl = `https://api.scdl.app/download?url=${encodeURIComponent(url)}`;
+```
+
+Some require JSON parsing differently — check Network tab in devtools.
+
+### Want the real thing (like mj-schmitz/soundcloud_dl)?
+
+Clone that repo:
+
+```bash
+git clone https://github.com/mj-schmitz/soundcloud_dl.git
+cd soundcloud_dl
+```
+
+Then follow README:
+
+- Install FFmpeg
+- Backend: `cd backend && pip install -r requirements.txt && python app.py`
+- Frontend: `cd ../frontend && npm i && npm run dev`
+
+It uses **your own yt-dlp** → much more reliable + 320kbps guaranteed when possible.
+
+If you want help converting that Flask backend → Node.js/Express + yt-dlp (via child_process), tell me — I can provide a basic port.
+
+Good luck! Enjoy the music. 🎧

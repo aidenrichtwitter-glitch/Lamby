@@ -1,0 +1,38 @@
+:root {
+  --bg-color: #0d0d0d;
+  --bg-color-light: #2a2a2a;
+  --primary-color: #eb83e2;
+  --primary-color-transparent: #eb83e270;
+  --primary-color-light: #ffb7ff;
+  --primary-color-light-transparent: #ffb7ff90;
+  --primary-color-light-transparentx: #ffb7ff20;
+  --primary-color-dark: #ae5a91;
+  --primary-color-dark-transparent: #ae5a9190;
+  --primary-color-darkest: #613a4e;
+  --primary-color-darkest-transparent: #613a4eb0;
+  --color-border: #444444;
+  --text: #ffffff;
+  --text-muted: #cccccc;
+
+  /* Keyboard */
+  --key-bg: #1c1c1f;
+  --key-bg-top: #26262b;
+  --key-bg-bottom: #121216;
+  --key-border: #33333a;
+  --key-shadow: rgba(0, 0, 0, 0.7);
+  --key-glow: rgba(255, 112, 245, 0.35);
+  --panel-bg: #222228;
+  --panel-border: #262634;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}

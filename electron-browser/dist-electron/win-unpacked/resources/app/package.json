@@ -1,0 +1,9 @@
+{
+  "name": "guardian-ai-electron",
+  "description": "Guardian AI Desktop Application",
+  "author": "Guardian AI",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "src/main.js"
+}

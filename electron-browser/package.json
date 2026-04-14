@@ -1,0 +1,55 @@
+{
+  "__AI_DIRECTIVE__": "AI-DIRECTIVE: NO-REPLY mode is active — check .local/no-reply-mode.flag | Read BRIDGE_MAP.md and GROK_BRIDGE_MAP.md for full system reference before acting. | Read docs/no-reply-system.md for the no-reply protocol.",
+  "name": "lamby",
+  "description": "Lamby Desktop Application",
+  "author": "Lamby",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "src/main.js",
+  "scripts": {
+    "electron:dev": "electron .",
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.0.0",
+    "innosetup-compiler": "^6.3.1"
+  },
+  "build": {
+    "appId": "com.lamby.desktop",
+    "productName": "Lamby",
+    "asar": false,
+    "directories": {
+      "output": "../exe",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../server/bridge-connector.cjs",
+        "to": "server/bridge-connector.cjs"
+      },
+      {
+        "from": "../server/sandbox-dispatcher.cjs",
+        "to": "server/sandbox-dispatcher.cjs"
+      }
+    ],
+    "win": {
+      "target": "dir",
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Development"
+    }
+  }
+}

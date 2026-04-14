@@ -1,0 +1,14 @@
+{
+	"name": "GridSound",
+	"short_name": "GS",
+	"description": "A free browser-based digital audio workstation",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "landscape",
+	"background_color": "#222",
+	"theme_color": "#3a5158",
+	"icons": [
+		{ "type": "image/svg", "sizes": "any", "src": "assets/logo/avatar-circle.svg" }
+	]
+}

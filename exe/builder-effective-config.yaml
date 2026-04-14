@@ -1,0 +1,25 @@
+directories:
+  output: ../exe
+  buildResources: build
+appId: com.lamby.desktop
+productName: Lamby
+asar: false
+files:
+  - filter:
+      - src/**/*
+      - dist/**/*
+      - package.json
+extraResources:
+  - from: ../server/bridge-connector.cjs
+    to: server/bridge-connector.cjs
+  - from: ../server/sandbox-dispatcher.cjs
+    to: server/sandbox-dispatcher.cjs
+win:
+  target: dir
+  icon: build/icon.ico
+linux:
+  target:
+    - AppImage
+  icon: build/icon.png
+  category: Development
+electronVersion: 33.4.11

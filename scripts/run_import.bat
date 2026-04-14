@@ -1,0 +1,2 @@
+@echo off
+"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" "C:\Users\Aiden\Desktop\godmode-evidence\mega_v3_framed.blend" --background --python "C:\Users\Aiden\Desktop\Lamby\scripts\fix_scene.py" 2>&1

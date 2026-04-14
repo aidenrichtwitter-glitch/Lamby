@@ -1,0 +1,5 @@
+{
+  "action": "click",
+  "success": true,
+  "error": "No element found for selector: .piano-key"
+}

@@ -1,0 +1,46 @@
+=== LEVEL 0: READ-ONLY BRIDGE TEST ===
+=== OBJECTIVE: Verify bridge connectivity with zero writes ===
+
+This is a READ-ONLY test. You must NOT write, edit, delete, or commit anything.
+Your goal is to prove the bridge is live and you can read project data reliably.
+
+STEPS (do them in order, post to coord after each):
+
+1. DISCOVERY: Call /api/diag?project={{PROJECT}}
+   → Post to coord: "L0-S1: diag returned, relay [online/offline], latency [N]ms"
+
+2. FILE TREE: Call /api/grok-tree?project={{PROJECT}}
+   → Post to coord: "L0-S2: tree has [N] total files, [N] in src/pages/"
+
+3. READ APP: Call /api/grok-read?project={{PROJECT}}&path=src/App.tsx
+   (If that fails, try src/components/App.tsx — check src/index.tsx for the import path)
+   → Post to coord: "L0-S3: App.tsx read OK, [N] chars, [N] page routes found"
+
+4. READ NAVIGATION: Call /api/grok-read?project={{PROJECT}}&path=src/components/Navigation.tsx
+   → Post to coord: "L0-S4: Navigation.tsx read OK, [N] nav items in NAV_ITEMS"
+
+5. GIT STATUS: Call /api/grok-git?project={{PROJECT}}&action=status
+   → Post to coord: "L0-S5: git status [clean/dirty], branch [name]"
+
+6. GIT LOG: Call /api/grok-git?project={{PROJECT}}&action=log&count=3
+   → Post to coord: "L0-S6: latest commit [hash] by [author]: [message]"
+
+7. COORD READBACK: Call /api/coord (no params — read the board)
+   → Post to coord: "L0-S7: coord board has [N] notes, all mine visible"
+
+8. FINAL: Post to coord: "L0 COMPLETE: All 7 read operations succeeded. Bridge is live."
+
+=== PASS CRITERIA ===
+- All 8 coord notes posted (L0-S1 through L0-S7 + final)
+- diag returned valid data with relay online
+- grok-tree returned a file list
+- grok-read returned file contents for App.tsx and Navigation.tsx
+- grok-git returned status and log
+- coord readback shows the notes you posted
+- ZERO writes, edits, or commits made
+
+=== FAIL CONDITIONS ===
+- Any coord note missing
+- Any endpoint returned an error that was not reported
+- Any write/edit/delete/commit was attempted
+- Claimed success without actually calling the endpoints

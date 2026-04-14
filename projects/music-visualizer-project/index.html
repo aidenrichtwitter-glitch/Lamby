@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+<script data-lamby-preview-path>if(window.location.pathname.match(/^\/__preview\/\d+/)){window.history.replaceState(null,'',window.location.pathname.replace(/^\/__preview\/\d+\/?/,'/')+window.location.search+window.location.hash)}</script>
+<script data-lamby-console-bridge>
+(function() {
+  if (window.__lambyConsoleBridge) return;
+  window.__lambyConsoleBridge = true;
+  var origLog = console.log, origWarn = console.warn, origError = console.error, origInfo = console.info;
+  function send(level, args, stack) {
+    try {
+      var serialized = [];
+      for (var i = 0; i < args.length; i++) {
+        try { serialized.push(typeof args[i] === 'object' ? JSON.parse(JSON.stringify(args[i])) : args[i]); }
+        catch(e) { serialized.push(String(args[i])); }
+      }
+      window.parent.postMessage({ type: 'lamby-console-bridge', level: level, args: serialized, stack: stack || null }, '*');
+    } catch(e) {}
+  }
+  console.log = function() { send('log', Array.prototype.slice.call(arguments)); origLog.apply(console, arguments); };
+  console.warn = function() { send('warn', Array.prototype.slice.call(arguments)); origWarn.apply(console, arguments); };
+  console.error = function() { send('error', Array.prototype.slice.call(arguments)); origError.apply(console, arguments); };
+  console.info = function() { send('info', Array.prototype.slice.call(arguments)); origInfo.apply(console, arguments); };
+  window.onerror = function(msg, source, line, column, error) {
+    send('error', [String(msg)], error && error.stack ? error.stack : null);
+    return false;
+  };
+  window.addEventListener('unhandledrejection', function(event) {
+    var reason = event.reason;
+    var msg = reason instanceof Error ? reason.message : String(reason);
+    var stack = reason instanceof Error ? reason.stack : null;
+    send('error', ['Unhandled Promise Rejection: ' + msg], stack);
+  });
+  var moduleErrors = [];
+  var origCreateElement = document.createElement;
+  document.createElement = function(tag) {
+    var el = origCreateElement.call(document, tag);
+    if (tag === 'script') {
+      el.addEventListener('error', function(e) {
+        var src = el.src || el.getAttribute('src') || 'unknown';
+        moduleErrors.push(src);
+        send('error', ['[Lamby] Failed to load script: ' + src]);
+      });
+    }
+    return el;
+  };
+  function extractOverlayContent(el) {
+    try {
+      var root = el.shadowRoot || el;
+      var text = '';
+      var msgEl = root.querySelector('.message-body, .message, [class*="message"], pre');
+      if (msgEl) text = msgEl.textContent || '';
+      if (!text) {
+        var preEls = root.querySelectorAll('pre, code');
+        for (var p = 0; p < preEls.length; p++) { text += (preEls[p].textContent || '') + '\n'; }
+      }
+      if (!text) {
+        text = root.textContent || el.textContent || '';
+      }
+      return text.trim().substring(0, 4000);
+    } catch(e) { return ''; }
+  }
+  function checkOverlays() {
+    try {
+      var selectors = ['vite-error-overlay', 'nextjs-portal', '#webpack-dev-server-client-overlay'];
+      for (var s = 0; s < selectors.length; s++) {
+        var els = document.querySelectorAll(selectors[s]);
+        for (var i = 0; i < els.length; i++) {
+          if (els[i].__lambyReported) continue;
+          els[i].__lambyReported = true;
+          var content = extractOverlayContent(els[i]);
+          if (content) {
+            send('error', ['[Lamby] Error overlay detected (' + selectors[s] + '):\n' + content]);
+          } else {
+            send('error', ['[Lamby] Error overlay detected (' + selectors[s] + ') but could not extract content.']);
+          }
+        }
+      }
+    } catch(e) {}
+  }
+  try {
+    var overlayObserver = new MutationObserver(function() { checkOverlays(); });
+    overlayObserver.observe(document.documentElement, { childList: true, subtree: true });
+  } catch(e) {}
+  setTimeout(function() {
+    checkOverlays();
+    try {
+      var root = document.getElementById('root') || document.getElementById('app');
+      if (root && root.children.length === 0 && root.textContent.trim() === '') {
+        var diag = '[Lamby] Blank screen detected — root element exists but has no rendered content after 5s.';
+        if (moduleErrors.length > 0) diag += ' Failed scripts: ' + moduleErrors.join(', ');
+        var viteErrors = document.querySelectorAll('vite-error-overlay');
+        if (viteErrors.length > 0) diag += ' Vite error overlay is showing.';
+        send('warn', [diag]);
+      }
+      if (!root) {
+        var body = document.body;
+        var visibleText = body ? body.innerText.trim() : '';
+        if (visibleText.length === 0) {
+          send('warn', ['[Lamby] Blank screen detected — no visible content on page after 5s. Check that index.html has the correct root element and entry script.']);
+        }
+      }
+    } catch(e) {}
+  }, 5000);
+})();
+</script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VoltViz – Real-Time Music Visualizer</title>
+    <meta name="description" content="VoltViz is a real-time music visualizer that turns your system audio or microphone into stunning visuals. Effects include Bars, Circular, Neon Wave, CRT Terminal, Cyber Grid, Fluid Smoke, Fireworks, PolySphere, Wave Terrain, Particles, and many more." />
+    <meta name="keywords" content="music visualizer, audio visualizer, real-time visualizer, WebGL visualizer, system audio, microphone visualizer, VoltViz, browser music visualizer, bars visualizer, circular visualizer, neon wave, CRT terminal, cyber grid, fluid smoke, fireworks visualizer, psychedelic skull, polysphere, perlin sphere, wave terrain, WebGL particles, data cloud, neon hex tunnel, ghost rainbow, glitch visualizer, vinyl visualizer, sheet music, 3D equalizer, festival stage, drone show, music grid, tunnel visualizer" />
+    <meta name="author" content="Sanwil" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#0f0f1a" />
+    <link rel="icon" href="/fav/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/fav/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/fav/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/fav/apple-touch-icon.png" />
+    <link rel="manifest" href="/fav/site.webmanifest" />
+    <link rel="canonical" href="https://voltviz.com" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://voltviz.com" />
+    <meta property="og:title" content="VoltViz – Real-Time Music Visualizer" />
+    <meta property="og:description" content="30 unique visualizer effects: Bars, Circular, Neon Wave, CRT Terminal, Cyber Grid, Fluid Smoke, Fireworks, PolySphere, Wave Terrain, Particles &amp; more. Powered by WebGL and Canvas." />
+    <meta property="og:site_name" content="VoltViz" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="VoltViz – Real-Time Music Visualizer" />
+    <meta name="twitter:description" content="30 unique visualizer effects: Bars, Circular, Neon Wave, CRT Terminal, Cyber Grid, Fluid Smoke, Fireworks, PolySphere, Wave Terrain, Particles &amp; more." />
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "VoltViz",
+      "url": "https://voltviz.com",
+      "description": "A real-time music visualizer with 30 unique effects: Bars, Circular, Neon Wave, CRT Terminal, Cyber Grid Canvas, Cyber Matrix, Data Cloud, Data Dashboard, Disney Drone Show, Festival Stage, Fireworks Show, Fluid Smoke, Ghost Rainbow, Glitch Visualizer, Mega Festival Stage, Music Grid, Neon Hex Tunnel, Perlin Sphere, Poly Sphere, Psychedelic Skull, Sheet Music, 3D Equalizer, Tunnel, Vinyl, Wave Terrain, WebGL Music Grid, WebGL Particles, Background and Blur Visualizer.",
+      "applicationCategory": "MultimediaApplication",
+      "operatingSystem": "Any",
+      "browserRequirements": "Requires a modern browser with Web Audio API support",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "EUR"
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "sanderdw"
+      }
+    }
+    </script>
+
+    <!-- Matomo -->
+    <script>
+      var _paq = window._paq = window._paq || [];
+      /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
+      _paq.push(['trackPageView']);
+      _paq.push(['enableLinkTracking']);
+      (function() {
+        var u="https://insights.sanwil.net/";
+        _paq.push(['setTrackerUrl', u+'matomo.php']);
+        _paq.push(['setSiteId', '8']);
+        var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+        g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+      })();
+    </script>
+    <!-- End Matomo Code -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

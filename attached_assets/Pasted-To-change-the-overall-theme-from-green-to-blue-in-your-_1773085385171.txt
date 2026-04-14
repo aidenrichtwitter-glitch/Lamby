@@ -1,0 +1,48 @@
+To change the overall theme from green to blue in your Guardian AI / λ Recursive app, the main place to update is the CSS variables in `src/index.css`.
+
+Here's the updated file with a clean blue-oriented palette (cool dark background + blue accents that still feel "cyber / terminal" but shifted away from green):
+
+```css
+// file: src/index.css
+/* Changed from terminal-green to terminal-blue theme
+   Dark void background with blue glow / accents */
+
+:root {
+  --background: 220 20% 8%;       /* Slightly deeper dark blue-gray */
+  --foreground: 210 40% 85%;      /* Soft blue-white for text */
+  --primary:    210 80% 55%;      /* Main interactive blue */
+  --terminal-green: 210 70% 60%;  /* Renamed → now the primary blue (used where old green was) */
+  --terminal-cyan:  200 80% 65%;  /* Brighter cyan-blue for secondary highlights */
+  --muted:      220 15% 45%;      /* Subtle muted blue-gray */
+  --border:     220 30% 25%;      /* Darker blue borders */
+}
+
+/* If you have any hardcoded hsl/hsla colors elsewhere in components,
+   look for values around hsl(140, 70%, 45%) and replace with something like
+   hsl(210, 80%, 55%) or var(--primary) */
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+```
+
+### Quick explanation of the new colors
+
+- `--terminal-green` renamed in spirit → now your main **blue** accent color (most visible change)
+- Primary blue tone: around hsl(210, 80%, 55%) — vivid but not neon-painful
+- Foreground text: light cool blue-white that remains readable on dark bg
+- Kept the dark futuristic feel, just rotated hue from green → blue
+
+### Next steps (recommended)
+
+1. Replace the whole `:root` block in `src/index.css` with the version above.
+2. Restart your dev server (`npm run dev` or equivalent) — Vite + Electron usually picks up CSS changes quickly.
+3. Check these places for possible hardcoded green overrides:
+   - Any Tailwind classes like `text-green-400`, `border-green-600`, `bg-green-950`
+   - Inline styles with `color: #00ff99` or `hsl(140, ...)`
+   - Component-specific CSS modules if you have any
+
+If after applying this change you still see green somewhere, tell me which component / area stayed green — we can target it specifically.
+
+Want a more cyberpunk neon-blue, a calmer navy, or something else? Let me know the vibe you're going for. 😄

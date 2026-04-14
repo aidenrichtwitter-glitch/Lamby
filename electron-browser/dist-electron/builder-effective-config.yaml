@@ -1,0 +1,19 @@
+directories:
+  output: dist-electron
+  buildResources: build
+appId: com.guardian-ai.desktop
+productName: Guardian AI
+asar: false
+files:
+  - filter:
+      - src/**/*
+      - dist/**/*
+      - package.json
+win:
+  target: portable
+  icon: null
+linux:
+  target:
+    - AppImage
+  category: Development
+electronVersion: 33.4.11

@@ -1,0 +1,138 @@
+.piano-app {
+  max-width: 1300px;
+  margin: 40px auto;
+  padding: 20px;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #111;
+  color: #fff;
+  min-height: 100vh;
+  text-align: center;
+}
+
+.piano-app h1 { font-size: 2.8rem; margin-bottom: 20px; color: #0ff; text-shadow: 0 0 20px #0ff; }
+
+.master-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+}
+.master-play-btn, .sweet-dreams-btn, .clear-all-btn, .save-btn, .load-btn {
+  border: none; padding: 14px 28px; font-size: 1.25rem;
+  font-weight: 700; border-radius: 9999px; cursor: pointer;
+}
+.master-play-btn { background: #0ff; color: #111; }
+.sweet-dreams-btn { background: #ff00cc; color: #fff; }
+.clear-all-btn { background: #ff4444; color: #fff; }
+.save-btn { background: #00cc66; color: #fff; }
+.load-btn { background: #0066ff; color: #fff; }
+
+.track {
+  background: #1a1a1a;
+  border-radius: 16px;
+  padding: 15px;
+  box-shadow: 0 15px 30px rgba(0,255,255,0.15);
+  margin-bottom: 30px;
+}
+
+.track-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.track-name { font-size: 1.3rem; font-weight: 600; }
+.octave-control { display: flex; align-items: center; gap: 8px; font-size: 1.1rem; }
+.octave-control button { width: 28px; height: 28px; border-radius: 50%; background: #333; color: #fff; border: none; cursor: pointer; }
+.clear-track-btn {
+  background: #ff6666; color: #fff; border: none; padding: 6px 14px; font-size: 0.95rem;
+  border-radius: 9999px; cursor: pointer;
+}
+
+.mini-roll {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 680px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+.mini-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.mini-label {
+  width: 42px; text-align: right; font-weight: 600; padding-right: 8px; font-size: 0.9rem;
+}
+.beat-scroller {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  min-width: fit-content;
+}
+.mini-cell {
+  width: 18px; height: 28px; border-radius: 3px; cursor: pointer; transition: all 0.1s;
+  background: #222; border: 1px solid #444;
+  flex-shrink: 0;
+}
+.mini-cell.white { background: #f0f0f0; }
+.mini-cell.black { background: #111; }
+.mini-cell.active {
+  background: #0ff !important;
+  box-shadow: 0 0 12px #0ff;
+  transform: scale(1.15);
+}
+
+.live-keyboard { margin-top: 40px; }
+.live-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.piano {
+  display: flex; justify-content: center; gap: 4px; background: #222; padding: 30px 20px;
+  border-radius: 16px; box-shadow: 0 20px 40px rgba(0,255,255,0.25); margin: 0 auto; width: fit-content;
+}
+.piano-key {
+  width: 58px; height: 220px; background: #f8f8f8; border: 3px solid #222;
+  border-radius: 0 0 12px 12px; display: flex; align-items: flex-end; justify-content: center;
+  font-size: 1rem; color: #222; cursor: pointer; transition: all 0.05s; box-shadow: 0 8px 0 #111;
+}
+.piano-key.black {
+  width: 36px; height: 140px; background: #111; color: #eee; border-radius: 0 0 6px 6px;
+  margin: 0 -18px; z-index: 2; box-shadow: 0 8px 0 #000;
+}
+.piano-key:active, .piano-key.active {
+  transform: translateY(6px); box-shadow: 0 2px 0 #111; background: #0ff !important; color: #111;
+}
+
+.instructions { margin-top: 30px; font-size: 1.2rem; color: #0ff; line-height: 1.6; }
+
+@media (max-width: 640px) {
+  .piano-key { width: 48px; height: 180px; }
+  .piano-key.black { width: 30px; height: 115px; margin: 0 -15px; }
+  .mini-cell { width: 14px; height: 24px; }
+}
+
+What to do now:
+
+Open src/App.css
+Delete everything in it
+Paste the full CSS above
+Save
+Refresh the preview (wait 15 seconds)
+
+The app should now look exactly like your original beautiful dark UI with proper tracks, scrollers, live keyboard, glowing buttons, etc.
+
+Once it looks correct again, just say the word and we’ll add the next feature safely (live playhead, better drums, working octave buttons, etc.).
+
+Let me know how it looks now! 🎹
+
+3.5s
+Explain CSS Flexbox deeply
+Explore CSS Grid layouts

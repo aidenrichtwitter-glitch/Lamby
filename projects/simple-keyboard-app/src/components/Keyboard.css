@@ -1,0 +1,230 @@
+.keyboard-container {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem;
+  background: radial-gradient(circle at top, #1b1220 0, var(--bg-color) 55%);
+  box-shadow: 0 1.125rem 2.5rem rgba(0, 0, 0, 0.9);
+  perspective: 1200px;
+}
+
+.keyboard-display {
+  width: 80%;
+  max-width: 950px;
+  height: 7.5rem;
+  margin: 0 auto 1.25rem auto;
+  padding: 0.75rem 1rem;
+  overflow-y: auto;
+  background: var(--bg-color-light);
+  color: var(--text);
+  border-radius: 0.75rem;
+  border: 1px solid #2b2b33;
+  font-size: 1rem;
+  box-shadow:
+    0 0 0.75rem rgba(0, 0, 0, 0.7),
+    0 0 0.625rem rgba(0, 0, 0, 0.9);
+  resize: none;
+}
+
+.keyboard-display:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.container {
+  position: relative;
+  width: 80%;
+  max-width: 950px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0.35rem;
+  background: linear-gradient(to bottom, var(--panel-bg), #0b0b10);
+  border-radius: 1.125rem;
+  padding: 1.5rem;
+  border: 1px solid var(--panel-border);
+  box-shadow:
+    0 1.125rem 2.5rem rgba(0, 0, 0, 0.8),
+    0 0 1.5rem rgba(0, 0, 0, 0.9);
+  transform-style: preserve-3d; /* ⬅ 3D */
+  transform: rotateX(1deg);
+}
+
+.container::before {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.keyboard-row {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 0.25rem;
+  margin-bottom: 0.25rem;
+  z-index: 10;
+}
+
+.keyboard-key {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1 0 0;
+  border: 1px solid var(--key-border);
+  background: linear-gradient(
+    to bottom,
+    var(--key-bg-top),
+    var(--key-bg-bottom)
+  );
+  color: var(--text);
+  height: 3.25rem;
+  min-width: 2.75rem;
+  padding: 0.15rem 0.4rem;
+  outline: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transform: translate3d(0, 0, 1.5rem);
+  z-index: 0;
+  box-shadow:
+    /* Botton */
+    0 0.25rem 0 #050507,
+    0.25rem 0.25rem 0.5rem var(--key-shadow),
+    0.125rem 1.125rem 0.25rem var(--key-shadow),
+    /* Keyside */ -1px -1px 0 hsla(0, 0%, 100%, 0.3),
+    -2px -2px 0 hsla(0, 0%, 100%, 0.22),
+    -3px -3px 0 hsla(0, 0%, 100%, 0.16),
+    -4px -4px 0 hsla(0, 0%, 100%, 0.1),
+    -5px -5px 0 hsla(0, 0%, 100%, 0.08),
+    -6px -6px 0 hsla(0, 0%, 100%, 0.06);
+
+  transition:
+    transform 120ms ease-out,
+    box-shadow 120ms ease-out,
+    background 120ms ease-out,
+    border-color 120ms ease-out,
+    color 120ms ease-out;
+  z-index: 0;
+}
+
+.keyboard-key::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: none;
+  z-index: -1;
+}
+
+.keyboard-key:hover,
+.keyboard-key:focus-visible {
+  transform: translate3d(0, 0, 0.3px);
+  border-color: var(--primary-color-transparent);
+  z-index: 100;
+  box-shadow:
+    0 1px 0 #050507,
+    5px 5px 12px var(--key-shadow),
+    2px 2px 8px var(--key-shadow),
+    /* Key Side */ -1px -1px 0 var(--primary-color-dark-transparent),
+    -2px -2px 0 var(--primary-color-dark-transparent),
+    -3px -3px 0 var(--primary-color-dark-transparent),
+    -4px -4px 0 var(--primary-color-dark),
+    -4px -4px 5px var(--primary-color-dark-transparent),
+    /* light glow */ 0 0 10px var(--primary-color-transparent),
+    0 0 20px var(--primary-color-darkest-transparent),
+    -4px -4px 2px var(--primary-color-light-transparent),
+    /* Glow */ -3px -5px 10px var(--primary-color),
+    -3px -3px 30px var(--primary-color-light-transparent),
+    -3px -3px 60px var(--primary-color-light-transparentx);
+}
+
+.keyboard-key:active {
+  transform: translateY(2px) scale(0.98);
+  box-shadow:
+    /* Smaller side */
+    0 2px 0 #050507,
+    3px 3px 8px var(--key-shadow),
+    1px 1px 4px var(--key-shadow),
+    /* key glow */ 0 0 10px var(--primary-color-transparent),
+    0 0 20px var(--primary-color-darkest-transparent),
+    /* Key Side */ -1px -1px 0 hsla(0, 0%, 100%, 0.24),
+    -2px -2px 0 hsla(0, 0%, 100%, 0.18),
+    -3px -3px 0 hsla(0, 0%, 100%, 0.12),
+    -3px -3px 0 hsla(0, 0%, 100%, 0.06),
+    /* Glow */ -2px -2px 10px var(--primary-color),
+    -2px -3px 30px var(--primary-color-light-transparent),
+    -2px -3px 60px var(--primary-color-light-transparentx);
+}
+
+.keyboard-key:focus-visible {
+  transform: translateY(0) scale(1.02);
+  border: 0px solid var(--primary-color);
+  color: var(--primary-color-light);
+}
+
+.keyboard-key--wide {
+  flex: 1.5 0 0;
+  min-width: 4.75rem;
+}
+
+.keyboard-key--extra-wide {
+  flex: 5 0 0; /* for Space key */
+  min-width: 13.75rem;
+}
+
+.keyboard-key--shifted {
+  font-size: 0.65rem;
+  opacity: 0.78;
+  align-self: flex-start;
+  transform: translateY(-0.125rem);
+}
+
+.keyboard-key--base {
+  font-size: 0.9rem;
+}
+
+.keyboard-key--active {
+  background: radial-gradient(
+    circle at top,
+    var(--primary-color),
+    var(--key-bg-bottom)
+  );
+  border-color: var(--primary-color-transparent);
+  box-shadow:
+        /* key glow */
+    0 0 10px var(--primary-color-transparent),
+    0 0 20px var(--primary-color-darkest-transparent),
+    /* Shadows */ 0 4px 0 #050507,
+    5px 5px 10px var(--key-shadow),
+    /* Key Side */ -1px -1px 0px var(--primary-color-dark-transparent),
+    -2px -2px 0px var(--primary-color-dark-transparent),
+    -3px -3px 0px var(--primary-color-dark-transparent),
+    -4px -4px 0px var(--primary-color-transparent),
+    -5px -5px 0px var(--primary-color-dark-transparent);
+}
+
+.keyboard-key--active::before {
+  box-shadow:
+        /* Key Side */
+    -1px -1px 0 var(--primary-color-dark-transparent),
+    -2px -2px 0 var(--primary-color-dark-transparent),
+    -3px -3px 0 var(--primary-color-dark-transparent),
+    -4px -4px 0 var(--primary-color-darkest-transparent),
+    -3px -3px 2px var(--primary-color-light-transparent),
+    -4px -4px 5px var(--primary-color-transparent),
+    -2px -5px 10px var(--primary-color),
+    /* Glow */ -2px -5px 10px var(--primary-color),
+    -3px -3px 30px var(--primary-color-light-transparent),
+    -3px -3px 60px var(--primary-color-light-transparentx);
+  z-index: -999;
+  pointer-events: none;
+  border-radius: 0.125rem;
+}

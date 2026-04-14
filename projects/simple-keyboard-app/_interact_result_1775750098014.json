@@ -1,0 +1,5 @@
+{
+  "action": "evaluate",
+  "success": true,
+  "error": "Execution context was destroyed, most likely because of a navigation."
+}

@@ -1,0 +1,341 @@
+// file: index.htmlhtml
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Visualizer</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+      color: #e0e0ff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .container {
+      background: rgba(20, 20, 50, 0.45);
+      backdrop-filter: blur(12px);
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 2.5rem 2rem;
+      max-width: 700px;
+      width: 100%;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+      text-align: center;
+    }
+
+    h1 {
+      font-size: 2.8rem;
+      margin-bottom: 1rem;
+      background: linear-gradient(90deg, #a78bfa, #7c3aed);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -1px;
+    }
+
+    p {
+      font-size: 1.1rem;
+      opacity: 0.9;
+      margin-bottom: 2rem;
+    }
+
+    .file-input-wrapper {
+      margin-bottom: 1.8rem;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .choose-btn {
+      background: linear-gradient(90deg, #6b7280, #4b5563);
+      color: white;
+      border: none;
+      padding: 0.9rem 1.8rem;
+      border-radius: 50px;
+      font-size: 1.05rem;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    }
+
+    .choose-btn:hover {
+      background: linear-gradient(90deg, #7c3aed, #a78bfa);
+      transform: translateY(-3px);
+      box-shadow: 0 10px 25px rgba(124, 58, 237, 0.4);
+    }
+
+    .file-name {
+      margin-left: 1rem;
+      font-size: 1rem;
+      opacity: 0.8;
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    .play-btn {
+      background: linear-gradient(90deg, #7c3aed, #c084fc);
+      color: white;
+      border: none;
+      padding: 1.2rem 3rem;
+      font-size: 1.3rem;
+      border-radius: 60px;
+      cursor: pointer;
+      margin: 1.5rem 0 2.5rem;
+      transition: all 0.4s ease;
+      box-shadow: 0 8px 30px rgba(124, 58, 237, 0.35);
+    }
+
+    .play-btn:hover {
+      transform: scale(1.08);
+      box-shadow: 0 15px 40px rgba(124, 58, 237, 0.55);
+    }
+
+    .play-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    #visualizer {
+      width: 100%;
+      height: 400px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 16px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      margin-top: 1rem;
+    }
+
+    footer {
+      margin-top: 2rem;
+      font-size: 0.9rem;
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>
+
+// file: src/App.tsxtsx
+import { useRef, useState, useEffect } from "react";
+import * as THREE from "three";
+
+function App() {
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const mountRef = useRef<HTMLDivElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const animationRef = useRef<number | null>(null);
+
+  // Three.js refs
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const barsRef = useRef<THREE.Mesh[]>([]);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file && audioRef.current) {
+      setAudioFile(file);
+      const url = URL.createObjectURL(file);
+      audioRef.current.src = url;
+      if (audioContextRef.current?.state === "suspended") {
+        audioContextRef.current.resume().catch(console.error);
+      }
+    }
+  };
+
+  const togglePlay = async () => {
+    if (!audioRef.current) return;
+
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContext();
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 256;
+      sourceRef.current = audioContextRef.current.createMediaElementSource(audioRef.current);
+      sourceRef.current.connect(analyserRef.current);
+      analyserRef.current.connect(audioContextRef.current.destination);
+    }
+
+    if (audioContextRef.current.state === "suspended") {
+      await audioContextRef.current.resume().catch((err) => {
+        console.error("Failed to resume AudioContext:", err);
+      });
+    }
+
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play().catch((err) => {
+        console.error("Audio play failed:", err);
+      });
+      setIsPlaying(true);
+    }
+  };
+
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+
+    // Setup Three.js scene
+    const width = mount.clientWidth;
+    const height = mount.clientHeight;
+    sceneRef.current = new THREE.Scene();
+    cameraRef.current = new THREE.PerspectiveCamera(75, width / height, 0.1, 1000);
+    rendererRef.current = new THREE.WebGLRenderer({ antialias: true });
+    rendererRef.current.setSize(width, height);
+    rendererRef.current.setClearColor(0x000000);
+    mount.appendChild(rendererRef.current.domElement);
+
+    // Lights for modern look
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    sceneRef.current.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(5, 5, 5);
+    sceneRef.current.add(directionalLight);
+
+    // Create 3D bars
+    const bufferLength = analyserRef.current ? analyserRef.current.frequencyBinCount : 128;
+    const barWidth = 0.5;
+    const barDepth = 0.5;
+    const spacing = 0.6;
+    for (let i = 0; i < bufferLength; i++) {
+      const geometry = new THREE.BoxGeometry(barWidth, 1, barDepth);
+      const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+      const bar = new THREE.Mesh(geometry, material);
+      bar.position.x = (i - bufferLength / 2) * spacing;
+      bar.position.y = 0;
+      bar.position.z = 0;
+      sceneRef.current.add(bar);
+      barsRef.current.push(bar);
+    }
+
+    cameraRef.current.position.set(0, 10, 30);
+    cameraRef.current.lookAt(0, 0, 0);
+
+    return () => {
+      // Cleanup
+      if (rendererRef.current) {
+        mount.removeChild(rendererRef.current.domElement);
+        rendererRef.current.dispose();
+      }
+      if (sceneRef.current) {
+        sceneRef.current.traverse((obj) => {
+          if (obj instanceof THREE.Mesh) {
+            obj.geometry.dispose();
+            (obj.material as THREE.Material).dispose();
+          }
+        });
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const analyser = analyserRef.current;
+    if (!analyser || !sceneRef.current || !cameraRef.current || !rendererRef.current) return;
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const draw = () => {
+      if (!isPlaying) return;
+
+      analyser.getByteFrequencyData(dataArray);
+
+      // Update bars in 3D
+      barsRef.current.forEach((bar, i) => {
+        const height = (dataArray[i] / 255) * 20 + 1; // Scale height
+        bar.scale.y = height;
+        bar.position.y = height / 2; // Anchor from bottom
+        (bar.material as THREE.MeshStandardMaterial).color.setHSL(i / bufferLength, 1, 0.5); // Color gradient
+      });
+
+      // Subtle rotation for modern 3D feel
+      sceneRef.current.rotation.y += 0.001;
+
+      rendererRef.current.render(sceneRef.current, cameraRef.current);
+      animationRef.current = requestAnimationFrame(draw);
+    };
+
+    if (isPlaying) {
+      draw();
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [isPlaying]);
+
+  // Cleanup object URL and context
+  useEffect(() => {
+    return () => {
+      if (audioFile && audioRef.current?.src) {
+        URL.revokeObjectURL(audioRef.current.src);
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(console.error);
+      }
+    };
+  }, [audioFile]);
+
+  return (
+    <div className="container">
+      <h1>Visualizer</h1>
+      <p>Select an audio file (MP3, WAV, etc.) and click Play to see the 3D visualization</p>
+      <div className="file-input-wrapper">
+        <label htmlFor="audioFile" className="choose-btn">Choose File</label>
+        <input type="file" id="audioFile" accept="audio/*" onChange={handleFileChange} />
+        <span className="file-name">{audioFile ? audioFile.name : 'No file chosen'}</span>
+      </div>
+      <button 
+        onClick={togglePlay} 
+        disabled={!audioFile}
+        className="play-btn"
+      >
+        {isPlaying ? "Pause" : "Play"}
+      </button>
+      <audio ref={audioRef} />
+      <div 
+        ref={mountRef} 
+        id="visualizer"
+      />
+      <footer>Powered by Web Audio API & Three.js • Modern Dark Mode</footer>
+    </div>
+  );
+}
+
+export default App;
+
+// file: src/main.tsxtsx
+import { createRoot } from "react-dom/client";
+import App from "./App";
+
+createRoot(document.getElementById("root")!).render(<App />);
+

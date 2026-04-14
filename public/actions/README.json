@@ -1,0 +1,128 @@
+{
+  "system": "Blender Action Scripts",
+  "version": "1.0",
+  "description": "Prebuilt Python actions for Blender, callable through the bridge relay. Each action reads config from ACTION_CONFIG env var (JSON).",
+  "usage": {
+    "single_action": "blender --background --python run_action.py -- config.json action_script.py",
+    "pipeline": "blender --background --python pipeline.py -- pipeline_config.json",
+    "env_config": "Set ACTION_CONFIG env var to JSON string before running action directly"
+  },
+  "actions": {
+    "init_gpu": {
+      "description": "Initialize CUDA GPU rendering",
+      "config": {}
+    },
+    "clear_scene": {
+      "description": "Remove all objects, materials, lights, cameras",
+      "config": {
+        "keep_gpu": "bool (default true) - preserve GPU preferences"
+      }
+    },
+    "set_sky": {
+      "description": "Set Nishita sky background",
+      "config": {
+        "preset": "night | sunset | golden_hour | overcast | noon",
+        "strength": "float (default 0.6)",
+        "elevation": "float override (degrees)",
+        "rotation": "float override (degrees)"
+      }
+    },
+    "add_camera": {
+      "description": "Add camera to scene",
+      "config": {
+        "name": "string (default MainCam)",
+        "location": "[x, y, z]",
+        "rotation_deg": "[rx, ry, rz] in degrees",
+        "lens": "float mm (default 35)"
+      }
+    },
+    "add_lighting": {
+      "description": "Add lighting setup from preset or custom list",
+      "config": {
+        "preset": "moonlit | shrine | cyberpunk",
+        "lights": "[{name, type, energy, color, size, location, rotation_deg}, ...] - overrides preset"
+      }
+    },
+    "add_ground": {
+      "description": "Add ground plane",
+      "config": {
+        "preset": "sand | grass | stone | wood | snow | dirt",
+        "size": "float (default 50)",
+        "location": "[x, y, z]",
+        "color": "[r, g, b] override",
+        "roughness": "float override"
+      }
+    },
+    "add_props": {
+      "description": "Add scene props from type list",
+      "config": {
+        "props": [
+          {
+            "type": "rock_cluster | bamboo_grove | stone_lantern | torii_gate | koi_pond | fireflies | moon | cherry_tree",
+            "...type-specific config...": ""
+          }
+        ]
+      },
+      "prop_types": {
+        "rock_cluster": {"center": "[x,y,z]", "count": "int", "spread": "float", "seed": "int", "color": "[r,g,b]"},
+        "bamboo_grove": {"center": "[x,y,z]", "count": "int", "spread": "float", "seed": "int"},
+        "stone_lantern": {"location": "[x,y]", "glow_color": "[r,g,b]", "glow_strength": "float", "light_energy": "float"},
+        "torii_gate": {"location": "[x,y]", "height": "float", "width": "float", "color": "[r,g,b]"},
+        "koi_pond": {"location": "[x,y,z]", "radius": "float"},
+        "fireflies": {"count": "int", "bounds": "[[xmin,xmax],[ymin,ymax],[zmin,zmax]]", "seed": "int", "color": "[r,g,b]", "strength": "float"},
+        "moon": {"location": "[x,y,z]", "radius": "float", "color": "[r,g,b]", "strength": "float"},
+        "cherry_tree": {"location": "[x,y]", "height": "float", "seed": "int", "trunk_color": "[r,g,b]", "blossom_color": "[r,g,b]"}
+      }
+    },
+    "render_cycles": {
+      "description": "Render with Cycles + Freestyle + OIDN",
+      "config": {
+        "samples": "int (default 128)",
+        "resolution_x": "int (default 1920)",
+        "resolution_y": "int (default 1080)",
+        "output_name": "string (default render_final)",
+        "output_dir": "string (default Desktop)",
+        "open_after": "bool (default true) - open PNG in viewer",
+        "save_blend": "bool (default true)",
+        "blend_path": "string - full path to save .blend",
+        "freestyle": "bool (default true)",
+        "freestyle_color": "[r,g,b] (default dark indigo)",
+        "freestyle_thickness": "float (default 1.5)",
+        "transfer_jpeg": "bool (default true)",
+        "jpeg_quality": "int (default 55)"
+      }
+    }
+  },
+  "pipeline_format": {
+    "name": "string - pipeline name",
+    "actions_dir": "string - path to actions folder on desktop",
+    "steps": [
+      {
+        "action": "string - action name (filename without .py)",
+        "config": {},
+        "required": "bool (default true) - stop pipeline on failure"
+      }
+    ]
+  },
+  "example_pipeline": {
+    "name": "Moonlit Zen Garden",
+    "actions_dir": "C:\\Users\\Aiden\\Desktop\\actions",
+    "steps": [
+      {"action": "init_gpu", "config": {}},
+      {"action": "clear_scene", "config": {}},
+      {"action": "set_sky", "config": {"preset": "night"}},
+      {"action": "add_ground", "config": {"preset": "sand"}},
+      {"action": "add_camera", "config": {"location": [1, -4, 1.2], "rotation_deg": [80, 0, 5]}},
+      {"action": "add_lighting", "config": {"preset": "moonlit"}},
+      {"action": "add_props", "config": {"props": [
+        {"type": "rock_cluster", "center": [-2, 3, 0], "count": 5},
+        {"type": "bamboo_grove", "center": [-4, 6, 0], "count": 12},
+        {"type": "stone_lantern", "location": [3.5, 4]},
+        {"type": "koi_pond", "location": [1.5, 2.5, 0]},
+        {"type": "fireflies", "count": 15},
+        {"type": "moon"}
+      ]}},
+      {"action": "render_cycles", "config": {"output_name": "zen_garden", "blend_path": "C:\\Users\\Aiden\\Desktop\\zen_garden.blend"}}
+    ]
+  }
+}
